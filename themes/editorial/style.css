@@ -1,0 +1,53 @@
+/* planloft theme: editorial — magazine, serif, generous */
+:root {
+  --ink: #201c1a;
+  --muted: #6b625c;
+  --paper: #fdfcfa;
+  --rule: #e7e1d9;
+  --accent: #a8321f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 19px/1.72 Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+}
+.planloft-plan {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 7rem;
+}
+h1 {
+  font-size: 2.6rem;
+  line-height: 1.08;
+  margin: 0 0 1.5rem;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+h2 {
+  font-size: 1.5rem;
+  margin: 2.75rem 0 0.6rem;
+  font-weight: 700;
+}
+/* Drop-cap on the opening paragraph. */
+.planloft-plan > article > p:first-of-type::first-letter {
+  float: left;
+  font-size: 3.4rem;
+  line-height: 0.8;
+  padding: 0.1rem 0.6rem 0 0;
+  font-weight: 700;
+}
+p { margin: 0 0 1.1rem; }
+a { color: var(--accent); text-underline-offset: 3px; }
+blockquote {
+  margin: 1.8rem 0;
+  padding-left: 1.4rem;
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+  font-size: 1.15em;
+  color: var(--muted);
+}
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82em; background: #f0ebe4; padding: 0.1em 0.35em; border-radius: 3px; }
+pre { background: #f0ebe4; padding: 1rem 1.15rem; overflow: auto; border-radius: 6px; font-size: 0.8em; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }

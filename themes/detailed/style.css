@@ -1,0 +1,41 @@
+/* planloft theme: detailed — structured, technical, readable */
+:root {
+  --ink: #1a1d21;
+  --muted: #5a6169;
+  --paper: #fbfbfc;
+  --rule: #e3e6ea;
+  --accent: #2563eb;
+  --code-bg: #f2f4f7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.planloft-plan {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 6rem;
+}
+h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 0.75rem; letter-spacing: -0.02em; }
+h2 {
+  font-size: 1.25rem;
+  margin: 2.25rem 0 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: var(--muted); }
+a { color: var(--accent); }
+code { background: var(--code-bg); padding: 0.12em 0.35em; border-radius: 4px; font-size: 0.9em; }
+pre { background: var(--code-bg); padding: 1rem 1.15rem; overflow: auto; border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95em; }
+th, td { border: 1px solid var(--rule); padding: 0.5rem 0.7rem; text-align: left; }
+th { background: #eef1f5; }
+blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}

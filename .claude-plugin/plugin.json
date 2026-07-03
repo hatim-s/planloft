@@ -1,0 +1,11 @@
+{
+  "name": "planloft",
+  "displayName": "planloft",
+  "version": "0.0.1",
+  "description": "Hoist Claude Code plans into a global, themed, deployable store — organized by project, one-click copy-to-repo and deploy-for-review.",
+  "author": {
+    "name": "planloft"
+  },
+  "license": "MIT",
+  "keywords": ["planning", "plans", "claude-code", "deploy", "review"]
+}
