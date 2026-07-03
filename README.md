@@ -29,7 +29,7 @@ auto-expires.
 /plugin install planloft
 
 # or the CLI standalone
-npm i -g planloft
+pnpm add -g planloft
 ```
 
 Zero-config: it works on install. Config is written on your first plan; connect flows
