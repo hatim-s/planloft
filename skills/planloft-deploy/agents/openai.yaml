@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planloft Deploy"
+  short_description: "Deploy planloft docs for review"
+  default_prompt: "Use $planloft-deploy to publish the latest planloft doc for review."

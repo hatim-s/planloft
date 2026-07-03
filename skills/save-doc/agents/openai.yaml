@@ -1,0 +1,4 @@
+interface:
+  display_name: "Save Doc"
+  short_description: "Persist durable docs to planloft"
+  default_prompt: "Use $save-doc to save this durable document in planloft."

@@ -1,0 +1,36 @@
+{
+  "name": "planloft",
+  "version": "0.0.1",
+  "description": "Capture, theme, preview, copy, and deploy agent-written plans and durable documents from Codex.",
+  "author": {
+    "name": "planloft"
+  },
+  "license": "MIT",
+  "keywords": [
+    "planning",
+    "plans",
+    "codex",
+    "documents",
+    "deploy",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "planloft",
+    "shortDescription": "Store and share agent-written docs",
+    "longDescription": "Persist substantial Codex plans, ADRs, reviews, reports, research writeups, and notes into the planloft global store, then preview, copy, or deploy them for review through the bundled CLI.",
+    "developerName": "planloft",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Save this implementation plan with planloft.",
+      "Use planloft to preview my latest saved doc.",
+      "Deploy the latest planloft doc for review."
+    ],
+    "brandColor": "#111827",
+    "screenshots": []
+  }
+}

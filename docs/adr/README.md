@@ -11,6 +11,7 @@ is shaped the way it is, not just *what* it does.
 | [0001](./0001-planloft-architecture.md) | planloft foundational architecture | Accepted |
 | [0002](./0002-document-kinds.md) | generalize the store from plans to documents | Accepted (amends 0001 §D3, §D6) |
 | [0003](./0003-marked-renderer.md) | replace Astro with a minimal `marked` renderer | Accepted (supersedes 0001 §D10, §D25) |
+| [0004](./0004-codex-plugin-support.md) | add Codex plugin support | Accepted (amends 0001 §D1, §D6, §D16) |
 
 ## Conventions
 

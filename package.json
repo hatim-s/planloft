@@ -1,7 +1,7 @@
 {
   "name": "planloft",
   "version": "0.0.1",
-  "description": "Hoist Claude Code plans into a global, themed, deployable store — organized by project, one-click copy-to-repo and deploy-for-review.",
+  "description": "Hoist agent-written plans and docs into a global, themed, deployable store — organized by project, one-click copy-to-repo and deploy-for-review.",
   "packageManager": "pnpm@10.8.1",
   "type": "module",
   "license": "MIT",
@@ -15,6 +15,7 @@
     "commands",
     "themes",
     "templates",
+    ".codex-plugin",
     ".claude-plugin"
   ],
   "scripts": {

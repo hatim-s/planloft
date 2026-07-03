@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planloft Copy"
+  short_description: "Copy planloft docs into a repo"
+  default_prompt: "Use $planloft-copy to copy the latest planloft doc into this repo."

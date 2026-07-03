@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planloft Preview"
+  short_description: "Preview planloft docs locally"
+  default_prompt: "Use $planloft-preview to open the latest planloft doc preview."

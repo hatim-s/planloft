@@ -2,11 +2,11 @@
 name: save-doc
 description: >-
   Persist a durable document the user will want to re-read into the planloft store —
-  an ADR, code/design review, research writeup, report, or note. Use this WHENEVER you
-  produce a substantial standalone document (not a plan — plans use write-plan), or when
-  the user says "save this as an ADR / research doc / report / review", "keep this",
-  "add this to planloft". Skip for throwaway or conversational output.
-when_to_use: "After producing an ADR, review, research writeup, report, or note worth keeping; or when asked to save/keep a doc."
+  an ADR, code/design review, research writeup, report, or note. Use this WHENEVER Codex
+  or Claude Code produces a substantial standalone document (not a plan — plans use
+  write-plan), or when the user says "save this as an ADR / research doc / report /
+  review", "keep this", "add this to planloft". Skip for throwaway or conversational
+  output.
 allowed-tools: Bash(planloft:*) Write Read
 ---
 
@@ -45,9 +45,9 @@ Prints JSON: `{ path, kind, format, theme, template }`.
 
 ## Step 3 — Write the document
 
-`Write` the doc to the returned `path`, in the returned `format`, following the `theme`
-`template` for voice/structure. Start markdown docs with frontmatter (the hook fills in
-anything you omit):
+Write/create the doc at the returned `path`, in the returned `format`, following the
+`theme` `template` for voice/structure. Start markdown docs with frontmatter (the hook
+fills in anything you omit):
 
 ```yaml
 ---

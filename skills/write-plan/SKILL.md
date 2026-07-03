@@ -2,10 +2,9 @@
 name: write-plan
 description: >-
   Persist a substantial implementation/design plan to the planloft global store.
-  Use this WHENEVER you finish producing a real plan — especially right after exiting
-  plan mode, or when the user asks you to plan a feature, migration, refactor, or
-  architecture. Skip it for trivial one-step throwaway plans.
-when_to_use: "After exiting plan mode; when asked to plan a feature/migration/refactor/architecture."
+  Use this WHENEVER Codex or Claude Code finishes producing a real plan — especially
+  after plan mode, or when the user asks you to plan a feature, migration, refactor,
+  or architecture. Skip it for trivial one-step throwaway plans.
 allowed-tools: Bash(planloft:*) Write Read
 ---
 
@@ -43,8 +42,8 @@ This prints JSON:
 
 ## Step 2 — Write the plan
 
-`Write` the plan to the exact `path` returned above, authored in the returned `format`
-and following the returned `theme` `template` guidance:
+Write/create the plan at the exact `path` returned above, authored in the returned
+`format` and following the returned `theme` `template` guidance:
 
 - **minimal** — terse bullets, no filler, black-and-white structure.
 - **detailed** — full technical sections: Context, Approach, Steps, Risks, Open

@@ -1,16 +1,17 @@
 # planloft
 
-> Hoist your Claude Code plans into a global, themed, shareable store.
+> Hoist your agent-written plans and docs into a global, themed, shareable store.
 
-planloft is a Claude Code **plugin + CLI**. When your agent writes a plan, planloft
+planloft is a Claude Code / Codex **plugin + CLI**. When your agent writes a plan, planloft
 captures it into a per-project global store, lets you theme it (minimal / detailed /
 editorial), copy it into your repo, and deploy it as a shareable review link that
 auto-expires.
 
 ## What it does
 
-- **Auto-capture** — a bundled skill tells the agent to persist substantial plans; a
-  hook backstops it. Plans land in `~/.planloft/plans/<project>/`.
+- **Auto-capture** — a bundled skill tells the agent to persist substantial plans; hooks
+  backstop Claude plan-mode exit and Codex plan-mode turn stop. Plans and durable docs
+  land in `~/.planloft/docs/<project>/`.
 - **Organized by project** — keyed by git remote (fallback: path hash), so plans
   follow the repo, not the folder.
 - **Themed** — every plan has a look *and* feel. `minimal`, `detailed`, `editorial`
@@ -32,17 +33,21 @@ auto-expires.
 pnpm add -g planloft
 ```
 
+Codex support is shipped through `.codex-plugin/plugin.json`, the bundled `skills/`
+directory, and `hooks/hooks.json`. Codex uses skills for the same flows: `write-plan`,
+`save-doc`, `planloft-preview`, `planloft-copy`, and `planloft-deploy`.
+
 Zero-config: it works on install. Config is written on your first plan; connect flows
 (`gh` / `vercel`) prompt on your first deploy.
 
 ## CLI
 
 ```
-planloft list                 # plans grouped by project
+planloft list                 # docs grouped by project
 planloft preview <slug>       # themed preview in your browser
-planloft copy [slug]          # copy raw plan into ./.planloft/plans/
+planloft copy [slug]          # copy raw doc into ./.planloft/plans/
 planloft deploy [slug]        # build + publish; prints the link
-planloft rm <slug>            # remove a plan from the store
+planloft rm <slug>            # remove a doc from the store
 planloft config               # open/edit global config
 planloft init                 # optional: set theme/format, verify hosts
 ```
@@ -65,7 +70,8 @@ Theme resolution: **plan frontmatter > project override > global default**.
 ## Design
 
 Architecture decisions are recorded in [`docs/adr/`](./docs/adr/). Start with
-[ADR-0001](./docs/adr/0001-planloft-architecture.md).
+[ADR-0001](./docs/adr/0001-planloft-architecture.md). Codex plugin support is captured
+in [ADR-0004](./docs/adr/0004-codex-plugin-support.md).
 
 ## Status
 
