@@ -10,14 +10,14 @@ description: Build and publish the latest or named saved planloft document as a 
 Run from the current project repo, passing through any user-provided slug or flags:
 
 ```bash
-planloft deploy [slug] [--host github|vercel] [--ttl <days>] [--comments]
+planloft deploy [slug] [--ttl <days>] [--comments]
 ```
 
 Defaults:
 
 - No slug means latest document for the current project.
-- GitHub Pages is the default host and uses the configured TTL.
-- `--host vercel` creates a permanent deployment.
+- Publishes to GitHub Pages (free, auto-expires after the configured TTL; `--ttl 90` to
+  extend, redeploy bumps expiry).
 - `--comments` enables giscus review comments.
 
 Report the deployed URL printed by the CLI. Mention expiry only when the CLI reports a

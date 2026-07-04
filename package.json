@@ -6,7 +6,7 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "planloft": "./dist/cli.js"
+    "planloft": "dist/cli.js"
   },
   "files": [
     "dist",

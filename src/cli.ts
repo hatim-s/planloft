@@ -42,15 +42,14 @@ program
 
 program
   .command("deploy [slug]")
-  .description("Build + publish a plan as a shareable review link.")
-  .option("--host <host>", "github | vercel", "github")
+  .description("Build + publish a plan to GitHub Pages as a shareable review link.")
   .option("--ttl <days>", "GitHub Pages expiry in days", (v) => parseInt(v, 10))
   .option("--comments", "enable giscus review comments")
-  .action((s, o) => deploy(s, { host: o.host, ttl: o.ttl, comments: o.comments }));
+  .action((s, o) => deploy(s, { ttl: o.ttl, comments: o.comments }));
 
 program.command("rm <slug>").description("Remove a plan from the store.").action((s) => rm(s));
 program.command("config").description("Open the global config in $EDITOR.").action(() => config());
-program.command("init").description("Optional setup: config + host readiness check.").action(() => init());
+program.command("init").description("Optional setup: config + GitHub readiness check.").action(() => init());
 
 // Hidden dispatcher invoked by hooks/hooks.json.
 program.command("__hook", { hidden: true }).action(() => hook());

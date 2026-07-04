@@ -16,3 +16,9 @@ export const packageRoot = path.resolve(here, "..");
 
 // Built-in themes shipped with the package (ADR-0001 §D18).
 export const builtinThemesDir = (): string => path.join(packageRoot, "themes");
+
+// Bundled deploy templates (prune Action, prune.mjs) — ADR-0001 §D15.
+export const templatesDir = (): string => path.join(packageRoot, "templates");
+
+// Local working clones of host repos (e.g. ~/.planloft/hosting/planloft-plans) — ADR-0001 §D15.
+export const hostingDir = (): string => path.join(HOME, "hosting");

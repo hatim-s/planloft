@@ -18,10 +18,9 @@ auto-expires.
   built in; drop your own in `~/.planloft/themes/`.
 - **1-click copy** — `/planloft-copy` drops the plan into `./.planloft/plans/` in your
   repo, committed alongside code.
-- **1-click deploy** — `/planloft-deploy` builds a themed static site and publishes it:
-  - **GitHub Pages** (default) — free, auto-expires after 30 days (`--ttl 90`, redeploy
-    bumps expiry).
-  - **Vercel** (`--host vercel`) — permanent, opt-in.
+- **1-click deploy** — `/planloft-deploy` builds a themed static site and publishes it to
+  **GitHub Pages** — free, served at an unguessable URL, auto-expires after 30 days
+  (`--ttl 90`, redeploy bumps expiry).
 
 ## Install
 
@@ -37,8 +36,8 @@ Codex support is shipped through `.codex-plugin/plugin.json`, the bundled `skill
 directory, and `hooks/hooks.json`. Codex uses skills for the same flows: `write-plan`,
 `save-doc`, `planloft-preview`, `planloft-copy`, and `planloft-deploy`.
 
-Zero-config: it works on install. Config is written on your first plan; connect flows
-(`gh` / `vercel`) prompt on your first deploy.
+Zero-config: it works on install. Config is written on your first plan; the GitHub
+connect flow (`gh`) prompts on your first deploy.
 
 ## CLI
 
@@ -49,7 +48,7 @@ planloft copy [slug]          # copy raw doc into ./.planloft/plans/
 planloft deploy [slug]        # build + publish; prints the link
 planloft rm <slug>            # remove a doc from the store
 planloft config               # open/edit global config
-planloft init                 # optional: set theme/format, verify hosts
+planloft init                 # optional: set theme/format, verify GitHub
 ```
 
 ## Config (`~/.planloft/config.json`)
@@ -67,12 +66,9 @@ planloft init                 # optional: set theme/format, verify hosts
 
 Theme resolution: **plan frontmatter > project override > global default**.
 
-## Design
+## Current scope
 
-Architecture decisions are recorded in [`docs/adr/`](./docs/adr/). Start with
-[ADR-0001](./docs/adr/0001-planloft-architecture.md). Codex plugin support is captured
-in [ADR-0004](./docs/adr/0004-codex-plugin-support.md).
-
-## Status
-
-Early scaffold (v0.0.1). See ADR-0001 for the resolved design and the deferred list.
+planloft currently supports the local doc store, themed preview, copy-to-repo, Claude
+Code and Codex plugin wiring, and GitHub Pages deploys. Saved docs stay local until you
+copy or deploy them. Deployed review links are public-by-link, marked `noindex`, and
+expire through the GitHub Pages cleanup workflow.

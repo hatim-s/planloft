@@ -3,9 +3,8 @@ import pc from "picocolors";
 import { configPath } from "../core/paths.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../core/config.js";
 import { hasGh } from "../hosts/github-pages.js";
-import { hasVercel } from "../hosts/vercel.js";
 
-/** Optional setup (ADR-0001 §D23): ensure config exists + report host readiness. */
+/** Optional setup (ADR-0001 §D23): ensure config exists + report GitHub readiness. */
 export function init(): void {
   if (!fs.existsSync(configPath())) {
     saveConfig(DEFAULT_CONFIG);
@@ -16,12 +15,11 @@ export function init(): void {
 
   const cfg = loadConfig();
   console.log(`theme=${cfg.theme}  planFormat=${cfg.planFormat}  defaultTtlDays=${cfg.defaultTtlDays}`);
+
+  const repo = cfg.github?.repo ?? "planloft-plans";
   console.log(
     "github (gh) : " +
-      (hasGh() ? pc.green("ready") : pc.yellow("not found — will prompt for a PAT on deploy")),
-  );
-  console.log(
-    "vercel      : " +
-      (hasVercel() ? pc.green("ready") : pc.yellow("not found — will prompt for a token on --host vercel")),
+      (hasGh() ? pc.green("ready") : pc.yellow("not found — will prompt for a PAT on deploy")) +
+      pc.dim(`  repo=${repo}`),
   );
 }

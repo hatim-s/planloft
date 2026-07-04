@@ -1,7 +1,7 @@
 ---
 name: planloft-deploy
-description: Build the latest (or named) plan into a themed static site and publish it as a shareable review link.
-argument-hint: "[slug] [--host github|vercel] [--ttl <days>] [--comments]"
+description: Build the latest (or named) plan into a themed static site and publish it to GitHub Pages as a shareable review link.
+argument-hint: "[slug] [--ttl <days>] [--comments]"
 allowed-tools: Bash(planloft:*)
 disable-model-invocation: true
 ---
@@ -17,8 +17,7 @@ planloft deploy $ARGUMENTS
 
 Report the returned URL to the user. Remember:
 
-- Default host is **GitHub Pages** (free, auto-expires after 30 days; `--ttl 90` to
-  extend; redeploy bumps expiry).
-- `--host vercel` publishes a **permanent** deploy.
+- Publishes to **GitHub Pages** — free, auto-expires after 30 days (`--ttl 90` to extend;
+  redeploy bumps expiry).
 - `--comments` wires giscus review comments (GitHub Discussions).
-- The plan page is public-by-link (unguessable id, `noindex`) — see ADR-0001 §D21.
+- The plan page is public-by-link: an unguessable id + `noindex`.
