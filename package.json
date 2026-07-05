@@ -5,6 +5,14 @@
   "packageManager": "pnpm@10.8.1",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hatim-s/planlof.git"
+  },
+  "homepage": "https://github.com/hatim-s/planlof#readme",
+  "bugs": {
+    "url": "https://github.com/hatim-s/planlof/issues"
+  },
   "bin": {
     "planloft": "dist/cli.js"
   },
@@ -34,6 +42,9 @@
     "test": "tsx --test src/**/*.test.ts",
     "prepack": "npm run build && npm run typecheck",
     "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18"
