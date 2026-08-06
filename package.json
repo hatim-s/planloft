@@ -1,5 +1,5 @@
 {
-  "name": "@hatimcodes/planloft",
+  "name": "planloft",
   "version": "0.0.1",
   "description": "Render, hoist, and publish Markdown, JSON, HTML, and agent-written plans as consistently themed documents.",
   "packageManager": "pnpm@10.8.1",

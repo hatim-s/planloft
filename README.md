@@ -32,7 +32,7 @@ publish it as a shareable review link that auto-expires.
 /plugin install planloft
 
 # or the CLI standalone
-pnpm add -g @hatim-s/planloft
+pnpm add -g planloft
 ```
 
 Codex support is shipped through `.codex-plugin/plugin.json`, the bundled `skills/`
@@ -96,7 +96,7 @@ Only `content` is required. The machine-readable contract is shipped at
 ## Node library
 
 ```ts
-import { ingestDocument, renderDocument } from "@hatim-s/planloft";
+import { ingestDocument, renderDocument } from "planloft";
 
 const doc = ingestDocument(JSON.stringify({
   title: "Launch plan",
