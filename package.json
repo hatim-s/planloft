@@ -1,5 +1,5 @@
 {
-  "name": "@hatim-s/planloft",
+  "name": "@hatimcodes/planloft",
   "version": "0.0.1",
   "description": "Render, hoist, and publish Markdown, JSON, HTML, and agent-written plans as consistently themed documents.",
   "packageManager": "pnpm@10.8.1",
@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hatim-s/planlof.git"
+    "url": "git+https://github.com/hatim-s/planloft.git"
   },
-  "homepage": "https://github.com/hatim-s/planlof#readme",
+  "homepage": "https://github.com/hatim-s/planloft#readme",
   "bugs": {
-    "url": "https://github.com/hatim-s/planlof/issues"
+    "url": "https://github.com/hatim-s/planloft/issues"
   },
   "bin": {
     "planloft": "dist/cli.js"
