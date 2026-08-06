@@ -1,11 +1,12 @@
 # planloft
 
-> Hoist your agent-written plans and docs into a global, themed, shareable store.
+> Turn Markdown, JSON, HTML, and agent-written plans into consistently themed,
+> shareable documents.
 
-planloft is a Claude Code / Codex **plugin + CLI**. When your agent writes a plan, planloft
-captures it into a per-project global store, lets you theme it (minimal / detailed /
-editorial), copy it into your repo, and deploy it as a shareable review link that
-auto-expires.
+planloft is a document compiler, Claude Code / Codex **plugin, CLI, and Node library**.
+Give it Markdown, a versioned JSON envelope, or trusted HTML; it can render a
+self-contained HTML artifact, hoist the source into a per-project global store, or
+publish it as a shareable review link that auto-expires.
 
 ## What it does
 
@@ -16,6 +17,8 @@ auto-expires.
   follow the repo, not the folder.
 - **Themed** — every plan has a look *and* feel. `minimal`, `detailed`, `editorial`
   built in; drop your own in `~/.planloft/themes/`.
+- **Caller-friendly input** — render, hoist, or publish Markdown and JSON directly;
+  trusted HTML is available through an explicit safety option.
 - **1-click copy** — `/planloft-copy` drops the plan into `./.planloft/plans/` in your
   repo, committed alongside code.
 - **1-click deploy** — `/planloft-deploy` builds a themed static site and publishes it to
@@ -29,7 +32,7 @@ auto-expires.
 /plugin install planloft
 
 # or the CLI standalone
-pnpm add -g planloft
+pnpm add -g @hatim-s/planloft
 ```
 
 Codex support is shipped through `.codex-plugin/plugin.json`, the bundled `skills/`
@@ -42,6 +45,9 @@ connect flow (`gh`) prompts on your first deploy.
 ## CLI
 
 ```
+planloft render <input>       # Markdown/JSON -> HTML on stdout
+planloft hoist <input>        # normalize + save in the project store
+planloft publish <input>      # hoist + render + deploy in one operation
 planloft list                 # docs grouped by project
 planloft preview <slug>       # themed preview in your browser
 planloft copy [slug]          # copy raw doc into ./.planloft/plans/
@@ -50,6 +56,73 @@ planloft rm <slug>            # remove a doc from the store
 planloft config               # open/edit global config
 planloft init                 # optional: set theme/format, verify GitHub
 ```
+
+`<input>` may be a `.md`, `.json`, or `.html` file. Use `- --format md|json|html` for
+stdin. Direct rendering writes HTML to stdout unless `--out <file-or-directory>` is
+provided.
+
+```bash
+planloft render proposal.md --theme editorial --out ./proposal-site
+planloft hoist proposal.json
+planloft publish proposal.json --ttl 30
+printf '{"title":"Launch","content":"# Goal\\n\\nShip."}' |
+  planloft render - --format json > index.html
+```
+
+HTML input and embedded Markdown HTML are disabled for direct callers by default. Use
+`--trusted-html` only for content you control.
+
+## JSON document format
+
+JSON is a small metadata envelope around Markdown or trusted HTML, not a proprietary
+tree of content blocks:
+
+```json
+{
+  "version": 1,
+  "title": "Launch plan",
+  "slug": "launch-plan",
+  "kind": "plan",
+  "theme": "detailed",
+  "status": "active",
+  "contentFormat": "md",
+  "content": "# Goal\n\nShip the release.\n\n## Steps\n\n- Verify CI.\n- Publish."
+}
+```
+
+Only `content` is required. The machine-readable contract is shipped at
+`schemas/document.schema.json`.
+
+## Node library
+
+```ts
+import { ingestDocument, renderDocument } from "@hatim-s/planloft";
+
+const doc = ingestDocument(JSON.stringify({
+  title: "Launch plan",
+  content: "# Goal\n\nShip the release.",
+}), { format: "json" });
+
+const html = renderDocument(doc, "minimal");
+```
+
+`hoistDocument(doc)` persists the same canonical document in the current project's
+global Planloft store.
+
+## Custom themes
+
+A theme directory may provide:
+
+```text
+~/.planloft/themes/<name>/
+  template.md   # authoring guidance for agents
+  style.css     # visual skin
+  layout.html   # optional constrained document layout
+```
+
+`layout.html` supports only `{{title}}`, `{{kind}}`, `{{body}}`, `{{styles}}`,
+`{{robots}}`, and `{{comments}}`. It does not execute expressions or code. Themes that
+omit it use Planloft's compatible default layout.
 
 ## Config (`~/.planloft/config.json`)
 
@@ -68,7 +141,7 @@ Theme resolution: **plan frontmatter > project override > global default**.
 
 ## Current scope
 
-planloft currently supports the local doc store, themed preview, copy-to-repo, Claude
-Code and Codex plugin wiring, and GitHub Pages deploys. Saved docs stay local until you
-copy or deploy them. Deployed review links are public-by-link, marked `noindex`, and
-expire through the GitHub Pages cleanup workflow.
+planloft currently supports direct document ingestion/rendering, the local doc store,
+themed preview, copy-to-repo, Claude Code and Codex plugin wiring, and GitHub Pages
+deploys. Saved docs stay local until you copy or publish them. Deployed review links are
+public-by-link, marked `noindex`, and expire through the GitHub Pages cleanup workflow.

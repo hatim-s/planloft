@@ -1,6 +1,6 @@
 # ADR-0003 — replace the Astro renderer with a minimal `marked` renderer
 
-- **Status**: Accepted
+- **Status**: Accepted; fixed input/wrapper partially superseded by ADR-0007
 - **Date**: 2026-07-03
 - **Supersedes**: ADR-0001 §D10 (assembler) and §D25 (renderer runtime).
 

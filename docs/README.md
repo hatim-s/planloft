@@ -16,6 +16,7 @@ These files are read by users installing or running planloft:
 - `skills/`
 - `hooks/`
 - `themes/`
+- `schemas/`
 - `templates/`
 - the built `dist/` output
 
@@ -27,6 +28,7 @@ designs, deferred hosts, internal tradeoffs, or future-only architecture.
 These files are public repo docs for maintainers and contributors:
 
 - `docs/adr/`
+- `CONTEXT.md`
 - future planning, architecture, release, or investigation notes under `docs/`
 
 This segment can record decision history, rejected options, deferred work, and

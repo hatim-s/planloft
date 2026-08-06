@@ -1,6 +1,7 @@
 // Shared types for the planloft store. See docs/adr/ for the decisions behind these.
 
 export type PlanFormat = "md" | "html";
+export type SourceFormat = PlanFormat | "json";
 
 // Document kinds (ADR-0002). Built-ins are first-class; any string is also accepted.
 export type BuiltinKind = "plan" | "adr" | "review" | "research" | "report" | "note";
@@ -16,8 +17,35 @@ export interface DocMeta {
   theme?: string; // per-doc override (ADR-0001 §D8)
   status?: string; // draft | active | superseded | done
   format: PlanFormat;
+  /** Whether embedded/raw HTML was explicitly trusted when this document was hoisted. */
+  trustedHtml?: boolean;
   file: string; // absolute path in the store
   updatedAt: string; // ISO timestamp
+}
+
+/** Format-independent document produced by every ingestion adapter (ADR-0007). */
+export interface CanonicalDocument {
+  version: 1;
+  title: string;
+  slug: string;
+  kind: Kind;
+  theme?: string;
+  status: string;
+  contentFormat: PlanFormat;
+  content: string;
+  trustedHtml: boolean;
+}
+
+/** Stable JSON document envelope accepted by the JSON ingestion adapter. */
+export interface JsonDocument {
+  version?: 1;
+  title?: string;
+  slug?: string;
+  kind?: Kind;
+  theme?: string;
+  status?: string;
+  contentFormat?: PlanFormat;
+  content: string;
 }
 
 /** One project bucket in the index. Docs are flat per project, keyed by slug (ADR-0002). */

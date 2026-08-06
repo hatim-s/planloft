@@ -9,12 +9,52 @@ import { rm } from "./commands/rm.js";
 import { config } from "./commands/config.js";
 import { init } from "./commands/init.js";
 import { hook } from "./commands/hook.js";
+import { hoist } from "./commands/hoist.js";
+import { render } from "./commands/render.js";
+import { publish } from "./commands/publish.js";
 
 const program = new Command();
 program
   .name("planloft")
-  .description("Hoist Claude Code plans into a global, themed, deployable store.")
+  .description("Render, hoist, and publish consistently themed documents.")
   .version("0.0.1");
+
+program
+  .command("render <input>")
+  .description("Render Markdown, JSON, or trusted HTML to a self-contained HTML artifact.")
+  .option("--format <format>", "md | json | html (required for stdin)")
+  .option("--out <path>", "output .html file or directory; defaults to stdout")
+  .option("--title <title>", "override document title")
+  .option("--slug <slug>", "override document slug")
+  .option("--kind <kind>", "override document kind")
+  .option("--theme <theme>", "override theme")
+  .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
+  .option("--noindex", "include noindex/nofollow metadata")
+  .action((input, o) => render(input, o));
+
+program
+  .command("hoist <input>")
+  .description("Normalize Markdown, JSON, or trusted HTML into the current project's store.")
+  .option("--format <format>", "md | json | html (required for stdin)")
+  .option("--title <title>", "override document title")
+  .option("--slug <slug>", "override document slug")
+  .option("--kind <kind>", "override document kind")
+  .option("--theme <theme>", "override theme")
+  .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
+  .action((input, o) => hoist(input, o));
+
+program
+  .command("publish <input>")
+  .description("Hoist + render + publish Markdown, JSON, or trusted HTML to GitHub Pages.")
+  .option("--format <format>", "md | json | html (required for stdin)")
+  .option("--title <title>", "override document title")
+  .option("--slug <slug>", "override document slug")
+  .option("--kind <kind>", "override document kind")
+  .option("--theme <theme>", "override theme")
+  .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
+  .option("--ttl <days>", "GitHub Pages expiry in days", (value) => parseInt(value, 10))
+  .option("--comments", "enable giscus review comments")
+  .action((input, o) => publish(input, { ...o, ttl: o.ttl }));
 
 program
   .command("resolve")
@@ -37,17 +77,17 @@ program
 
 program
   .command("copy [slug]")
-  .description("Copy a plan's raw source into ./.planloft/plans/.")
+  .description("Copy a document's raw source into ./.planloft/plans/.")
   .action((s) => copy(s));
 
 program
   .command("deploy [slug]")
-  .description("Build + publish a plan to GitHub Pages as a shareable review link.")
+  .description("Build + publish a document to GitHub Pages as a shareable review link.")
   .option("--ttl <days>", "GitHub Pages expiry in days", (v) => parseInt(v, 10))
   .option("--comments", "enable giscus review comments")
   .action((s, o) => deploy(s, { ttl: o.ttl, comments: o.comments }));
 
-program.command("rm <slug>").description("Remove a plan from the store.").action((s) => rm(s));
+program.command("rm <slug>").description("Remove a document from the store.").action((s) => rm(s));
 program.command("config").description("Open the global config in $EDITOR.").action(() => config());
 program.command("init").description("Optional setup: config + GitHub readiness check.").action(() => init());
 

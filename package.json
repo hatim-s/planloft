@@ -1,12 +1,21 @@
 {
-  "name": "planloft",
+  "name": "@hatim-s/planloft",
   "version": "0.0.1",
-  "description": "Hoist agent-written plans and docs into a global, themed, deployable store — organized by project, one-click copy-to-repo and deploy-for-review.",
+  "description": "Render, hoist, and publish Markdown, JSON, HTML, and agent-written plans as consistently themed documents.",
   "packageManager": "pnpm@10.8.1",
   "type": "module",
   "license": "MIT",
   "bin": {
     "planloft": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -14,13 +23,16 @@
     "hooks",
     "commands",
     "themes",
+    "schemas",
     "templates",
     ".codex-plugin",
     ".claude-plugin"
   ],
   "scripts": {
-    "build": "tsup src/cli.ts --format esm --clean --dts",
+    "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
     "dev": "tsx src/cli.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "prepack": "npm run build && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

@@ -1,73 +1,101 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { marked } from "marked";
-import * as fm from "../core/frontmatter.js";
-import { readStyle } from "./themes.js";
-import type { DocMeta } from "../core/types.js";
+import { marked, Renderer } from "marked";
+import { ingestDocument } from "../core/ingest.js";
+import { readLayout, readStyle } from "./themes.js";
+import type { CanonicalDocument, DocMeta } from "../core/types.js";
 
-export interface BuildOpts {
-  doc: DocMeta;
-  theme: string;
-  base: string; // deploy URL base path; kept for interface compat, unused (page is self-contained)
-  comments?: boolean; // giscus (ADR-0001 §D19)
-  noindex?: boolean; // ADR-0001 §D21
+export interface RenderOptions {
+  comments?: boolean;
+  noindex?: boolean;
 }
 
-/**
- * Render a single doc to a self-contained themed static site.
- * ADR-0003 (supersedes ADR-0001 §D10/§D25): pure JS — marked + gray-matter, inlined
- * theme CSS. No framework, no native binaries, no vendored node_modules, instant build.
- * Returns the absolute path to the output dir containing index.html.
- */
+export interface BuildOpts extends RenderOptions {
+  doc: DocMeta;
+  theme: string;
+  base: string; // kept for interface compatibility; the artifact is self-contained
+}
+
+/** Render a canonical document into a self-contained HTML artifact (ADR-0007). */
+export function renderDocument(
+  doc: CanonicalDocument,
+  theme: string,
+  options: RenderOptions = {},
+): string {
+  const body =
+    doc.contentFormat === "html" ? doc.content : renderMarkdown(doc.content, doc.trustedHtml);
+
+  return renderLayout(readLayout(theme), {
+    title: escapeHtml(doc.title),
+    kind: escapeHtml(doc.kind),
+    body,
+    styles: readStyle(theme),
+    robots: options.noindex
+      ? '\n<meta name="robots" content="noindex, nofollow" />'
+      : "",
+    comments: options.comments
+      ? '\n<section class="planloft-comments"><!-- TODO(impl) mount giscus. --></section>'
+      : "",
+  });
+}
+
+/** Render an indexed store document to a temporary directory for preview/deploy. */
 export function buildSite(opts: BuildOpts): string {
   const raw = fs.readFileSync(opts.doc.file, "utf8");
-  const isHtml = opts.doc.format === "html"; // planFormat: html (ADR-0001 §D9)
-  const { data, content } = isHtml ? { data: {} as fm.Frontmatter, content: raw } : fm.parse(raw);
-
-  const title = opts.doc.title || data.title || "Doc";
-  const body = isHtml ? content : (marked.parse(content) as string);
-  const css = readStyle(opts.theme);
-
-  const html = renderPage({
-    title,
-    body,
-    css,
-    noindex: !!opts.noindex,
-    comments: !!opts.comments,
+  const canonical = ingestDocument(raw, {
+    format: opts.doc.format,
+    sourceName: opts.doc.file,
+    trustedHtml: opts.doc.trustedHtml ?? true,
+    overrides: {
+      title: opts.doc.title,
+      slug: opts.doc.slug,
+      kind: opts.doc.kind,
+      theme: opts.doc.theme,
+      status: opts.doc.status,
+    },
   });
-
+  const html = renderDocument(canonical, opts.theme, opts);
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-build-"));
   fs.writeFileSync(path.join(outDir, "index.html"), html);
   return outDir;
 }
 
-function renderPage(o: {
-  title: string;
-  body: string;
-  css: string;
-  noindex: boolean;
-  comments: boolean;
-}): string {
-  const robots = o.noindex ? '\n<meta name="robots" content="noindex, nofollow" />' : "";
-  const comments = o.comments
-    ? '\n<section class="planloft-comments"><!-- TODO(impl) ADR-0001 §D19: mount giscus (repo/category from config). --></section>'
-    : "";
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />${robots}
-<title>${escapeHtml(o.title)}</title>
-<style>${o.css}</style>
-</head>
-<body>
-<main class="planloft-plan">
-<article>${o.body}</article>${comments}
-</main>
-</body>
-</html>
-`;
+function renderMarkdown(content: string, trustedHtml: boolean): string {
+  const renderer = new Renderer();
+  if (!trustedHtml) {
+    renderer.html = (html) => escapeHtml(html);
+    renderer.link = (href, title, text) => {
+      if (!safeUrl(href)) return text;
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${escapeHtml(href)}"${titleAttr}>${text}</a>`;
+    };
+    renderer.image = (href, title, text) => {
+      if (!safeUrl(href)) return escapeHtml(text);
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<img src="${escapeHtml(href)}" alt="${escapeHtml(text)}"${titleAttr}>`;
+    };
+  }
+  return marked.parse(content, { renderer }) as string;
+}
+
+function renderLayout(layout: string, slots: Record<string, string>): string {
+  return layout.replace(/\{\{(title|kind|body|styles|robots|comments)\}\}/g, (_, key: string) => {
+    return slots[key] ?? "";
+  });
+}
+
+function safeUrl(url: string): boolean {
+  const normalized = url.trim().toLowerCase();
+  return (
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("mailto:") ||
+    normalized.startsWith("#") ||
+    normalized.startsWith("/") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../")
+  );
 }
 
 const ESCAPES: Record<string, string> = {
@@ -77,6 +105,6 @@ const ESCAPES: Record<string, string> = {
   '"': "&quot;",
   "'": "&#39;",
 };
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ESCAPES[c] ?? c);
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ESCAPES[character] ?? character);
 }

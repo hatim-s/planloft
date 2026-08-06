@@ -14,10 +14,11 @@ is shaped the way it is, not just *what* it does.
 |-----|-------|--------|
 | [0001](./0001-planloft-architecture.md) | planloft foundational architecture | Accepted |
 | [0002](./0002-document-kinds.md) | generalize the store from plans to documents | Accepted (amends 0001 §D3, §D6) |
-| [0003](./0003-marked-renderer.md) | replace Astro with a minimal `marked` renderer | Accepted (supersedes 0001 §D10, §D25) |
+| [0003](./0003-marked-renderer.md) | replace Astro with a minimal `marked` renderer | Accepted (supersedes 0001 §D10, §D25; partially superseded by 0007) |
 | [0004](./0004-codex-plugin-support.md) | add Codex plugin support | Accepted (amends 0001 §D1, §D6, §D16) |
 | [0005](./0005-custom-domain.md) | optional custom domain for GitHub Pages deploys | Superseded by 0006 |
 | [0006](./0006-github-pages-only.md) | narrow active hosting scope to GitHub Pages | Accepted (supersedes 0005; amends 0001 §D11) |
+| [0007](./0007-document-pipeline.md) | canonical document pipeline and constrained theme layouts | Accepted (amends 0001, 0002; partially supersedes 0003) |
 
 ## Conventions
 

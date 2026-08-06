@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { docsDir } from "./paths.js";
 import * as fm from "./frontmatter.js";
-import { upsertDoc } from "./store.js";
+import { getDoc, upsertDoc } from "./store.js";
 import type { DocMeta, Kind, PlanFormat } from "./types.js";
 
 // Built-in kinds (ADR-0002). Custom kinds (any string) are also allowed.
@@ -35,6 +35,7 @@ export function normalizeDocFile(absPath: string, key: string, label: string): D
   const format: PlanFormat = absPath.endsWith(".html") ? "html" : "md";
   const slug = path.basename(absPath).replace(/\.(md|html)$/, "");
   const now = new Date().toISOString();
+  const existing = getDoc(key, slug);
 
   if (format === "md") {
     const { data, content } = fm.parse(fs.readFileSync(absPath, "utf8"));
@@ -56,6 +57,7 @@ export function normalizeDocFile(absPath: string, key: string, label: string): D
       theme: typeof data.theme === "string" ? data.theme : undefined,
       status: String(merged.status),
       format,
+      trustedHtml: existing?.trustedHtml,
       file: absPath,
       updatedAt: now,
     };
@@ -66,11 +68,13 @@ export function normalizeDocFile(absPath: string, key: string, label: string): D
   // html docs: index by filename, no frontmatter rewrite.
   const meta: DocMeta = {
     slug,
-    title: slug,
-    kind: "note",
+    title: existing?.title ?? slug,
+    kind: existing?.kind ?? "note",
     project: key,
-    status: "active",
+    theme: existing?.theme,
+    status: existing?.status ?? "active",
     format,
+    trustedHtml: existing?.trustedHtml,
     file: absPath,
     updatedAt: now,
   };
