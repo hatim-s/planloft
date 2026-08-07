@@ -9,6 +9,7 @@ export interface SourceFlags {
   slug?: string;
   kind?: string;
   theme?: string;
+  status?: string;
   trustedHtml?: boolean;
 }
 
@@ -27,6 +28,7 @@ export async function readCanonicalDocument(
       slug: flags.slug,
       kind: flags.kind as Kind | undefined,
       theme: flags.theme,
+      status: flags.status,
     },
   });
 }

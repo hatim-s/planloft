@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { renderDocument } from "./renderer.js";
-import type { CanonicalDocument } from "../core/types.js";
+import { buildSite, renderDocument } from "./renderer.js";
+import type { CanonicalDocument, DocMeta } from "../core/types.js";
 
 test("a theme layout receives only constrained document slots", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-render-test-"));
@@ -44,6 +44,32 @@ test("untrusted Markdown escapes raw HTML and removes unsafe links", () => {
   assert.doesNotMatch(html, /<article>[\s\S]*<script>/);
   assert.doesNotMatch(html, /javascript:/);
   assert.match(html, /href="https:\/\/example.com"/);
+});
+
+test("legacy indexed HTML remains readable and deploy-renderable", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-legacy-html-test-"));
+  const source = path.join(directory, "legacy.html");
+  fs.writeFileSync(source, '<section data-legacy="true"><h1>Stored HTML</h1></section>');
+  const meta: DocMeta = {
+    slug: "legacy",
+    title: "Legacy HTML",
+    kind: "plan",
+    project: "legacy-project",
+    status: "active",
+    format: "html",
+    file: source,
+    updatedAt: "2026-08-08T00:00:00.000Z",
+  };
+  let site: string | undefined;
+  try {
+    site = buildSite({ doc: meta, theme: "minimal", base: "/" });
+    const html = fs.readFileSync(path.join(site, "index.html"), "utf8");
+    assert.match(html, /<section data-legacy="true"><h1>Stored HTML<\/h1><\/section>/);
+    assert.match(html, /planloft-theme-toggle/);
+  } finally {
+    if (site) fs.rmSync(site, { recursive: true, force: true });
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("comments are off by default", () => {

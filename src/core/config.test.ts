@@ -72,6 +72,19 @@ test("semantically invalid configuration reports the contract failure", () => {
   });
 });
 
+test("old HTML capture configuration produces an actionable migration diagnostic", () => {
+  withHome((home) => {
+    const file = path.join(home, "config.json");
+    fs.writeFileSync(file, JSON.stringify({ ...DEFAULT_CONFIG, planFormat: "html" }));
+    assertConfigError(
+      () => loadConfig(),
+      "PLANLOFT_CONFIG_MIGRATION_REQUIRED",
+      /Remove planFormat.*agent-authored documents now resolve to Markdown.*--trusted-html/,
+    );
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).planFormat, "html");
+  });
+});
+
 test("shared config fixtures agree through runtime and actual JSON Schema validation", () => {
   const schemaPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../schemas/config.schema.json");
   const fixturesPath = path.resolve(path.dirname(schemaPath), "config.fixtures.json");
@@ -173,7 +186,6 @@ test("targeted updates ignore explicit undefined values at every optional patch 
 
     const updated = updateConfig({
       theme: undefined,
-      planFormat: undefined,
       defaultTtlDays: undefined,
       github: { repo: "new-plans", user: undefined, token: undefined },
       giscus: { repo: undefined, repoId: undefined, category: undefined, categoryId: undefined },

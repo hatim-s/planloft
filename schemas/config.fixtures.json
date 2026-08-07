@@ -5,7 +5,6 @@
       "config": {
         "version": 1,
         "theme": "minimal",
-        "planFormat": "md",
         "defaultTtlDays": 30,
         "projects": {}
       }
@@ -15,7 +14,6 @@
       "config": {
         "version": 1,
         "theme": "editorial",
-        "planFormat": "html",
         "defaultTtlDays": 100000000,
         "projects": {
           "project": {
@@ -47,7 +45,6 @@
       "config": {
         "version": 1,
         "theme": "minimal",
-        "planFormat": "md",
         "defaultTtlDays": "30",
         "projects": {}
       }
@@ -57,7 +54,6 @@
       "config": {
         "version": 1,
         "theme": "minimal",
-        "planFormat": "md",
         "defaultTtlDays": 1.5,
         "projects": {}
       }
@@ -67,7 +63,6 @@
       "config": {
         "version": 1,
         "theme": "minimal",
-        "planFormat": "md",
         "defaultTtlDays": 30,
         "projects": {},
         "github": { "token": "   " }
@@ -78,7 +73,6 @@
       "config": {
         "version": 1,
         "theme": "minimal",
-        "planFormat": "md",
         "defaultTtlDays": 30,
         "projects": {
           "project": { "giscus": { "category": "\t" } }

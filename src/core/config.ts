@@ -9,7 +9,8 @@ import { assertThemeName, validateTheme } from "../render/themes.js";
 export type ConfigDiagnosticCode =
   | "PLANLOFT_CONFIG_MALFORMED"
   | "PLANLOFT_CONFIG_INACCESSIBLE"
-  | "PLANLOFT_CONFIG_INVALID";
+  | "PLANLOFT_CONFIG_INVALID"
+  | "PLANLOFT_CONFIG_MIGRATION_REQUIRED";
 
 export class ConfigError extends Error {
   constructor(
@@ -26,7 +27,6 @@ export class ConfigError extends Error {
 export const DEFAULT_CONFIG: Config = {
   version: 1,
   theme: "minimal",
-  planFormat: "md",
   defaultTtlDays: 30,
   projects: {},
 };
@@ -147,7 +147,6 @@ export function updateConfig(patch: ConfigPatch): Config {
     version: 1,
     projects,
     ...(patch.theme === undefined ? {} : { theme: patch.theme }),
-    ...(patch.planFormat === undefined ? {} : { planFormat: patch.planFormat }),
     ...(patch.defaultTtlDays === undefined ? {} : { defaultTtlDays: patch.defaultTtlDays }),
     ...optionalNestedUpdate("giscus", current.giscus, patch.giscus),
     ...optionalNestedUpdate("github", current.github, patch.github),
@@ -173,13 +172,19 @@ export function validateConfig(value: unknown, source = "configuration"): Config
 
 function validateConfigValue(value: unknown): Config {
   const root = object(value, "$config");
-  exactKeys(root, ["version", "theme", "planFormat", "defaultTtlDays", "projects", "giscus", "github", "vercel"], "$config");
+  if (root.planFormat !== undefined) {
+    const detail = root.planFormat === "html"
+      ? 'The old planFormat: "html" capture setting cannot author agent plans safely.'
+      : "The planFormat capture setting has been removed.";
+    throw new ConfigError(
+      "PLANLOFT_CONFIG_MIGRATION_REQUIRED",
+      `${detail} Remove planFormat from config.json; agent-authored documents now resolve to Markdown, while explicit trusted HTML input remains available through --trusted-html.`,
+    );
+  }
+  exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel"], "$config");
   if (root.version !== 1) fail("$config.version must equal 1");
   const theme = nonEmptyString(root.theme, "$config.theme");
   assertThemeName(theme);
-  if (root.planFormat !== "md" && root.planFormat !== "html") {
-    fail('$config.planFormat must be "md" or "html"');
-  }
   const defaultTtlDays = configTtlDays(root.defaultTtlDays);
   const projectValues = object(root.projects, "$config.projects");
   const projects: Config["projects"] = {};
@@ -200,7 +205,6 @@ function validateConfigValue(value: unknown): Config {
   return {
     version: 1,
     theme,
-    planFormat: root.planFormat,
     defaultTtlDays,
     projects,
     ...(root.giscus === undefined ? {} : { giscus: validateStringMap(root.giscus, "$config.giscus", GISCUS_KEYS) }),

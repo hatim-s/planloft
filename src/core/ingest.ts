@@ -1,4 +1,5 @@
 import path from "node:path";
+import { marked } from "marked";
 import * as fm from "./frontmatter.js";
 import { slugify } from "./slug.js";
 import type {
@@ -41,20 +42,14 @@ export function ingestDocument(raw: string, options: IngestOptions): CanonicalDo
   }
 
   const parsed = options.format === "md" ? fm.parse(raw) : { data: {}, content: raw };
-  const data = parsed.data;
+  const source = normalizeDocumentMetadata(parsed.data, "Markdown frontmatter");
   return canonical({
     content: parsed.content,
     contentFormat: options.format,
     trustedHtml: !!options.trustedHtml,
     fallbackSlug,
     defaults: options.defaults,
-    source: {
-      title: stringValue(data.title),
-      slug: stringValue(data.slug),
-      kind: stringValue(data.kind) as Kind | undefined,
-      theme: stringValue(data.theme),
-      status: stringValue(data.status),
-    },
+    source,
     overrides: options.overrides,
   });
 }
@@ -100,11 +95,7 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
   if (typeof doc.content !== "string") {
     throw new Error('A JSON document requires a string "content" field.');
   }
-  for (const field of ["title", "slug", "kind", "theme", "status"] as const) {
-    if (doc[field] !== undefined && typeof doc[field] !== "string") {
-      throw new Error(`"${field}" must be a string.`);
-    }
-  }
+  const source = normalizeDocumentMetadata(doc, "JSON document");
   const contentFormat = doc.contentFormat ?? "md";
   if (contentFormat !== "md" && contentFormat !== "html") {
     throw new Error('"contentFormat" must be "md" or "html".');
@@ -121,13 +112,7 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
     trustedHtml: !!options.trustedHtml,
     fallbackSlug,
     defaults: options.defaults,
-    source: {
-      title: stringValue(doc.title),
-      slug: stringValue(doc.slug),
-      kind: stringValue(doc.kind) as Kind | undefined,
-      theme: stringValue(doc.theme),
-      status: stringValue(doc.status),
-    },
+    source,
     overrides: options.overrides,
   });
 }
@@ -141,9 +126,17 @@ function canonical(input: {
   source: DocumentOverrides;
   overrides?: DocumentOverrides;
 }): CanonicalDocument {
-  const merged = { ...input.defaults, ...defined(input.source), ...defined(input.overrides) };
-  const inferredTitle = firstHeading(input.content) ?? merged.slug ?? input.fallbackSlug ?? "Document";
-  const title = merged.title?.trim() || inferredTitle;
+  const merged = {
+    ...normalizeDocumentMetadata(input.defaults, "document defaults"),
+    ...input.source,
+    ...normalizeDocumentMetadata(input.overrides, "document overrides"),
+  };
+  const inferredTitle =
+    (input.contentFormat === "md" ? firstMarkdownHeading(input.content) : undefined) ??
+    merged.slug ??
+    input.fallbackSlug ??
+    "Document";
+  const title = merged.title ?? inferredTitle;
 
   return {
     version: 1,
@@ -158,16 +151,28 @@ function canonical(input: {
   };
 }
 
-function firstHeading(markdown: string): string | undefined {
-  const match = /^#\s+(.+)$/m.exec(markdown);
-  return match?.[1]?.trim();
+/** Infer a title only from the first parsed level-one Markdown heading. */
+function firstMarkdownHeading(markdown: string): string | undefined {
+  const heading = marked
+    .lexer(markdown)
+    .find((token) => token.type === "heading" && token.depth === 1);
+  return heading?.type === "heading" && heading.text.trim() ? heading.text.trim() : undefined;
 }
 
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function defined<T extends object>(value: T | undefined): Partial<T> {
+/** Validate and trim document metadata consistently across every ingestion surface. */
+export function normalizeDocumentMetadata(
+  value: Partial<Record<keyof DocumentOverrides, unknown>> | undefined,
+  source: string,
+): DocumentOverrides {
   if (!value) return {};
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as Partial<T>;
+  const normalized: DocumentOverrides = {};
+  for (const field of ["title", "slug", "kind", "theme", "status"] as const) {
+    const entry = value[field];
+    if (entry === undefined) continue;
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(`${source} metadata "${field}" must be a nonblank string when provided.`);
+    }
+    Object.assign(normalized, { [field]: entry.trim() });
+  }
+  return normalized;
 }

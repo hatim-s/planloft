@@ -18,7 +18,7 @@ export function init(): void {
   } else {
     console.log(pc.dim("Config exists: ") + configPath());
   }
-  console.log(`theme=${cfg.theme}  planFormat=${cfg.planFormat}  defaultTtlDays=${cfg.defaultTtlDays}`);
+  console.log(`theme=${cfg.theme}  captureFormat=md  defaultTtlDays=${cfg.defaultTtlDays}`);
 
   const repo = cfg.github?.repo ?? "planloft-plans";
   console.log(

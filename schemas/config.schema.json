@@ -4,11 +4,10 @@
   "title": "Planloft configuration",
   "description": "Version 1 contract for ~/.planloft/config.json.",
   "type": "object",
-  "required": ["version", "theme", "planFormat", "defaultTtlDays", "projects"],
+  "required": ["version", "theme", "defaultTtlDays", "projects"],
   "properties": {
     "version": { "const": 1 },
     "theme": { "$ref": "#/$defs/themeName" },
-    "planFormat": { "enum": ["md", "html"] },
     "defaultTtlDays": { "type": "integer", "minimum": 1, "maximum": 100000000 },
     "projects": {
       "type": "object",

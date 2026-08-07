@@ -33,6 +33,7 @@ export function createProgram(): Command {
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
+    .option("--status <status>", "override document status")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--noindex", "include noindex/nofollow metadata")
     .action((input, options) => render(input, options));
@@ -43,6 +44,7 @@ export function createProgram(): Command {
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
+    .option("--status <status>", "override document status")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .action((input, options) => hoist(input, options));
 
@@ -52,6 +54,7 @@ export function createProgram(): Command {
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
+    .option("--status <status>", "override document status")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--ttl <days>", "GitHub Pages expiry in days", positiveInteger)
     .option("--comments", "enable giscus review comments")
@@ -69,7 +72,9 @@ export function createProgram(): Command {
 
   withKnowledge(program.command("preview [slug]"), "preview").action((slug) => preview(slug));
 
-  withKnowledge(program.command("copy [slug]"), "copy").action((slug) => copy(slug));
+  withKnowledge(program.command("copy [slug]"), "copy")
+    .option("--force", "replace an existing repository copy")
+    .action((slug, options) => copy(slug, { force: options.force }));
 
   withKnowledge(program.command("deploy [slug]"), "deploy")
     .option("--ttl <days>", "GitHub Pages expiry in days", positiveInteger)
