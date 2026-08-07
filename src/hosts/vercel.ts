@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { HostAdapter, DeployInput } from "./adapter.js";
+import type { HostAdapter, DeployInput, DeployResult } from "./adapter.js";
 
 /** Is the `vercel` CLI installed + logged in? (ADR-0001 §D13) */
 export function hasVercel(): boolean {
@@ -17,7 +17,7 @@ export const vercel: HostAdapter = {
   basePath() {
     return "/";
   },
-  async deploy(input: DeployInput): Promise<string> {
+  async deploy(input: DeployInput): Promise<DeployResult> {
     // TODO(impl) ADR-0001 §D13:
     //   `vercel deploy --prebuilt <dist>` when the CLI is present,
     //   else POST to the Vercel REST API with a token from config. Permanent (no TTL).

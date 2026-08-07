@@ -7,6 +7,7 @@ import {
   COMMAND_CATEGORIES,
   COMMAND_KNOWLEDGE,
   PLUGIN_DEFAULT_PROMPTS,
+  PUBLICATION_PRIVACY_DISCLOSURE,
   renderReadmeCliReference,
   renderSkillDiscoveryReference,
 } from "./command-knowledge.js";
@@ -39,10 +40,10 @@ test("root help groups every public command and explains state and safety", asyn
   for (const command of COMMAND_KNOWLEDGE) assert.ok(help.includes(command.signature));
   assert.match(help, /source -> canonical document -> store/);
   assert.match(help, /publish and deploy write to GitHub/);
-  assert.match(help, /backing repository and manifest are public/);
+  assert.ok(help.includes(PUBLICATION_PRIVACY_DISCLOSURE));
   assert.match(help, /rm deletes stored source/);
-  assert.match(help, /comments requires valid giscus configuration/i);
-  assert.match(help, /--ttl must be a positive integer/);
+  assert.match(help, /--comments requires GitHub Discussions plus giscus\.repo/);
+  assert.match(help, /--ttl and config\.defaultTtlDays must be finite positive integers/);
   assert.match(help, /--trusted-html accepts only content you trust/);
 });
 
@@ -58,8 +59,25 @@ test("every command help page includes its tested example and effect markers", a
 });
 
 test("TTL help contract is enforced by the CLI parser", async () => {
-  const result = await captureFailure(["deploy", "example", "--ttl", "0"]);
-  assert.match(result, /must be a positive integer/);
+  for (const command of ["deploy", "publish"]) {
+    for (const invalid of ["0", "-1", "1.5", "12days", "Infinity", "NaN"]) {
+      const subject = command === "deploy" ? "example" : "example.md";
+      const result = await captureFailure([command, subject, "--ttl", invalid]);
+      assert.match(result, /must be a finite positive integer/);
+    }
+  }
+});
+
+test("publication privacy disclosure is snapshot-stable and present in both publishing commands", async () => {
+  assert.equal(
+    PUBLICATION_PRIVACY_DISCLOSURE,
+    "Public deployment: the URL path is hard to guess and marked noindex, but the backing " +
+      "GitHub repository is public. Repository visitors can enumerate document folders and " +
+      "manifest metadata. Keep sensitive plans local.",
+  );
+  for (const command of ["deploy", "publish"]) {
+    assert.ok((await captureHelp(["help", command])).includes(PUBLICATION_PRIVACY_DISCLOSURE));
+  }
 });
 
 test("README, write-plan, and plugin metadata are projections of command knowledge", () => {

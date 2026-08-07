@@ -2,22 +2,24 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { loadConfig } from "../core/config.js";
+import { parseTtlDays } from "../core/ttl.js";
 import { hostingDir, templatesDir } from "../core/paths.js";
+import type { Config } from "../core/types.js";
 import type { DeployInput, HostAdapter } from "./adapter.js";
 
 const DEFAULT_REPO = "planloft-plans";
 const API = "https://api.github.com";
 
-interface ManifestEntry {
+export interface ManifestEntry {
   id: string;
   project: string;
   slug: string;
   title: string;
   kind: string;
   createdAt: string;
-  expiresAt: string | null; // null = permanent
+  expiresAt: string | null; // null is readable for legacy manifests; new deploys always expire
 }
-interface Manifest {
+export interface Manifest {
   version: 1;
   deploys: ManifestEntry[];
 }
@@ -34,22 +36,94 @@ export function hasGh(): boolean {
 
 // ---- auth -----------------------------------------------------------------
 
-/** Token from `gh auth token`, falling back to a configured PAT (ADR-0001 §D12). */
-function discoverToken(): string {
-  let ghToken: string | null = null;
+export type GithubCredentialSource = "gh" | "environment" | "config" | "prompt";
+export interface GithubCredential {
+  token: string;
+  source: GithubCredentialSource;
+}
+
+export const GITHUB_AUTH_MISSING = "PLANLOFT_GITHUB_AUTH_MISSING";
+export const GITHUB_AUTH_INVALID = "PLANLOFT_GITHUB_AUTH_INVALID";
+export const GITHUB_AUTH_UNREACHABLE = "PLANLOFT_GITHUB_AUTH_UNREACHABLE";
+
+export interface AuthDiscoveryOptions {
+  env?: NodeJS.ProcessEnv;
+  interactive?: boolean;
+  promptToken?: () => Promise<string>;
+  runGh?: (args: string[]) => string;
+}
+
+/** Credential precedence: authenticated gh, environment, config, interactive prompt. */
+export async function discoverGithubCredential(
+  cfg: Config,
+  options: AuthDiscoveryOptions = {},
+): Promise<GithubCredential> {
+  const env = options.env ?? process.env;
+  const runGh = options.runGh ?? runGhCommand;
   try {
-    ghToken = execFileSync("gh", ["auth", "token"], { encoding: "utf8" }).trim();
+    runGh(["auth", "status"]);
+    const token = runGh(["auth", "token"]).trim();
+    if (token) return { token, source: "gh" };
   } catch {
-    ghToken = null;
+    // Continue through the documented fallbacks.
   }
-  const token = ghToken || loadConfig().github?.token;
-  if (!token) {
-    throw new Error(
-      "GitHub auth not found. Run `gh auth login`, or set github.token (a PAT with repo scope) " +
-        "via `planloft config`.",
-    );
+
+  const environmentToken = env.PLANLOFT_GITHUB_TOKEN?.trim();
+  if (environmentToken) return { token: environmentToken, source: "environment" };
+
+  const configuredToken = cfg.github?.token?.trim();
+  if (configuredToken) return { token: configuredToken, source: "config" };
+
+  const interactive = options.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  if (interactive) {
+    const token = (await (options.promptToken ?? promptForToken)()).trim();
+    if (token) return { token, source: "prompt" };
   }
-  return token;
+
+  throw new Error(
+    `${GITHUB_AUTH_MISSING}: authenticate with \`gh auth login\`, set ` +
+      "PLANLOFT_GITHUB_TOKEN, or configure github.token. Noninteractive deploys never prompt.",
+  );
+}
+
+function runGhCommand(args: string[]): string {
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+}
+
+async function promptForToken(): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode) return "";
+  process.stdout.write("GitHub personal access token (input hidden): ");
+  const wasRaw = process.stdin.isRaw;
+  const wasPaused = process.stdin.isPaused();
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  return new Promise<string>((resolve, reject) => {
+    let token = "";
+    const finish = (error?: Error) => {
+      process.stdin.off("data", onData);
+      process.stdin.setRawMode?.(wasRaw);
+      if (wasPaused) process.stdin.pause();
+      process.stdout.write("\n");
+      if (error) reject(error);
+      else resolve(token);
+    };
+    const onData = (chunk: Buffer | string) => {
+      for (const character of chunk.toString()) {
+        if (character === "\u0003") {
+          finish(new Error(`${GITHUB_AUTH_MISSING}: GitHub authentication was cancelled.`));
+          return;
+        }
+        if (character === "\r" || character === "\n") {
+          finish();
+          return;
+        }
+        if (character === "\u007f" || character === "\b") token = token.slice(0, -1);
+        else token += character;
+      }
+    };
+    process.stdin.on("data", onData);
+  });
 }
 
 async function api(
@@ -71,14 +145,26 @@ async function api(
   });
 }
 
-async function login(token: string): Promise<string> {
-  const cfgUser = loadConfig().github?.user;
-  const res = await api(token, "GET", "/user");
-  if (!res.ok) {
-    if (cfgUser) return cfgUser;
-    throw new Error(`GitHub /user failed (${res.status}). Check your token/PAT scope.`);
+export async function validateGithubCredential(
+  credential: GithubCredential,
+  request: typeof api = api,
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await request(credential.token, "GET", "/user");
+  } catch {
+    throw new Error(`${GITHUB_AUTH_UNREACHABLE}: could not validate GitHub credentials.`);
   }
-  return ((await res.json()) as { login: string }).login;
+  if (!res.ok) {
+    throw new Error(
+      `${GITHUB_AUTH_INVALID}: GitHub rejected the ${credential.source} credential (${res.status}).`,
+    );
+  }
+  const login = ((await res.json()) as { login?: unknown }).login;
+  if (typeof login !== "string" || login.trim().length === 0) {
+    throw new Error(`${GITHUB_AUTH_INVALID}: GitHub returned no user for the credential.`);
+  }
+  return login;
 }
 
 // ---- git helpers ----------------------------------------------------------
@@ -87,12 +173,27 @@ function git(cwd: string, args: string[]): void {
   execFileSync("git", args, { cwd, stdio: "ignore" });
 }
 
-// Token embedded in the URL for a single command; never persisted to .git/config.
-function authUrl(user: string, repo: string, token: string): string {
-  return `https://x-access-token:${token}@github.com/${user}/${repo}.git`;
-}
 function cleanUrl(user: string, repo: string): string {
   return `https://github.com/${user}/${repo}.git`;
+}
+
+function authenticatedGit(cwd: string, args: string[], token: string): void {
+  const authorization = Buffer.from(`x-access-token:${token}`).toString("base64");
+  try {
+    execFileSync(
+      "git",
+      [
+        "-C",
+        cwd,
+        "-c",
+        `http.https://github.com/.extraheader=AUTHORIZATION: basic ${authorization}`,
+        ...args,
+      ],
+      { stdio: "ignore" },
+    );
+  } catch {
+    throw new Error("GitHub Git operation failed. Check credential and repository permissions.");
+  }
 }
 
 // ---- repo / pages ---------------------------------------------------------
@@ -129,17 +230,18 @@ async function ensurePages(token: string, user: string, repo: string): Promise<v
 // ---- local working clone --------------------------------------------------
 
 function syncClone(dir: string, user: string, repo: string, token: string): void {
-  const auth = authUrl(user, repo, token);
   if (!fs.existsSync(path.join(dir, ".git"))) {
-    fs.mkdirSync(hostingDir(), { recursive: true });
-    execFileSync("git", ["clone", "--depth", "1", auth, dir], { stdio: "ignore" });
-    git(dir, ["remote", "set-url", "origin", cleanUrl(user, repo)]); // drop token from config
+    fs.mkdirSync(dir, { recursive: true });
+    git(dir, ["init"]);
+    git(dir, ["remote", "add", "origin", cleanUrl(user, repo)]);
   } else {
-    // Remote is source of truth (the prune Action rewrites it) — hard-reset to it.
-    execFileSync("git", ["-C", dir, "fetch", "--depth", "1", auth, "main"], { stdio: "ignore" });
-    git(dir, ["reset", "--hard", "FETCH_HEAD"]);
-    git(dir, ["clean", "-fd"]);
+    // Repair clones created by older versions before any authenticated operation.
+    git(dir, ["remote", "set-url", "origin", cleanUrl(user, repo)]);
   }
+  // Remote is source of truth (the prune Action rewrites it) — hard-reset to it.
+  authenticatedGit(dir, ["fetch", "--depth", "1", "origin", "main"], token);
+  git(dir, ["reset", "--hard", "FETCH_HEAD"]);
+  git(dir, ["clean", "-fd"]);
   git(dir, ["config", "user.name", "planloft"]);
   git(dir, ["config", "user.email", `${user}@users.noreply.github.com`]);
 }
@@ -205,11 +307,14 @@ export const githubPages: HostAdapter = {
     return `/${repo}/p/${id}/`;
   },
 
-  async deploy(input: DeployInput): Promise<string> {
-    const cfg = loadConfig();
+  async deploy(input: DeployInput) {
+    // Validate adapter callers before credential discovery or any Git/GitHub effect.
+    parseTtlDays(input.ttlDays, "TTL");
+    const cfg = input.cfg;
     const repo = cfg.github?.repo ?? DEFAULT_REPO;
-    const token = discoverToken();
-    const user = await login(token);
+    const credential = await discoverGithubCredential(cfg);
+    const user = await validateGithubCredential(credential);
+    const token = credential.token;
 
     await ensureRepo(token, user, repo);
 
@@ -226,20 +331,7 @@ export const githubPages: HostAdapter = {
 
     copyDist(input.dist, path.join(dir, "p", id));
 
-    const now = new Date().toISOString();
-    const expiresAt = input.ttlDays
-      ? new Date(Date.now() + input.ttlDays * 86_400_000).toISOString()
-      : null;
-    manifest.deploys = manifest.deploys.filter((d) => d.id !== id);
-    manifest.deploys.push({
-      id,
-      project: input.doc.project,
-      slug: input.doc.slug,
-      title: input.doc.title,
-      kind: input.doc.kind,
-      createdAt: existing?.createdAt ?? now,
-      expiresAt,
-    });
+    const expiresAt = updateManifestDeployment(manifest, input, id, new Date());
     writeManifest(dir, manifest);
 
     // Commit + push (Pages redeploys from the branch).
@@ -249,12 +341,37 @@ export const githubPages: HostAdapter = {
     } catch {
       /* nothing changed */
     }
-    execFileSync("git", ["-C", dir, "push", authUrl(user, repo, token), "HEAD:main"], {
-      stdio: "ignore",
-    });
+    authenticatedGit(dir, ["push", "origin", "HEAD:main"], token);
 
     await ensurePages(token, user, repo);
 
-    return `https://${user}.github.io/${repo}/p/${id}/`;
+    return { url: `https://${user}.github.io/${repo}/p/${id}/`, expiresAt };
   },
 };
+
+/** Update manifest using an injected clock; returns the exact effective expiry. */
+export function updateManifestDeployment(
+  manifest: Manifest,
+  input: DeployInput,
+  id: string,
+  now: Date,
+): string {
+  const ttlDays = parseTtlDays(input.ttlDays, "TTL");
+  const existing = manifest.deploys.find(
+    (entry) => entry.project === input.doc.project && entry.slug === input.doc.slug,
+  );
+  const stableId = existing?.id ?? id;
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + ttlDays * 86_400_000).toISOString();
+  manifest.deploys = manifest.deploys.filter((entry) => entry.id !== stableId);
+  manifest.deploys.push({
+    id: stableId,
+    project: input.doc.project,
+    slug: input.doc.slug,
+    title: input.doc.title,
+    kind: input.doc.kind,
+    createdAt: existing?.createdAt ?? createdAt,
+    expiresAt,
+  });
+  return expiresAt;
+}

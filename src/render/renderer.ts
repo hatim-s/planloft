@@ -4,10 +4,11 @@ import path from "node:path";
 import { marked, Renderer } from "marked";
 import { ingestDocument } from "../core/ingest.js";
 import { readLayout, readStyle } from "./themes.js";
-import type { CanonicalDocument, DocMeta } from "../core/types.js";
+import { validateGiscusConfig } from "../core/giscus.js";
+import type { CanonicalDocument, DocMeta, GiscusConfig } from "../core/types.js";
 
 export interface RenderOptions {
-  comments?: boolean;
+  comments?: GiscusConfig;
   noindex?: boolean;
 }
 
@@ -28,7 +29,8 @@ export function renderDocument(
 
   const layout = readLayout(theme);
   const styles = themeStyles(readStyle(theme));
-  const html = renderLayout(layout, {
+  const comments = options.comments ? renderGiscus(options.comments) : "";
+  const rendered = renderLayout(layout, {
     title: escapeHtml(doc.title),
     kind: escapeHtml(doc.kind),
     body,
@@ -36,11 +38,37 @@ export function renderDocument(
     robots: options.noindex
       ? '\n<meta name="robots" content="noindex, nofollow" />'
       : "",
-    comments: options.comments
-      ? '\n<section class="planloft-comments"><!-- TODO(impl) mount giscus. --></section>'
-      : "",
+    comments,
   });
+  const html =
+    comments && !layout.includes("{{comments}}")
+      ? injectComments(rendered, comments)
+      : rendered;
   return injectThemeSupport(html, styles, layout.includes("{{styles}}"));
+}
+
+function renderGiscus(config: GiscusConfig): string {
+  const validated = validateGiscusConfig(config);
+  const attributes: Record<string, string> = {
+    src: "https://giscus.app/client.js",
+    "data-repo": validated.repo,
+    "data-repo-id": validated.repoId,
+    "data-category": validated.category,
+    "data-category-id": validated.categoryId,
+    "data-mapping": "pathname",
+    "data-strict": "1",
+    "data-reactions-enabled": "1",
+    "data-emit-metadata": "0",
+    "data-input-position": "bottom",
+    "data-theme": "preferred_color_scheme",
+    "data-lang": "en",
+    "data-loading": "lazy",
+    crossorigin: "anonymous",
+  };
+  const rendered = Object.entries(attributes)
+    .map(([name, value]) => `${name}="${escapeHtml(value)}"`)
+    .join("\n  ");
+  return `\n<section class="planloft-comments" aria-label="Comments">\n<script\n  ${rendered}\n  async>\n</script>\n</section>`;
 }
 
 /** Render an indexed store document to a temporary directory for preview/deploy. */
@@ -177,6 +205,14 @@ function injectThemeToggle(html: string): string {
   if (!body || body.index === undefined) return `${THEME_TOGGLE}\n${html}`;
   const insertion = body.index + body[0].length;
   return `${html.slice(0, insertion)}\n${THEME_TOGGLE}${html.slice(insertion)}`;
+}
+
+function injectComments(html: string, comments: string): string {
+  const bodyEnd = /<\/body\s*>/i.exec(html);
+  if (bodyEnd?.index !== undefined) {
+    return `${html.slice(0, bodyEnd.index)}${comments}\n${html.slice(bodyEnd.index)}`;
+  }
+  return `${html}${comments}`;
 }
 
 function safeUrl(url: string): boolean {

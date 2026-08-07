@@ -5,6 +5,9 @@ import { loadConfig, resolveTheme } from "../core/config.js";
 import { buildSite } from "../render/renderer.js";
 import { shortId } from "../core/id.js";
 import { getAdapter } from "../hosts/adapter.js";
+import { resolveGiscusConfig } from "../core/giscus.js";
+import { resolveTtlDays } from "../core/ttl.js";
+import { PUBLICATION_PRIVACY_DISCLOSURE } from "../command-knowledge.js";
 
 export interface DeployFlags {
   ttl?: number;
@@ -25,19 +28,23 @@ export async function deploy(slug: string | undefined, flags: DeployFlags): Prom
     return;
   }
 
-  const cfg = loadConfig();
-  const theme = resolveTheme(cfg, key, meta.theme);
-  const adapter = getAdapter("github")!; // always registered
-
-  const ttlDays = flags.ttl ?? cfg.defaultTtlDays;
-  const id = shortId();
-  const base = adapter.basePath(id);
-  const dist = buildSite({ doc: meta, theme, base, comments: flags.comments, noindex: true });
-
   try {
-    const url = await adapter.deploy({ id, dist, doc: meta, ttlDays, cfg });
-    console.log(pc.green("Deployed: ") + url);
-    console.log(pc.dim(`Expires in ${ttlDays} days (redeploy to bump).`));
+    const cfg = loadConfig();
+    const theme = resolveTheme(cfg, key, meta.theme);
+    const ttlDays = resolveTtlDays(flags.ttl, cfg.defaultTtlDays);
+    const comments = flags.comments ? resolveGiscusConfig(cfg, key) : undefined;
+    const adapter = getAdapter("github")!; // always registered
+    const id = shortId();
+    const base = adapter.basePath(id);
+    const dist = buildSite({ doc: meta, theme, base, comments, noindex: true });
+    const result = await adapter.deploy({ id, dist, doc: meta, ttlDays, cfg });
+    console.log(pc.green("Deployed: ") + result.url);
+    console.log(
+      pc.dim(
+        `Expires at ${result.expiresAt} (${ttlDays} days; redeploy moves expiry forward).`,
+      ),
+    );
+    console.log(pc.yellow(PUBLICATION_PRIVACY_DISCLOSURE));
     console.log(pc.dim("GitHub Pages can take ~1 min to build on first deploy."));
   } catch (err) {
     console.error(pc.red("Deploy failed: ") + (err as Error).message);

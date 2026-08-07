@@ -46,6 +46,59 @@ test("untrusted Markdown escapes raw HTML and removes unsafe links", () => {
   assert.match(html, /href="https:\/\/example.com"/);
 });
 
+test("comments are off by default", () => {
+  const html = renderDocument(document({}), "minimal");
+  assert.doesNotMatch(html, /giscus\.app\/client\.js/);
+  assert.doesNotMatch(html, /planloft-comments/);
+});
+
+test("configured comments render the complete giscus integration with escaped attributes", () => {
+  const html = renderDocument(document({}), "minimal", {
+    comments: {
+      repo: "owner/repository",
+      repoId: 'repo-id"&<',
+      category: 'Plan review "<&',
+      categoryId: 'category-id"&<',
+    },
+  });
+  assert.match(html, /src="https:\/\/giscus\.app\/client\.js"/);
+  assert.match(html, /data-repo="owner\/repository"/);
+  assert.match(html, /data-repo-id="repo-id&quot;&amp;&lt;"/);
+  assert.match(html, /data-category="Plan review &quot;&lt;&amp;"/);
+  assert.match(html, /data-category-id="category-id&quot;&amp;&lt;"/);
+  assert.match(html, /data-mapping="pathname"/);
+  assert.match(html, /data-theme="preferred_color_scheme"/);
+  assert.match(html, /crossorigin="anonymous"/);
+  assert.match(html, /\n  async>/);
+  assert.doesNotMatch(html, /TODO\(impl\)/);
+});
+
+test("comments are appended when a custom constrained layout omits the comments slot", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-comments-layout-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "no-comments-slot");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "style.css"), "");
+    fs.writeFileSync(path.join(theme, "layout.html"), "<html><body>{{body}}</body></html>");
+    const html = renderDocument(document({}), "no-comments-slot", {
+      comments: {
+        repo: "owner/repository",
+        repoId: "repo-id",
+        category: "Plan reviews",
+        categoryId: "category-id",
+      },
+    });
+    assert.match(html, /giscus\.app\/client\.js/);
+    assert.ok(html.indexOf("planloft-comments") < html.indexOf("</body>"));
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("rendered documents honor system theme and expose a top theme toggle", () => {
   for (const theme of ["minimal", "detailed", "editorial"]) {
     const html = renderDocument(document({ content: "# Both themes" }), theme);

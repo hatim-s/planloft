@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { configPath } from "../core/paths.js";
 import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../core/config.js";
+import type { Config } from "../core/types.js";
 
 /** Open the global config in $EDITOR (falls back to printing it). */
 export function config(): void {
@@ -16,5 +17,12 @@ export function config(): void {
     }
   }
   console.log(configPath());
-  console.log(JSON.stringify(loadConfig(), null, 2));
+  const cfg = loadConfig();
+  console.log(JSON.stringify(redactConfig(cfg), null, 2));
+}
+
+export function redactConfig(cfg: Config): Config {
+  return cfg.github?.token
+    ? { ...cfg, github: { ...cfg.github, token: "[redacted]" } }
+    : cfg;
 }

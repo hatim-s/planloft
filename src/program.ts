@@ -1,4 +1,5 @@
 import { Command, InvalidArgumentError } from "commander";
+import { parseTtlDays, TTL_RULE } from "./core/ttl.js";
 import {
   commandKnowledge,
   formatCommandHelp,
@@ -92,8 +93,9 @@ function withKnowledge(command: Command, name: string): Command {
 }
 
 function positiveInteger(value: string): number {
-  if (!/^[1-9]\d*$/.test(value)) {
-    throw new InvalidArgumentError("must be a positive integer");
+  try {
+    return parseTtlDays(value, "--ttl");
+  } catch {
+    throw new InvalidArgumentError(TTL_RULE);
   }
-  return Number.parseInt(value, 10);
 }
