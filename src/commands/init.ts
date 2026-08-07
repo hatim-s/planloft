@@ -1,19 +1,23 @@
 import fs from "node:fs";
 import pc from "picocolors";
 import { configPath } from "../core/paths.js";
-import { DEFAULT_CONFIG, loadConfig, saveConfig } from "../core/config.js";
+import { ensureConfig, loadConfig } from "../core/config.js";
 import { hasGh } from "../hosts/github-pages.js";
 
 /** Optional setup (ADR-0001 §D23): ensure config exists + report GitHub readiness. */
 export function init(): void {
-  if (!fs.existsSync(configPath())) {
-    saveConfig(DEFAULT_CONFIG);
+  let absent = false;
+  try {
+    fs.statSync(configPath());
+  } catch (error) {
+    absent = (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+  const cfg = absent ? ensureConfig() : loadConfig();
+  if (absent) {
     console.log(pc.green("Wrote default config: ") + configPath());
   } else {
     console.log(pc.dim("Config exists: ") + configPath());
   }
-
-  const cfg = loadConfig();
   console.log(`theme=${cfg.theme}  planFormat=${cfg.planFormat}  defaultTtlDays=${cfg.defaultTtlDays}`);
 
   const repo = cfg.github?.repo ?? "planloft-plans";

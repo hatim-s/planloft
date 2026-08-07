@@ -167,7 +167,8 @@ global Planloft store.
 
 ## Custom themes
 
-A theme directory may provide:
+A theme name must resolve to a built-in or user theme directory. Unknown-theme errors list
+the available themes. Within a real theme directory, all three assets are optional:
 
 ```text
 ~/.planloft/themes/<name>/
@@ -187,6 +188,7 @@ override. Without the marker, Planloft supplies a readable system-color fallback
 
 ```jsonc
 {
+  "version": 1,
   "theme": "minimal",          // minimal | detailed | editorial | <custom>
   "planFormat": "md",          // md | html
   "defaultTtlDays": 30,
@@ -210,6 +212,11 @@ override. Without the marker, Planloft supplies a readable system-color fallback
 
 Theme resolution: **plan frontmatter > project override > global default**.
 Giscus resolution: **project field > global field**.
+
+The version-1 configuration contract is published at `schemas/config.schema.json`.
+Defaults are used only when `config.json` is absent. Malformed JSON, inaccessible files,
+unsupported versions, unknown properties, and invalid values fail with stable diagnostics;
+`planloft config` validates the file after the editor closes.
 
 ## Current scope
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hatim-s/planloft/schemas/config.schema.json",
+  "title": "Planloft configuration",
+  "description": "Version 1 contract for ~/.planloft/config.json.",
+  "type": "object",
+  "required": ["version", "theme", "planFormat", "defaultTtlDays", "projects"],
+  "properties": {
+    "version": { "const": 1 },
+    "theme": { "$ref": "#/$defs/themeName" },
+    "planFormat": { "enum": ["md", "html"] },
+    "defaultTtlDays": { "type": "integer", "minimum": 1, "maximum": 100000000 },
+    "projects": {
+      "type": "object",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/project" }
+    },
+    "giscus": { "$ref": "#/$defs/giscus" },
+    "github": {
+      "type": "object",
+      "properties": {
+        "token": { "$ref": "#/$defs/nonblankString" },
+        "user": { "$ref": "#/$defs/nonblankString" },
+        "repo": { "$ref": "#/$defs/nonblankString" }
+      },
+      "additionalProperties": false
+    },
+    "vercel": {
+      "type": "object",
+      "properties": {
+        "token": { "$ref": "#/$defs/nonblankString" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "nonblankString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "themeName": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+    },
+    "giscus": {
+      "type": "object",
+      "properties": {
+        "repo": { "$ref": "#/$defs/nonblankString" },
+        "repoId": { "$ref": "#/$defs/nonblankString" },
+        "category": { "$ref": "#/$defs/nonblankString" },
+        "categoryId": { "$ref": "#/$defs/nonblankString" }
+      },
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "theme": { "$ref": "#/$defs/themeName" },
+        "giscus": { "$ref": "#/$defs/giscus" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

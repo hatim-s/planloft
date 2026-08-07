@@ -379,6 +379,7 @@ test("the GitHub adapter rejects invalid TTL before attempting authentication", 
 
 function config(overrides: Partial<Config> = {}): Config {
   return {
+    version: 1,
     theme: "minimal",
     planFormat: "md",
     defaultTtlDays: 30,

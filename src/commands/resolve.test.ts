@@ -31,3 +31,44 @@ test("write-plan resolution always returns a Markdown target", () => {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("resolve rejects an unusable theme before writing plan or index state", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-theme-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    saveConfig({ ...DEFAULT_CONFIG, theme: "missing-theme" });
+    assert.throws(
+      () => resolve({ kind: "plan", slug: "never-written", title: "Never Written" }),
+      /\[PLANLOFT_THEME_MISSING\]/,
+    );
+    assert.equal(fs.existsSync(path.join(home, "index.json")), false);
+    assert.equal(fs.existsSync(path.join(home, "docs")), false);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("resolve validates a theme layout before writing plan or index state", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-layout-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "broken-layout");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "layout.html"), "<main>{{title}}</main>");
+    saveConfig({ ...DEFAULT_CONFIG, theme: "broken-layout" });
+    assert.throws(
+      () => resolve({ kind: "plan", slug: "never-written", title: "Never Written" }),
+      /\[PLANLOFT_THEME_INVALID_LAYOUT\]/,
+    );
+    assert.equal(fs.existsSync(path.join(home, "index.json")), false);
+    assert.equal(fs.existsSync(path.join(home, "docs")), false);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

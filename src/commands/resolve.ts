@@ -1,6 +1,5 @@
 import fs from "node:fs";
-import { DEFAULT_CONFIG, loadConfig, resolveTheme, saveConfig } from "../core/config.js";
-import { configPath } from "../core/paths.js";
+import { ensureConfig, resolveTheme } from "../core/config.js";
 import { projectKey } from "../core/project.js";
 import { docDir, docFile } from "../core/doc.js";
 import { slugify } from "../core/slug.js";
@@ -13,8 +12,7 @@ import type { Kind, ResolvedContext } from "../core/types.js";
  * Consumed by the write-plan skill (ADR-0008). Zero-config writes defaults on first use.
  */
 export function resolve(opts: { slug?: string; title?: string; kind?: string }): void {
-  if (!fs.existsSync(configPath())) saveConfig(DEFAULT_CONFIG);
-  const cfg = loadConfig();
+  const cfg = ensureConfig();
 
   const { key, label } = projectKey();
   const kind: Kind = opts.kind || "plan";

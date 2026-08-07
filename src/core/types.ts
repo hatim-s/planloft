@@ -58,6 +58,7 @@ export interface ProjectEntry {
 
 /** ~/.planloft/config.json (ADR-0001 §D3, §D8, §D9, §D20). */
 export interface Config {
+  version: 1; // versioned manual-editing contract
   theme: string; // global default theme
   planFormat: PlanFormat; // md | html
   defaultTtlDays: number; // GitHub Pages TTL default

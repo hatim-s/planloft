@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { configPath } from "./paths.js";
-import { DEFAULT_CONFIG, saveConfig } from "./config.js";
+import { ensureConfig, resolveTheme } from "./config.js";
 import { docDir, docFile } from "./doc.js";
 import { projectKey } from "./project.js";
 import { getDoc, upsertDoc } from "./store.js";
@@ -14,8 +13,9 @@ export interface HoistOptions {
 
 /** Persist a canonical document in the current project's store and index it. */
 export function hoistDocument(doc: CanonicalDocument, options: HoistOptions = {}): DocMeta {
-  if (!fs.existsSync(configPath())) saveConfig(DEFAULT_CONFIG);
+  const cfg = ensureConfig();
   const { key, label } = projectKey(options.cwd);
+  resolveTheme(cfg, key, doc.theme);
   const format = doc.contentFormat;
   const file = docFile(label, doc.slug, format);
   const previous = getDoc(key, doc.slug);
