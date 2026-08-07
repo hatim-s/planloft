@@ -42,7 +42,7 @@ export function ingestDocument(raw: string, options: IngestOptions): CanonicalDo
   }
 
   const parsed = options.format === "md" ? fm.parse(raw) : { data: {}, content: raw };
-  const source = normalizeMetadata(parsed.data, "Markdown frontmatter");
+  const source = normalizeDocumentMetadata(parsed.data, "Markdown frontmatter");
   return canonical({
     content: parsed.content,
     contentFormat: options.format,
@@ -95,7 +95,7 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
   if (typeof doc.content !== "string") {
     throw new Error('A JSON document requires a string "content" field.');
   }
-  const source = normalizeMetadata(doc, "JSON document");
+  const source = normalizeDocumentMetadata(doc, "JSON document");
   const contentFormat = doc.contentFormat ?? "md";
   if (contentFormat !== "md" && contentFormat !== "html") {
     throw new Error('"contentFormat" must be "md" or "html".');
@@ -127,9 +127,9 @@ function canonical(input: {
   overrides?: DocumentOverrides;
 }): CanonicalDocument {
   const merged = {
-    ...normalizeMetadata(input.defaults, "document defaults"),
+    ...normalizeDocumentMetadata(input.defaults, "document defaults"),
     ...input.source,
-    ...normalizeMetadata(input.overrides, "document overrides"),
+    ...normalizeDocumentMetadata(input.overrides, "document overrides"),
   };
   const inferredTitle =
     (input.contentFormat === "md" ? firstMarkdownHeading(input.content) : undefined) ??
@@ -159,7 +159,8 @@ function firstMarkdownHeading(markdown: string): string | undefined {
   return heading?.type === "heading" && heading.text.trim() ? heading.text.trim() : undefined;
 }
 
-function normalizeMetadata(
+/** Validate and trim document metadata consistently across every ingestion surface. */
+export function normalizeDocumentMetadata(
   value: Partial<Record<keyof DocumentOverrides, unknown>> | undefined,
   source: string,
 ): DocumentOverrides {
