@@ -1,72 +1,68 @@
 ---
 name: write-plan
 description: >-
-  Persist a substantial implementation/design plan to the planloft global store.
-  Use this WHENEVER Codex or Claude Code finishes producing a real plan — especially
-  after plan mode, or when the user asks you to plan a feature, migration, refactor,
-  or architecture. Skip it for trivial one-step throwaway plans.
-allowed-tools: Bash(planloft:*) Write Read
+  Author and persist a substantial, standalone Planloft implementation, migration,
+  refactor, architecture, or design plan. Use after plan-mode completion with durable
+  content or when the user explicitly asks to save a plan with Planloft. Skip trivial
+  one-step work, conversational or throwaway output, and requests that only render,
+  hoist, preview, copy, or deploy an existing source.
 ---
 
-# Write the plan to planloft
+# Write a Planloft plan
 
-You have just produced a plan. Persist it to the planloft global store so the user can
-theme, copy, and deploy it. Do this **without asking** — it is the whole point of the
-plugin.
+Persist the substantial plan directly. Keep it reviewable without conversation history.
 
-## Step 1 — Resolve the target path, theme, and template
+## Resolve the target
 
-Derive a short kebab-case `slug` from the plan's topic (e.g. `auth-refactor`) and a
-human `title`. Then run:
+Derive a short kebab-case slug and a human title. Run this exact command with real
+values:
 
 ```!
-planloft resolve --kind plan --slug "SLUG_HERE" --title "TITLE_HERE"
+planloft resolve --kind plan --slug "<slug>" --title "<title>"
 ```
 
-This prints JSON:
+Use the returned path. Never guess or synthesize a store path. If the command fails,
+report the install problem instead of writing elsewhere.
 
-```jsonc
-{
-  "path":     "/Users/you/.planloft/docs/<project>/<slug>.md",  // where to Write
-  "kind":     "plan",               // include this in frontmatter
-  "format":   "md",                 // md | html — author in THIS format
-  "theme":    "editorial",          // resolved theme (plan > project > global)
-  "template": "…authoring guidance…" // how this theme wants the plan written
-}
-```
+## Author and persist
 
-> For other durable docs (ADR, review, research, report, note), use the **save-doc**
-> skill instead — same mechanism with `--kind <kind>`.
-
-> Replace `SLUG_HERE` / `TITLE_HERE` with the actual values before running.
-
-## Step 2 — Write the plan
-
-Write/create the plan at the exact `path` returned above, authored in the returned
-`format` and following the returned `theme` `template` guidance:
-
-- **minimal** — terse bullets, no filler, black-and-white structure.
-- **detailed** — full technical sections: Context, Approach, Steps, Risks, Open
-  questions.
-- **editorial** — narrative prose, a TL;DR, callouts; readable like an article.
-
-Start the file with YAML frontmatter (the hook fills in anything you omit):
+Author Markdown at the returned path and follow the returned theme guidance. Start with
+complete frontmatter:
 
 ```yaml
 ---
 title: <title>
 slug: <slug>
 kind: plan
-theme: <theme>        # optional per-plan override
 status: active
 ---
 ```
 
-## Step 3 — Done
+Name concrete files, modules, commands, dependencies, risks, and unresolved decisions.
+Let Planloft render the HTML artifact; do not manually author generated HTML.
 
-Do **not** copy it into the repo or deploy it unless the user asks. Tell the user the
-plan was saved and mention they can `/planloft-copy` it into the repo or
-`/planloft-deploy` it for review.
+Treat light and dark presentation as mandatory. Do not embed one-theme colors or
+presentation markup in the Markdown. Planloft output must expose a theme toggle at the
+top and must initially honor `prefers-color-scheme`; follow any custom theme guidance
+only when it preserves both appearances.
 
-If `planloft resolve` fails (CLI not found), tell the user to check the planloft install
-— do not write the plan to a guessed path.
+## Discover other operations
+
+<!-- planloft:command-knowledge:start -->
+Run `planloft help` to discover all operations.
+
+Common next actions:
+- `planloft render <input>` produces HTML without storing or publishing.
+- `planloft preview [slug]` opens a stored plan locally.
+- `planloft copy [slug]` copies raw source into the repository.
+- `planloft deploy [slug]` explicitly publishes a stored plan.
+- `planloft hoist <input>` stores another Markdown, JSON, or trusted HTML document.
+<!-- planloft:command-knowledge:end -->
+
+Never deploy unless the user explicitly requests publication. GitHub Pages publication
+uses a public, enumerable repository and manifest.
+
+## Finish
+
+Report the exact saved path. Do not preview, copy, render, hoist, or deploy unless the
+user also requests that action.

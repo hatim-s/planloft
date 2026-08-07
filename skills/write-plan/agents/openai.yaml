@@ -1,4 +1,4 @@
 interface:
   display_name: "Write Plan"
-  short_description: "Persist plans to planloft"
-  default_prompt: "Use $write-plan to save this implementation plan in planloft."
+  short_description: "Author and persist substantial plans"
+  default_prompt: "Use $write-plan to author and save this substantial implementation plan in Planloft."

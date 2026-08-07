@@ -1,8 +1,31 @@
 /* planloft theme: minimal — mono, black & white, tight */
+/* planloft-color-schemes: light dark */
 :root {
+  color-scheme: light dark;
   --ink: #111;
   --paper: #fff;
   --rule: #e5e5e5;
+  --code-bg: #f4f4f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #f5f5f5;
+    --paper: #111;
+    --rule: #3f3f46;
+    --code-bg: #242424;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #111;
+  --paper: #fff;
+  --rule: #e5e5e5;
+  --code-bg: #f4f4f4;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #f5f5f5;
+  --paper: #111;
+  --rule: #3f3f46;
+  --code-bg: #242424;
 }
 * { box-sizing: border-box; }
 body {
@@ -22,6 +45,6 @@ h2 { font-size: 1.05rem; margin: 2rem 0 0.5rem; text-transform: uppercase; lette
 ul { padding-left: 1.1rem; }
 li { margin: 0.15rem 0; }
 a { color: var(--ink); text-underline-offset: 2px; }
-code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; }
-pre { background: #f4f4f4; padding: 1rem; overflow: auto; border-radius: 4px; }
+code { background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 1rem; overflow: auto; border-radius: 4px; }
 hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }

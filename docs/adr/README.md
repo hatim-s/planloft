@@ -19,6 +19,7 @@ is shaped the way it is, not just *what* it does.
 | [0005](./0005-custom-domain.md) | optional custom domain for GitHub Pages deploys | Superseded by 0006 |
 | [0006](./0006-github-pages-only.md) | narrow active hosting scope to GitHub Pages | Accepted (supersedes 0005; amends 0001 §D11) |
 | [0007](./0007-document-pipeline.md) | canonical document pipeline and constrained theme layouts | Accepted (amends 0001, 0002; partially supersedes 0003) |
+| [0008](./0008-single-skill-command-knowledge.md) | single skill, authoritative command knowledge, and dual-theme output | Accepted (supersedes 0002 E4 and 0004's five-skill surface; amends 0001) |
 
 ## Conventions
 

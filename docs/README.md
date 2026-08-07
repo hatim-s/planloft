@@ -12,7 +12,6 @@ These files are read by users installing or running planloft:
 - `README.md`
 - `package.json` metadata
 - `.claude-plugin/` and `.codex-plugin/`
-- `commands/`
 - `skills/`
 - `hooks/`
 - `themes/`
@@ -33,7 +32,7 @@ These files are public repo docs for maintainers and contributors:
 
 This segment can record decision history, rejected options, deferred work, and
 implementation rationale. It can mention future hosts or internal seams that should not
-appear in install docs, plugin descriptions, slash commands, skill instructions, or CLI
+appear in install docs, plugin descriptions, skill instructions, or CLI
 help until they are actually supported.
 
 ### Local or generated surface

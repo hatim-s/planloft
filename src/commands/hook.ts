@@ -17,7 +17,7 @@ interface HookEvent {
 }
 
 /**
- * Hidden dispatcher invoked by hooks/hooks.json (ADR-0001 §D2, §D6; ADR-0002, ADR-0004).
+ * Hidden dispatcher invoked by hooks/hooks.json (ADR-0001 §D2, §D6; ADR-0008).
  * - Write under the store -> normalize frontmatter (incl. kind) + index the doc.
  * - ExitPlanMode / Codex plan Stop -> nudge the agent to persist the plan if worth keeping.
  */

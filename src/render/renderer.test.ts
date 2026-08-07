@@ -41,9 +41,43 @@ test("untrusted Markdown escapes raw HTML and removes unsafe links", () => {
     "minimal",
   );
 
-  assert.doesNotMatch(html, /<script>/);
+  assert.doesNotMatch(html, /<article>[\s\S]*<script>/);
   assert.doesNotMatch(html, /javascript:/);
   assert.match(html, /href="https:\/\/example.com"/);
+});
+
+test("rendered documents honor system theme and expose a top theme toggle", () => {
+  for (const theme of ["minimal", "detailed", "editorial"]) {
+    const html = renderDocument(document({ content: "# Both themes" }), theme);
+    const bodyIndex = html.indexOf("<body");
+    const buttonIndex = html.indexOf('class="planloft-theme-toggle"');
+    const mainIndex = html.indexOf('<main class="planloft-plan">');
+    assert.ok(bodyIndex >= 0 && buttonIndex > bodyIndex && buttonIndex < mainIndex);
+    assert.match(html, /prefers-color-scheme: dark/);
+    assert.match(html, /data-planloft-color-scheme="light"/);
+    assert.match(html, /data-planloft-color-scheme="dark"/);
+    assert.match(html, /localStorage\.getItem\(key\)/);
+    assert.match(html, /Theme: system/);
+  }
+});
+
+test("custom light-only themes receive a system dark fallback", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-theme-fallback-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "light-only");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "style.css"), "body { color: #111; background: #fff; }");
+    const html = renderDocument(document({}), "light-only");
+    assert.match(html, /prefers-color-scheme: dark/);
+    assert.match(html, /background: Canvas !important/);
+    assert.match(html, /color: CanvasText !important/);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("theme layouts must include the body and may only use documented slots", () => {

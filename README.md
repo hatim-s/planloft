@@ -1,6 +1,6 @@
 # planloft
 
-> Turn Markdown, JSON, HTML, and agent-written plans into consistently themed,
+> Turn Markdown, JSON, HTML, and agent-written plans into light-and-dark themed,
 > shareable documents.
 
 planloft is a document compiler, Claude Code / Codex **plugin, CLI, and Node library**.
@@ -10,52 +10,59 @@ publish it as a shareable review link that auto-expires.
 
 ## What it does
 
-- **Auto-capture** — a bundled skill tells the agent to persist substantial plans; hooks
-  backstop Claude plan-mode exit and Codex plan-mode turn stop. Plans and durable docs
-  land in `~/.planloft/docs/<project>/`.
+- **Focused plan capture** — the single `write-plan` skill tells the agent to persist
+  substantial plans; hooks backstop Claude plan-mode exit and Codex plan-mode turn
+  stop. Other documents remain available through `planloft hoist`.
 - **Organized by project** — keyed by git remote (fallback: path hash), so plans
   follow the repo, not the folder.
-- **Themed** — every plan has a look *and* feel. `minimal`, `detailed`, `editorial`
-  built in; drop your own in `~/.planloft/themes/`.
+- **Themed in light and dark** — every artifact starts with the browser's preferred
+  color scheme and includes a theme toggle at the top. `minimal`, `detailed`, and
+  `editorial` are built in; drop your own in `~/.planloft/themes/`.
 - **Caller-friendly input** — render, hoist, or publish Markdown and JSON directly;
   trusted HTML is available through an explicit safety option.
-- **1-click copy** — `/planloft-copy` drops the plan into `./.planloft/plans/` in your
-  repo, committed alongside code.
-- **1-click deploy** — `/planloft-deploy` builds a themed static site and publishes it to
+- **CLI copy** — `planloft copy` drops a stored source into `./.planloft/plans/` in your
+  repo, ready to commit alongside code.
+- **Explicit deploy** — `planloft deploy` builds a themed static site and publishes it to
   **GitHub Pages** — free, served at an unguessable URL, auto-expires after 30 days
   (`--ttl 90`, redeploy bumps expiry).
 
 ## Install
 
-```bash
-# as a Claude Code plugin (recommended — auto-wires skill, hook, commands)
-/plugin install planloft
+Planloft has three distinct installation surfaces:
 
-# or the CLI standalone
-pnpm add -g planloft
-```
+| Install | Command | Includes |
+|---|---|---|
+| CLI only | `pnpm add -g planloft` | Every `planloft` command and the Node library; no agent skill or hooks |
+| `write-plan` skill only | `npx skills add hatim-s/planloft --skill write-plan` | The semantic skill only; install the CLI separately so `planloft resolve` is available |
+| Full plugin | `/plugin install planloft` | One `write-plan` skill, plan-mode capture hooks, plugin metadata, and the bundled CLI |
 
-Codex support is shipped through `.codex-plugin/plugin.json`, the bundled `skills/`
-directory, and `hooks/hooks.json`. Codex uses skills for the same flows: `write-plan`,
-`save-doc`, `planloft-preview`, `planloft-copy`, and `planloft-deploy`.
+The skill installer also works as `pnpm dlx skills add hatim-s/planloft --skill
+write-plan` or `bunx skills add hatim-s/planloft --skill write-plan`. The runner is
+`npx`, `pnpm dlx`, or `bunx`; there is no generic `npm skills`, `pnpm skills`, or `bun
+skills` command.
 
-Zero-config: it works on install. Config is written on your first plan; the GitHub
-connect flow (`gh`) prompts on your first deploy.
+Codex and Claude Code consume the same `write-plan` skill. Preview, copy, and deploy
+are CLI commands rather than separately triggered skills. Configuration is created on
+first use; publishing remains an explicit action.
 
 ## CLI
 
-```
-planloft render <input>       # Markdown/JSON -> HTML on stdout
-planloft hoist <input>        # normalize + save in the project store
-planloft publish <input>      # hoist + render + deploy in one operation
-planloft list                 # docs grouped by project
-planloft preview <slug>       # themed preview in your browser
-planloft copy [slug]          # copy raw doc into ./.planloft/plans/
-planloft deploy [slug]        # build + publish; prints the link
-planloft rm <slug>            # remove a doc from the store
-planloft config               # open/edit global config
-planloft init                 # optional: set theme/format, verify GitHub
-```
+<!-- planloft:command-knowledge:start -->
+- `planloft render <input>` — Render Markdown, JSON, or trusted HTML to a self-contained HTML artifact.
+- `planloft hoist <input>` — Normalize Markdown, JSON, or trusted HTML into the current project's store.
+- `planloft publish <input>` — Hoist, render, and publish a source to GitHub Pages.
+- `planloft list` — List stored documents grouped by project.
+- `planloft preview [slug]` — Build and open a local themed preview of a stored document.
+- `planloft copy [slug]` — Copy a stored document's raw source into the current repository.
+- `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages.
+- `planloft rm <slug>` — Delete a stored document's source and index entry.
+- `planloft resolve` — Resolve the exact plan path, kind, theme, and authoring template.
+- `planloft config` — Open the global configuration in $EDITOR or print it.
+- `planloft init` — Create default configuration and report GitHub readiness.
+<!-- planloft:command-knowledge:end -->
+
+Run `planloft help` for workflow groups and safety markers, or `planloft help
+<command>` for defaults and tested examples.
 
 `<input>` may be a `.md`, `.json`, or `.html` file. Use `- --format md|json|html` for
 stdin. Direct rendering writes HTML to stdout unless `--out <file-or-directory>` is
@@ -70,7 +77,10 @@ printf '{"title":"Launch","content":"# Goal\\n\\nShip."}' |
 ```
 
 HTML input and embedded Markdown HTML are disabled for direct callers by default. Use
-`--trusted-html` only for content you control.
+`--trusted-html` only for content you control. `publish` and `deploy` write to GitHub;
+the backing GitHub Pages repository and manifest are public and enumerable. TTL values
+must be positive integers, `rm` deletes stored source, and comments require valid
+giscus configuration.
 
 ## JSON document format
 
@@ -122,7 +132,10 @@ A theme directory may provide:
 
 `layout.html` supports only `{{title}}`, `{{kind}}`, `{{body}}`, `{{styles}}`,
 `{{robots}}`, and `{{comments}}`. It does not execute expressions or code. Themes that
-omit it use Planloft's compatible default layout.
+omit it use Planloft's compatible default layout. Custom CSS should include the marker
+`/* planloft-color-schemes: light dark */`, define a system dark palette with
+`prefers-color-scheme`, and support the `data-planloft-color-scheme="light|dark"`
+override. Without the marker, Planloft supplies a readable system-color fallback.
 
 ## Config (`~/.planloft/config.json`)
 
@@ -142,6 +155,7 @@ Theme resolution: **plan frontmatter > project override > global default**.
 ## Current scope
 
 planloft currently supports direct document ingestion/rendering, the local doc store,
-themed preview, copy-to-repo, Claude Code and Codex plugin wiring, and GitHub Pages
-deploys. Saved docs stay local until you copy or publish them. Deployed review links are
-public-by-link, marked `noindex`, and expire through the GitHub Pages cleanup workflow.
+light-and-dark themed preview, copy-to-repo, one shared Claude Code/Codex plan skill,
+and GitHub Pages deploys. Saved docs stay local until you copy or publish them. Deployed
+review links are marked `noindex`, but their public repository remains enumerable, and
+they expire through the GitHub Pages cleanup workflow.

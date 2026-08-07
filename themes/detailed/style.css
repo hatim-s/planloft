@@ -1,11 +1,43 @@
 /* planloft theme: detailed — structured, technical, readable */
+/* planloft-color-schemes: light dark */
 :root {
+  color-scheme: light dark;
   --ink: #1a1d21;
   --muted: #5a6169;
   --paper: #fbfbfc;
   --rule: #e3e6ea;
   --accent: #2563eb;
   --code-bg: #f2f4f7;
+  --table-heading: #eef1f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #f3f4f6;
+    --muted: #aeb5bf;
+    --paper: #121417;
+    --rule: #363b42;
+    --accent: #7db0ff;
+    --code-bg: #20242a;
+    --table-heading: #272c33;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #1a1d21;
+  --muted: #5a6169;
+  --paper: #fbfbfc;
+  --rule: #e3e6ea;
+  --accent: #2563eb;
+  --code-bg: #f2f4f7;
+  --table-heading: #eef1f5;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #f3f4f6;
+  --muted: #aeb5bf;
+  --paper: #121417;
+  --rule: #363b42;
+  --accent: #7db0ff;
+  --code-bg: #20242a;
+  --table-heading: #272c33;
 }
 * { box-sizing: border-box; }
 body {
@@ -32,7 +64,7 @@ code { background: var(--code-bg); padding: 0.12em 0.35em; border-radius: 4px; f
 pre { background: var(--code-bg); padding: 1rem 1.15rem; overflow: auto; border-radius: 8px; }
 table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95em; }
 th, td { border: 1px solid var(--rule); padding: 0.5rem 0.7rem; text-align: left; }
-th { background: #eef1f5; }
+th { background: var(--table-heading); }
 blockquote {
   margin: 1rem 0;
   padding: 0.5rem 1rem;

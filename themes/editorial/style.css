@@ -1,10 +1,39 @@
 /* planloft theme: editorial — magazine, serif, generous */
+/* planloft-color-schemes: light dark */
 :root {
+  color-scheme: light dark;
   --ink: #201c1a;
   --muted: #6b625c;
   --paper: #fdfcfa;
   --rule: #e7e1d9;
   --accent: #a8321f;
+  --code-bg: #f0ebe4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #f1ece7;
+    --muted: #bcb1a8;
+    --paper: #171412;
+    --rule: #403933;
+    --accent: #ff8f78;
+    --code-bg: #29231f;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #201c1a;
+  --muted: #6b625c;
+  --paper: #fdfcfa;
+  --rule: #e7e1d9;
+  --accent: #a8321f;
+  --code-bg: #f0ebe4;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #f1ece7;
+  --muted: #bcb1a8;
+  --paper: #171412;
+  --rule: #403933;
+  --accent: #ff8f78;
+  --code-bg: #29231f;
 }
 * { box-sizing: border-box; }
 body {
@@ -48,6 +77,6 @@ blockquote {
   font-size: 1.15em;
   color: var(--muted);
 }
-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82em; background: #f0ebe4; padding: 0.1em 0.35em; border-radius: 3px; }
-pre { background: #f0ebe4; padding: 1rem 1.15rem; overflow: auto; border-radius: 6px; font-size: 0.8em; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 1rem 1.15rem; overflow: auto; border-radius: 6px; font-size: 0.8em; }
 hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }

@@ -14,3 +14,4 @@ Rules:
 - No adjectives that don't carry information.
 - No emoji. No decorative headings.
 - If a step needs detail, nest at most one level of sub-bullets.
+- Keep presentation color-free so the rendered document works in light and dark themes.
