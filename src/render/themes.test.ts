@@ -56,11 +56,44 @@ test("a theme name must point to a directory", () => {
   });
 });
 
+test("a dangling user theme symlink is inaccessible instead of falling back", () => {
+  withHome((home) => {
+    const themes = path.join(home, "themes");
+    fs.mkdirSync(themes, { recursive: true });
+    fs.symlinkSync(path.join(home, "missing-theme"), path.join(themes, "minimal"));
+
+    assertThemeError(
+      () => resolveThemeDirectory("minimal"),
+      "PLANLOFT_THEME_INACCESSIBLE",
+    );
+    assertThemeError(() => listAvailableThemes(), "PLANLOFT_THEME_INACCESSIBLE");
+  });
+});
+
 test("present optional assets surface read failures instead of falling back", () => {
   withHome((home) => {
     const theme = path.join(home, "themes", "broken-style");
     fs.mkdirSync(path.join(theme, "style.css"), { recursive: true });
     assertThemeError(() => readStyle("broken-style"), "PLANLOFT_THEME_INACCESSIBLE");
+  });
+});
+
+test("dangling optional asset symlinks are inaccessible instead of receiving defaults", () => {
+  withHome((home) => {
+    const theme = path.join(home, "themes", "dangling-assets");
+    fs.mkdirSync(theme, { recursive: true });
+    const readers = {
+      "template.md": readTemplate,
+      "style.css": readStyle,
+      "layout.html": readLayout,
+    };
+
+    for (const [asset, reader] of Object.entries(readers)) {
+      const file = path.join(theme, asset);
+      fs.symlinkSync(path.join(theme, `missing-${asset}`), file);
+      assertThemeError(() => reader("dangling-assets"), "PLANLOFT_THEME_INACCESSIBLE");
+      fs.unlinkSync(file);
+    }
   });
 });
 

@@ -1,0 +1,89 @@
+{
+  "valid": [
+    {
+      "name": "required fields only",
+      "config": {
+        "version": 1,
+        "theme": "minimal",
+        "planFormat": "md",
+        "defaultTtlDays": 30,
+        "projects": {}
+      }
+    },
+    {
+      "name": "all optional settings",
+      "config": {
+        "version": 1,
+        "theme": "editorial",
+        "planFormat": "html",
+        "defaultTtlDays": 100000000,
+        "projects": {
+          "project": {
+            "theme": "detailed",
+            "giscus": {
+              "repo": "hatim/plans",
+              "category": " Reviews "
+            }
+          }
+        },
+        "giscus": {
+          "repoId": "repo-id",
+          "categoryId": "category-id"
+        },
+        "github": {
+          "token": "secret",
+          "user": "hatim",
+          "repo": "plans"
+        },
+        "vercel": {
+          "token": "secret"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "string config TTL",
+      "config": {
+        "version": 1,
+        "theme": "minimal",
+        "planFormat": "md",
+        "defaultTtlDays": "30",
+        "projects": {}
+      }
+    },
+    {
+      "name": "fractional config TTL",
+      "config": {
+        "version": 1,
+        "theme": "minimal",
+        "planFormat": "md",
+        "defaultTtlDays": 1.5,
+        "projects": {}
+      }
+    },
+    {
+      "name": "blank optional github value",
+      "config": {
+        "version": 1,
+        "theme": "minimal",
+        "planFormat": "md",
+        "defaultTtlDays": 30,
+        "projects": {},
+        "github": { "token": "   " }
+      }
+    },
+    {
+      "name": "blank nested optional giscus value",
+      "config": {
+        "version": 1,
+        "theme": "minimal",
+        "planFormat": "md",
+        "defaultTtlDays": 30,
+        "projects": {
+          "project": { "giscus": { "category": "\t" } }
+        }
+      }
+    }
+  ]
+}

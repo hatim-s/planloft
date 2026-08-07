@@ -140,10 +140,26 @@ function readOptionalThemeAsset(theme: string, asset: string): string | undefine
     return fs.readFileSync(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      // An absent optional asset gets its documented default, but a concurrently
-      // removed theme is still reported as a missing theme.
-      resolveThemeDirectory(theme);
-      return undefined;
+      try {
+        fs.lstatSync(file);
+      } catch (inspectionError) {
+        if ((inspectionError as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new ThemeError(
+            "PLANLOFT_THEME_INACCESSIBLE",
+            `Cannot inspect ${asset} for theme ${JSON.stringify(theme)} at ${file}.`,
+            { cause: inspectionError },
+          );
+        }
+        // An absent optional asset gets its documented default, but a concurrently
+        // removed theme is still reported as a missing theme.
+        resolveThemeDirectory(theme);
+        return undefined;
+      }
+      throw new ThemeError(
+        "PLANLOFT_THEME_INACCESSIBLE",
+        `Cannot read ${asset} for theme ${JSON.stringify(theme)} at ${file}.`,
+        { cause: error },
+      );
     }
     throw new ThemeError(
       "PLANLOFT_THEME_INACCESSIBLE",
@@ -160,7 +176,18 @@ function directoryState(
   try {
     return fs.statSync(directory).isDirectory() ? "directory" : "not-directory";
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      try {
+        fs.lstatSync(directory);
+      } catch (inspectionError) {
+        if ((inspectionError as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+        throw new ThemeError(
+          "PLANLOFT_THEME_INACCESSIBLE",
+          `Cannot inspect theme ${JSON.stringify(theme)} at ${directory}.`,
+          { cause: inspectionError },
+        );
+      }
+    }
     throw new ThemeError(
       "PLANLOFT_THEME_INACCESSIBLE",
       `Cannot inspect theme ${JSON.stringify(theme)} at ${directory}.`,
@@ -186,7 +213,18 @@ function themeDirectories(root: string): string[] {
     try {
       return fs.statSync(path.join(root, name)).isDirectory();
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        try {
+          fs.lstatSync(path.join(root, name));
+        } catch (inspectionError) {
+          if ((inspectionError as NodeJS.ErrnoException).code === "ENOENT") return false;
+          throw new ThemeError(
+            "PLANLOFT_THEME_INACCESSIBLE",
+            `Cannot inspect theme ${JSON.stringify(name)} at ${path.join(root, name)}.`,
+            { cause: inspectionError },
+          );
+        }
+      }
       throw new ThemeError(
         "PLANLOFT_THEME_INACCESSIBLE",
         `Cannot inspect theme ${JSON.stringify(name)} at ${path.join(root, name)}.`,

@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { configPath } from "./paths.js";
 import type { Config } from "./types.js";
-import { parseTtlDays } from "./ttl.js";
+import { MAX_TTL_DAYS, TTL_RULE } from "./ttl.js";
 import { assertThemeName, validateTheme } from "../render/themes.js";
 
 export type ConfigDiagnosticCode =
@@ -49,7 +49,18 @@ function readConfig(): { config: Config; absent: boolean } {
     source = fs.readFileSync(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { config: structuredClone(DEFAULT_CONFIG), absent: true };
+      try {
+        fs.lstatSync(file);
+      } catch (inspectionError) {
+        if ((inspectionError as NodeJS.ErrnoException).code === "ENOENT") {
+          return { config: structuredClone(DEFAULT_CONFIG), absent: true };
+        }
+        throw new ConfigError(
+          "PLANLOFT_CONFIG_INACCESSIBLE",
+          `Cannot inspect configuration at ${file}.`,
+          { cause: inspectionError },
+        );
+      }
     }
     throw new ConfigError(
       "PLANLOFT_CONFIG_INACCESSIBLE",
@@ -79,6 +90,7 @@ export function saveConfig(cfg: Config): void {
   const temporary = path.join(directory, `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
   try {
     fs.mkdirSync(directory, { recursive: true });
+    assertConfigIsNotDanglingSymlink(file);
     fs.writeFileSync(temporary, JSON.stringify(validated, null, 2) + "\n", {
       flag: "wx",
       mode: 0o600,
@@ -111,23 +123,35 @@ export function updateConfig(patch: ConfigPatch): Config {
   const current = loadConfig();
   const projects = { ...current.projects };
   for (const [key, projectPatch] of Object.entries(patch.projects ?? {})) {
+    if (projectPatch === undefined) continue;
+    const giscusUpdate = optionalNestedUpdate(
+      "giscus",
+      projects[key]?.giscus,
+      projectPatch.giscus,
+    );
+    if (
+      projects[key] === undefined &&
+      projectPatch.theme === undefined &&
+      Object.keys(giscusUpdate).length === 0
+    ) {
+      continue;
+    }
     projects[key] = {
       ...projects[key],
-      ...projectPatch,
-      giscus:
-        projectPatch.giscus === undefined
-          ? projects[key]?.giscus
-          : { ...projects[key]?.giscus, ...projectPatch.giscus },
+      ...(projectPatch.theme === undefined ? {} : { theme: projectPatch.theme }),
+      ...giscusUpdate,
     };
   }
   const next: Config = {
     ...current,
-    ...patch,
     version: 1,
     projects,
-    ...(patch.giscus === undefined ? {} : { giscus: { ...current.giscus, ...patch.giscus } }),
-    ...(patch.github === undefined ? {} : { github: { ...current.github, ...patch.github } }),
-    ...(patch.vercel === undefined ? {} : { vercel: { ...current.vercel, ...patch.vercel } }),
+    ...(patch.theme === undefined ? {} : { theme: patch.theme }),
+    ...(patch.planFormat === undefined ? {} : { planFormat: patch.planFormat }),
+    ...(patch.defaultTtlDays === undefined ? {} : { defaultTtlDays: patch.defaultTtlDays }),
+    ...optionalNestedUpdate("giscus", current.giscus, patch.giscus),
+    ...optionalNestedUpdate("github", current.github, patch.github),
+    ...optionalNestedUpdate("vercel", current.vercel, patch.vercel),
   };
   const validated = validateConfig(next, "configuration update");
   saveConfig(validated);
@@ -156,7 +180,7 @@ function validateConfigValue(value: unknown): Config {
   if (root.planFormat !== "md" && root.planFormat !== "html") {
     fail('$config.planFormat must be "md" or "html"');
   }
-  const defaultTtlDays = parseTtlDays(root.defaultTtlDays, "config.defaultTtlDays");
+  const defaultTtlDays = configTtlDays(root.defaultTtlDays);
   const projectValues = object(root.projects, "$config.projects");
   const projects: Config["projects"] = {};
   for (const [key, projectValue] of Object.entries(projectValues)) {
@@ -223,6 +247,46 @@ function nonEmptyString(value: unknown, label: string): string {
 
 function optionalString(value: unknown, label: string): string | undefined {
   return value === undefined ? undefined : nonEmptyString(value, label);
+}
+
+function configTtlDays(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > MAX_TTL_DAYS
+  ) {
+    fail(`config.defaultTtlDays ${TTL_RULE}.`);
+  }
+  return value;
+}
+
+function optionalNestedUpdate<K extends string, V extends Partial<Record<string, string>>>(
+  key: K,
+  current: V | undefined,
+  patch: V | undefined,
+): Partial<Record<K, V>> {
+  if (patch === undefined) return {};
+  const defined = Object.fromEntries(
+    Object.entries(patch).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  ) as V;
+  if (Object.keys(defined).length === 0) return {};
+  return { [key]: { ...current, ...defined } } as Partial<Record<K, V>>;
+}
+
+function assertConfigIsNotDanglingSymlink(file: string): void {
+  try {
+    fs.statSync(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    try {
+      fs.lstatSync(file);
+    } catch (inspectionError) {
+      if ((inspectionError as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw inspectionError;
+    }
+    throw new Error(`Configuration path ${file} is a dangling symbolic link.`);
+  }
 }
 
 function fail(message: string): never {

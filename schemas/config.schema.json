@@ -19,21 +19,25 @@
     "github": {
       "type": "object",
       "properties": {
-        "token": { "type": "string", "minLength": 1 },
-        "user": { "type": "string", "minLength": 1 },
-        "repo": { "type": "string", "minLength": 1 }
+        "token": { "$ref": "#/$defs/nonblankString" },
+        "user": { "$ref": "#/$defs/nonblankString" },
+        "repo": { "$ref": "#/$defs/nonblankString" }
       },
       "additionalProperties": false
     },
     "vercel": {
       "type": "object",
       "properties": {
-        "token": { "type": "string", "minLength": 1 }
+        "token": { "$ref": "#/$defs/nonblankString" }
       },
       "additionalProperties": false
     }
   },
   "$defs": {
+    "nonblankString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
     "themeName": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
@@ -41,10 +45,10 @@
     "giscus": {
       "type": "object",
       "properties": {
-        "repo": { "type": "string", "minLength": 1 },
-        "repoId": { "type": "string", "minLength": 1 },
-        "category": { "type": "string", "minLength": 1 },
-        "categoryId": { "type": "string", "minLength": 1 }
+        "repo": { "$ref": "#/$defs/nonblankString" },
+        "repoId": { "$ref": "#/$defs/nonblankString" },
+        "category": { "$ref": "#/$defs/nonblankString" },
+        "categoryId": { "$ref": "#/$defs/nonblankString" }
       },
       "additionalProperties": false
     },
