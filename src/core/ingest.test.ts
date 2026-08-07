@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import { readCanonicalDocument, type SourceFlags } from "../commands/source.js";
 import { ingestDocument, sourceFormatFromPath } from "./ingest.js";
+
+const SCHEMA_ID = "https://github.com/hatim-s/planloft/schemas/document.v1.schema.json";
 
 test("Markdown frontmatter becomes a canonical document", () => {
   const doc = ingestDocument(
@@ -45,6 +53,34 @@ test("JSON rejects unknown fields and unsupported versions", () => {
   );
 });
 
+test("Markdown metadata is normalized and present blank metadata is rejected", () => {
+  const normalized = ingestDocument(
+    "---\ntitle: '  Trimmed title  '\nkind: '  roadmap  '\n---\n\nBody\n",
+    { format: "md" },
+  );
+  assert.equal(normalized.title, "Trimmed title");
+  assert.equal(normalized.kind, "roadmap");
+  assert.throws(
+    () => ingestDocument("---\ntitle: '   '\n---\n\n# Not a fallback\n", { format: "md" }),
+    /metadata "title" must be a nonblank string/,
+  );
+});
+
+test("title inference uses the first parsed Markdown H1 only", () => {
+  const doc = ingestDocument(
+    "```md\n# Not this\n```\n\n## Also not this\n\n# Actual title\n",
+    { format: "md", sourceName: "fallback.md" },
+  );
+  assert.equal(doc.title, "Actual title");
+
+  const html = ingestDocument("# Not a Markdown heading", {
+    format: "html",
+    sourceName: "legacy.html",
+    trustedHtml: true,
+  });
+  assert.equal(html.title, "legacy");
+});
+
 test("HTML requires an explicit trust decision", () => {
   assert.throws(
     () => ingestDocument("<p>trusted?</p>", { format: "html" }),
@@ -63,3 +99,96 @@ test("source formats are inferred from supported file extensions", () => {
   assert.equal(sourceFormatFromPath("plan.html"), "html");
   assert.throws(() => sourceFormatFromPath("plan.txt"), /Cannot infer input format/);
 });
+
+test("versioned document fixtures agree through runtime and actual JSON Schema validation", async () => {
+  const schemaDirectory = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../schemas",
+  );
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(schemaDirectory, "document.v1.schema.json"), "utf8"),
+  ) as { $id: string };
+  const fixtures = JSON.parse(
+    fs.readFileSync(path.join(schemaDirectory, "document.fixtures.json"), "utf8"),
+  ) as DocumentFixtures;
+  assert.equal(schema.$id, SCHEMA_ID);
+
+  const validateSchema = new Ajv2020({ allErrors: true }).compile(schema);
+  for (const fixture of fixtures.valid) {
+    assert.equal(
+      validateSchema(fixture.document),
+      true,
+      `schema rejected valid fixture: ${fixture.name}: ${JSON.stringify(validateSchema.errors)}`,
+    );
+    const runtime = ingestDocument(JSON.stringify(fixture.document), {
+      format: "json",
+      trustedHtml: fixture.trustedHtml,
+    });
+    assert.deepEqual(
+      pickMetadata(runtime),
+      fixture.expected,
+      `runtime normalization drifted for valid fixture: ${fixture.name}`,
+    );
+  }
+
+  for (const fixture of fixtures.invalid) {
+    assert.equal(validateSchema(fixture.document), false, `schema accepted invalid fixture: ${fixture.name}`);
+    assert.throws(
+      () => ingestDocument(JSON.stringify(fixture.document), { format: "json" }),
+      new RegExp(fixture.error ?? `metadata "${fixture.field}"`),
+      `runtime accepted invalid fixture: ${fixture.name}`,
+    );
+  }
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-document-cli-fixtures-"));
+  const source = path.join(directory, "source.md");
+  fs.writeFileSync(source, "# CLI source\n\nBody\n");
+  try {
+    for (const fixture of fixtures.valid.filter((entry) => entry.cliMetadata)) {
+      const runtime = await readCanonicalDocument(source, fixture.cliMetadata ?? {});
+      for (const [field, value] of Object.entries(fixture.expected)) {
+        assert.equal(
+          runtime[field as keyof typeof runtime],
+          value,
+          `CLI metadata normalization drifted for ${fixture.name}.${field}`,
+        );
+      }
+    }
+    for (const fixture of fixtures.invalid.filter((entry) => entry.cliMetadata)) {
+      await assert.rejects(
+        readCanonicalDocument(source, fixture.cliMetadata ?? {}),
+        new RegExp(`metadata "${fixture.field}"`),
+        `CLI metadata accepted invalid fixture: ${fixture.name}`,
+      );
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+interface DocumentFixtures {
+  valid: Array<{
+    name: string;
+    trustedHtml?: boolean;
+    document: Record<string, unknown>;
+    expected: Record<string, string>;
+    cliMetadata?: SourceFlags;
+  }>;
+  invalid: Array<{
+    name: string;
+    document: Record<string, unknown>;
+    field?: string;
+    error?: string;
+    cliMetadata?: SourceFlags;
+  }>;
+}
+
+function pickMetadata(doc: ReturnType<typeof ingestDocument>): Record<string, string> {
+  return {
+    title: doc.title,
+    slug: doc.slug,
+    kind: doc.kind,
+    ...(doc.theme === undefined ? {} : { theme: doc.theme }),
+    status: doc.status,
+  };
+}

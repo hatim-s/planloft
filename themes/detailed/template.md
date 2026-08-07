@@ -1,5 +1,7 @@
 # Authoring guidance — detailed
 
+Author Markdown only. Never hand-author HTML or generated presentation markup.
+
 Write a thorough technical plan a teammate could execute without asking questions.
 
 Use these sections (drop a section only if truly N/A):

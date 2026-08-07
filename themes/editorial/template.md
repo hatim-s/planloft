@@ -1,5 +1,7 @@
 # Authoring guidance — editorial
 
+Author Markdown only. Never hand-author HTML or generated presentation markup.
+
 Write the plan like a short, confident engineering article a reader enjoys.
 
 Shape:

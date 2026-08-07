@@ -19,9 +19,9 @@ export function resolve(opts: { slug?: string; title?: string; kind?: string }):
   const title = opts.title ?? opts.slug ?? capitalize(kind);
   const slug = slugify(opts.slug ?? title);
   const theme = resolveTheme(cfg, key);
-  // Agent-authored plans are always Markdown sources. Other explicit resolve callers
-  // retain the configured format until the configuration contract is simplified.
-  const format = kind === "plan" ? "md" : cfg.planFormat;
+  // Write-direct agent capture always authors Markdown. Explicit trusted HTML remains
+  // available through render, hoist, and publish instead of through resolve.
+  const format = "md" as const;
 
   // Register the project bucket + ensure its dir exists.
   const idx = loadIndex();

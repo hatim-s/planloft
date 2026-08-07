@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hatim-s/planloft/schemas/document.v1.schema.json",
+  "title": "Planloft document",
+  "description": "Version 1 JSON document envelope accepted by Planloft.",
+  "type": "object",
+  "required": ["content"],
+  "properties": {
+    "version": { "const": 1, "default": 1 },
+    "title": { "$ref": "#/$defs/nonblankString" },
+    "slug": { "$ref": "#/$defs/nonblankString" },
+    "kind": { "$ref": "#/$defs/nonblankString", "default": "plan" },
+    "theme": { "$ref": "#/$defs/nonblankString" },
+    "status": { "$ref": "#/$defs/nonblankString", "default": "active" },
+    "contentFormat": { "enum": ["md", "html"], "default": "md" },
+    "content": { "type": "string" }
+  },
+  "$defs": {
+    "nonblankString": {
+      "type": "string",
+      "pattern": "\\S"
+    }
+  },
+  "additionalProperties": false
+}

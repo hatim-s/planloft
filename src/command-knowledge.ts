@@ -132,7 +132,8 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     destructive: false,
     defaults: [
       "Uses the latest document when slug is omitted.",
-      "Writes to ./.planloft/plans/.",
+      "Writes to <git-root>/.planloft/plans/; outside Git, uses the current directory and prints a notice.",
+      "Refuses to replace an existing copy unless --force is provided.",
     ],
     examples: ["planloft copy architecture-roadmap"],
     trustAndPrivacy: [],

@@ -1,0 +1,105 @@
+{
+  "valid": [
+    {
+      "name": "omitted metadata with heading inference",
+      "document": {
+        "content": "# Inferred title\n\nBody"
+      },
+      "expected": {
+        "title": "Inferred title",
+        "slug": "inferred-title",
+        "kind": "plan",
+        "status": "active"
+      }
+    },
+    {
+      "name": "nonblank metadata is trimmed",
+      "document": {
+        "version": 1,
+        "title": "  Launch plan  ",
+        "slug": "  release-launch  ",
+        "kind": "  roadmap  ",
+        "theme": "  minimal  ",
+        "status": "  draft  ",
+        "contentFormat": "md",
+        "content": "# Ignored heading\n\nBody"
+      },
+      "expected": {
+        "title": "Launch plan",
+        "slug": "release-launch",
+        "kind": "roadmap",
+        "theme": "minimal",
+        "status": "draft"
+      },
+      "cliMetadata": {
+        "title": "  Launch plan  ",
+        "slug": "  release-launch  ",
+        "kind": "  roadmap  ",
+        "theme": "  minimal  ",
+        "status": "  draft  "
+      }
+    },
+    {
+      "name": "explicit trusted HTML remains accepted",
+      "trustedHtml": true,
+      "document": {
+        "title": "HTML report",
+        "contentFormat": "html",
+        "content": "<h1>Trusted report</h1>"
+      },
+      "expected": {
+        "title": "HTML report",
+        "slug": "html-report",
+        "kind": "plan",
+        "status": "active"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "blank title",
+      "document": { "title": "   ", "content": "Body" },
+      "field": "title",
+      "cliMetadata": { "title": "   " }
+    },
+    {
+      "name": "blank slug",
+      "document": { "slug": "\t", "content": "Body" },
+      "field": "slug",
+      "cliMetadata": { "slug": "\t" }
+    },
+    {
+      "name": "blank kind",
+      "document": { "kind": "\n", "content": "Body" },
+      "field": "kind",
+      "cliMetadata": { "kind": "\n" }
+    },
+    {
+      "name": "blank theme",
+      "document": { "theme": "  ", "content": "Body" },
+      "field": "theme",
+      "cliMetadata": { "theme": "  " }
+    },
+    {
+      "name": "blank status",
+      "document": { "status": "\r\n", "content": "Body" },
+      "field": "status",
+      "cliMetadata": { "status": "\r\n" }
+    },
+    {
+      "name": "non-string metadata",
+      "document": { "title": 12, "content": "Body" },
+      "field": "title"
+    },
+    {
+      "name": "unknown field",
+      "document": { "content": "Body", "blocks": [] },
+      "error": "Unknown JSON document field"
+    },
+    {
+      "name": "unsupported version",
+      "document": { "version": 2, "content": "Body" },
+      "error": "Unsupported JSON document version"
+    }
+  ]
+}

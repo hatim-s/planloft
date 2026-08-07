@@ -20,8 +20,8 @@ publish it as a shareable review link that auto-expires.
   `editorial` are built in; drop your own in `~/.planloft/themes/`.
 - **Caller-friendly input** — render, hoist, or publish Markdown and JSON directly;
   trusted HTML is available through an explicit safety option.
-- **CLI copy** — `planloft copy` drops a stored source into `./.planloft/plans/` in your
-  repo, ready to commit alongside code.
+- **CLI copy** — `planloft copy` drops a stored source into
+  `<git-root>/.planloft/plans/`, ready to commit alongside code.
 - **Explicit deploy** — `planloft deploy` builds a themed static site and publishes it to
   **GitHub Pages** — free, served at a hard-to-guess path marked `noindex`, and
   auto-expires after 30 days (`--ttl 90`; redeploy preserves the URL and moves the
@@ -85,6 +85,11 @@ metadata. Keep sensitive plans local. TTL values from `--ttl` and
 `config.defaultTtlDays` must be finite positive integers; the configured default is
 used only when `--ttl` is omitted. `rm` deletes stored source.
 
+`planloft copy` finds the Git root even when invoked from a nested directory or linked
+worktree. Outside Git it uses the current directory and prints a fallback notice. It
+preserves the stored source byte-for-byte and refuses to replace an existing copy unless
+`--force` is provided.
+
 ### GitHub authentication
 
 Before any repository mutation, Planloft validates the selected credential with
@@ -146,8 +151,13 @@ tree of content blocks:
 }
 ```
 
-Only `content` is required. The machine-readable contract is shipped at
-`schemas/document.schema.json`.
+Only `content` is required. Present `title`, `slug`, `kind`, `theme`, and `status`
+values must be nonblank strings; Planloft trims surrounding whitespace. When `title` is
+omitted from a Markdown source, Planloft uses the first parsed level-one Markdown
+heading, then the slug or source filename. Unknown fields and unsupported versions are
+rejected. The version-1 machine-readable contract is shipped at
+`schemas/document.v1.schema.json` with schema identity
+`https://github.com/hatim-s/planloft/schemas/document.v1.schema.json`.
 
 ## Node library
 
@@ -190,7 +200,6 @@ override. Without the marker, Planloft supplies a readable system-color fallback
 {
   "version": 1,
   "theme": "minimal",          // minimal | detailed | editorial | <custom>
-  "planFormat": "md",          // md | html
   "defaultTtlDays": 30,
   "github": {
     "repo": "planloft-plans"   // optional; token may come from auth precedence above
@@ -217,6 +226,11 @@ The version-1 configuration contract is published at `schemas/config.schema.json
 Defaults are used only when `config.json` is absent. Malformed JSON, inaccessible files,
 unsupported versions, unknown properties, and invalid values fail with stable diagnostics;
 `planloft config` validates the file after the editor closes.
+
+Agent write-direct capture is Markdown-only. Remove the retired `planFormat` property
+from existing configuration; `planFormat: "html"` produces a dedicated migration
+diagnostic. Explicit trusted HTML input and already indexed HTML documents remain
+renderable and deployable.
 
 ## Current scope
 

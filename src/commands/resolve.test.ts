@@ -7,7 +7,7 @@ import { DEFAULT_CONFIG, saveConfig } from "../core/config.js";
 import type { ResolvedContext } from "../core/types.js";
 import { resolve } from "./resolve.js";
 
-test("write-plan resolution always returns a Markdown target", () => {
+test("write-direct resolution always returns a Markdown target", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-test-"));
   const previousHome = process.env.PLANLOFT_HOME;
   const originalWrite = process.stdout.write;
@@ -19,11 +19,18 @@ test("write-plan resolution always returns a Markdown target", () => {
   }) as typeof process.stdout.write;
 
   try {
-    saveConfig({ ...DEFAULT_CONFIG, planFormat: "html" });
+    saveConfig(DEFAULT_CONFIG);
     resolve({ kind: "plan", slug: "markdown-plan", title: "Markdown Plan" });
     const context = JSON.parse(output) as ResolvedContext;
     assert.equal(context.format, "md");
     assert.match(context.path, /markdown-plan\.md$/);
+    assert.match(context.template, /Author Markdown only/);
+
+    output = "";
+    resolve({ kind: "review", slug: "markdown-review", title: "Markdown Review" });
+    const reviewContext = JSON.parse(output) as ResolvedContext;
+    assert.equal(reviewContext.format, "md");
+    assert.match(reviewContext.path, /markdown-review\.md$/);
   } finally {
     process.stdout.write = originalWrite;
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;

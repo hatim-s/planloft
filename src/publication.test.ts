@@ -381,7 +381,6 @@ function config(overrides: Partial<Config> = {}): Config {
   return {
     version: 1,
     theme: "minimal",
-    planFormat: "md",
     defaultTtlDays: 30,
     projects: {},
     ...overrides,

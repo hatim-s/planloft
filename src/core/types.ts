@@ -60,7 +60,6 @@ export interface ProjectEntry {
 export interface Config {
   version: 1; // versioned manual-editing contract
   theme: string; // global default theme
-  planFormat: PlanFormat; // md | html
   defaultTtlDays: number; // GitHub Pages TTL default
   projects: Record<string, { theme?: string; giscus?: Partial<GiscusConfig> }>; // key -> overrides
   giscus?: Partial<GiscusConfig>; // global defaults; project values take precedence
@@ -90,7 +89,7 @@ export interface IndexFile {
 export interface ResolvedContext {
   path: string;
   kind: Kind;
-  format: PlanFormat;
+  format: "md";
   theme: string;
   template: string;
 }

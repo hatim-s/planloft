@@ -1,5 +1,7 @@
 # Authoring guidance — minimal
 
+Author Markdown only. Never hand-author HTML or generated presentation markup.
+
 Write the plan black-and-white and terse. No filler, no preamble, no hedging.
 
 Structure:

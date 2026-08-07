@@ -34,6 +34,20 @@ test("command knowledge covers every public command with examples and effects", 
   }
 });
 
+test("source metadata and copy replacement flags are exposed by the CLI", () => {
+  const program = createProgram();
+  for (const name of ["render", "hoist", "publish"]) {
+    const command = program.commands.find((entry) => entry.name() === name);
+    assert.ok(command);
+    const flags = command.options.map((option) => option.long);
+    for (const metadata of ["--title", "--slug", "--kind", "--theme", "--status"]) {
+      assert.ok(flags.includes(metadata), `${name} is missing ${metadata}`);
+    }
+  }
+  const copy = program.commands.find((entry) => entry.name() === "copy");
+  assert.ok(copy?.options.some((option) => option.long === "--force"));
+});
+
 test("root help groups every public command and explains state and safety", async () => {
   const help = await captureHelp(["--help"]);
   for (const category of COMMAND_CATEGORIES) assert.match(help, new RegExp(category));
