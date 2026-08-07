@@ -80,6 +80,31 @@ test("custom light-only themes receive a system dark fallback", () => {
   }
 });
 
+test("body-only custom layouts retain theme styles, system preference, and the top toggle", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-body-only-layout-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "body-only");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "style.css"), "article { color: rebeccapurple; }");
+    fs.writeFileSync(path.join(theme, "layout.html"), "{{body}}");
+
+    const html = renderDocument(document({ content: "Body content" }), "body-only");
+    const buttonIndex = html.indexOf('class="planloft-theme-toggle"');
+    const bodyIndex = html.indexOf("<p>Body content</p>");
+    assert.match(html, /<style>[\s\S]*article \{ color: rebeccapurple; \}/);
+    assert.match(html, /prefers-color-scheme: dark/);
+    assert.match(html, /:root \{ color-scheme: light dark; \}/);
+    assert.ok(buttonIndex >= 0 && buttonIndex < bodyIndex);
+    assert.match(html, /Theme: system/);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("theme layouts must include the body and may only use documented slots", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-layout-test-"));
   const previousHome = process.env.PLANLOFT_HOME;

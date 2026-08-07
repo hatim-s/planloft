@@ -26,11 +26,13 @@ export function renderDocument(
   const body =
     doc.contentFormat === "html" ? doc.content : renderMarkdown(doc.content, doc.trustedHtml);
 
-  const html = renderLayout(readLayout(theme), {
+  const layout = readLayout(theme);
+  const styles = themeStyles(readStyle(theme));
+  const html = renderLayout(layout, {
     title: escapeHtml(doc.title),
     kind: escapeHtml(doc.kind),
     body,
-    styles: themeStyles(readStyle(theme)),
+    styles,
     robots: options.noindex
       ? '\n<meta name="robots" content="noindex, nofollow" />'
       : "",
@@ -38,7 +40,7 @@ export function renderDocument(
       ? '\n<section class="planloft-comments"><!-- TODO(impl) mount giscus. --></section>'
       : "",
   });
-  return injectThemeToggle(html);
+  return injectThemeSupport(html, styles, layout.includes("{{styles}}"));
 }
 
 /** Render an indexed store document to a temporary directory for preview/deploy. */
@@ -150,6 +152,24 @@ const THEME_TOGGLE = `<button class="planloft-theme-toggle" type="button" aria-l
 function themeStyles(style: string): string {
   const fallback = style.includes(THEME_SUPPORT_MARKER) ? "" : SYSTEM_DARK_FALLBACK_CSS;
   return `${style}\n${fallback}${THEME_CONTROL_CSS}`;
+}
+
+function injectThemeSupport(html: string, styles: string, layoutIncludesStyles: boolean): string {
+  const htmlWithToggle = injectThemeToggle(html);
+  return layoutIncludesStyles ? htmlWithToggle : injectStyles(htmlWithToggle, styles);
+}
+
+function injectStyles(html: string, styles: string): string {
+  const styleElement = `<style>${styles}</style>`;
+  const headEnd = /<\/head\s*>/i.exec(html);
+  if (headEnd?.index !== undefined) {
+    return `${html.slice(0, headEnd.index)}${styleElement}\n${html.slice(headEnd.index)}`;
+  }
+  const body = /<body\b[^>]*>/i.exec(html);
+  if (body?.index !== undefined) {
+    return `${html.slice(0, body.index)}${styleElement}\n${html.slice(body.index)}`;
+  }
+  return `${styleElement}\n${html}`;
 }
 
 function injectThemeToggle(html: string): string {
