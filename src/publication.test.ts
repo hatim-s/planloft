@@ -280,30 +280,63 @@ test("authenticated Git keeps token and reversible credentials out of argv and c
 test("publication clones persist and repair only clean credential-free remotes", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-clean-remote-test-"));
   const token = "github_pat_remote-secret";
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  const clean = "https://github.com/owner/plans.git";
   try {
     configureCleanRemote(dir, "owner", "plans");
     assert.equal(
       execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
         encoding: "utf8",
       }).trim(),
-      "https://github.com/owner/plans.git",
+      clean,
     );
 
+    const credentialUrls = [
+      `https://x-access-token:${token}@github.com/owner/plans.git`,
+      `https://x-access-token:${basic}@github.com/owner/plans.git`,
+    ];
+    execFileSync("git", ["-C", dir, "remote", "set-url", "origin", credentialUrls[0]!]);
+    execFileSync("git", ["-C", dir, "remote", "set-url", "--add", "origin", credentialUrls[1]!]);
     execFileSync("git", [
       "-C",
       dir,
       "remote",
       "set-url",
+      "--push",
       "origin",
-      `https://x-access-token:${token}@github.com/owner/plans.git`,
+      credentialUrls[0]!,
+    ]);
+    execFileSync("git", [
+      "-C",
+      dir,
+      "remote",
+      "set-url",
+      "--add",
+      "--push",
+      "origin",
+      credentialUrls[1]!,
     ]);
     configureCleanRemote(dir, "owner", "plans");
-    const repaired = execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
+    const fetchUrls = execFileSync("git", ["-C", dir, "remote", "get-url", "--all", "origin"], {
       encoding: "utf8",
-    }).trim();
-    assert.equal(repaired, "https://github.com/owner/plans.git");
-    assert.doesNotMatch(repaired, new RegExp(token));
-    assert.doesNotMatch(repaired, /x-access-token|@github\.com/);
+    })
+      .trim()
+      .split(/\r?\n/);
+    const pushUrls = execFileSync(
+      "git",
+      ["-C", dir, "remote", "get-url", "--push", "--all", "origin"],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split(/\r?\n/);
+
+    assert.deepEqual(fetchUrls, [clean]);
+    assert.deepEqual(pushUrls, [clean]);
+    for (const url of [...fetchUrls, ...pushUrls]) {
+      assert.doesNotMatch(url, new RegExp(token));
+      assert.doesNotMatch(url, new RegExp(basic));
+      assert.doesNotMatch(url, /x-access-token|@github\.com/);
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

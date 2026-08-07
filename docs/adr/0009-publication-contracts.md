@@ -34,7 +34,9 @@ GitHub's `/user` endpoint before repository mutation. Noninteractive failures us
 stable `PLANLOFT_GITHUB_AUTH_*` codes.
 
 Never print credentials. Do not save prompted credentials. Authenticate Git commands
-with an ephemeral header while the persisted remote remains a clean HTTPS URL.
+with an ephemeral `GIT_ASKPASS` helper and environment-scoped credential values while
+the persisted fetch and push remote URLs remain clean HTTPS URLs. Delete the helper
+immediately after each Git operation.
 
 ### P3 — Share one TTL rule and expose exact expiry
 

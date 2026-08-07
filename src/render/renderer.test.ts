@@ -180,6 +180,38 @@ test("body-only custom layouts retain theme styles, system preference, and the t
   }
 });
 
+test("body-only custom layouts put noindex and injected styles in a real head", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-body-noindex-layout-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "body-noindex");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "style.css"), "article { color: rebeccapurple; }");
+    fs.writeFileSync(path.join(theme, "layout.html"), "<body><article>{{body}}</article></body>");
+
+    const html = renderDocument(document({ content: "Body content" }), "body-noindex", {
+      noindex: true,
+    });
+    const headIndex = html.indexOf("<head>");
+    const robotsIndex = html.indexOf('name="robots"');
+    const styleIndex = html.indexOf("<style>");
+    const headEndIndex = html.indexOf("</head>");
+    const bodyIndex = html.indexOf("<body>");
+    const toggleIndex = html.indexOf('class="planloft-theme-toggle"');
+
+    assert.match(html, /^<!doctype html>\s*<html>/);
+    assert.ok(headIndex >= 0 && styleIndex > headIndex && robotsIndex > headIndex);
+    assert.ok(styleIndex < headEndIndex && robotsIndex < headEndIndex);
+    assert.ok(bodyIndex > headEndIndex && toggleIndex > bodyIndex);
+    assert.equal(html.match(/name="robots"/g)?.length, 1);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("theme layouts must include the body and may only use documented slots", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-layout-test-"));
   const previousHome = process.env.PLANLOFT_HOME;

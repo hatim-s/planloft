@@ -251,11 +251,18 @@ export function configureCleanRemote(dir: string, user: string, repo: string): v
   if (!fs.existsSync(path.join(dir, ".git"))) {
     fs.mkdirSync(dir, { recursive: true });
     git(dir, ["init"]);
-    git(dir, ["remote", "add", "origin", cleanUrl(user, repo)]);
-  } else {
-    // Repair clones created by older versions before any authenticated operation.
-    git(dir, ["remote", "set-url", "origin", cleanUrl(user, repo)]);
   }
+
+  // Rebuild origin so legacy additional fetch URLs and explicit push URLs cannot
+  // retain credentials even when the primary fetch URL was already repaired.
+  const remotes = execFileSync("git", ["-C", dir, "remote"], { encoding: "utf8" })
+    .split(/\r?\n/)
+    .filter(Boolean);
+  if (remotes.includes("origin")) git(dir, ["remote", "remove", "origin"]);
+
+  const url = cleanUrl(user, repo);
+  git(dir, ["remote", "add", "origin", url]);
+  git(dir, ["remote", "set-url", "--push", "origin", url]);
 }
 
 function syncClone(dir: string, user: string, repo: string, token: string): void {

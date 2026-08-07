@@ -38,16 +38,18 @@ export function renderDocument(
     kind: escapeHtml(doc.kind),
     body,
     styles,
-    robots,
+    // Metadata is injected after the document shell and all other render
+    // support so it always lands in a real head, even for fragment layouts.
+    robots: "",
     comments,
   });
-  const withRobots =
-    robots && !layout.includes("{{robots}}") ? injectHeadMetadata(rendered, robots) : rendered;
-  const html =
+  const structured = ensureDocumentStructure(rendered);
+  const withComments =
     comments && !layout.includes("{{comments}}")
-      ? injectComments(withRobots, comments)
-      : withRobots;
-  return injectThemeSupport(html, styles, layout.includes("{{styles}}"));
+      ? injectComments(structured, comments)
+      : structured;
+  const themed = injectThemeSupport(withComments, styles, layout.includes("{{styles}}"));
+  return robots ? injectHeadMetadata(themed, robots) : themed;
 }
 
 function renderGiscus(config: GiscusConfig): string {
@@ -188,6 +190,30 @@ function themeStyles(style: string): string {
 function injectThemeSupport(html: string, styles: string, layoutIncludesStyles: boolean): string {
   const htmlWithToggle = injectThemeToggle(html);
   return layoutIncludesStyles ? htmlWithToggle : injectStyles(htmlWithToggle, styles);
+}
+
+function ensureDocumentStructure(html: string): string {
+  const hasHtml = /<html\b[^>]*>/i.test(html);
+  const hasHead = /<head\b[^>]*>/i.test(html);
+  const hasBody = /<body\b[^>]*>/i.test(html);
+
+  if (hasHtml) {
+    if (hasHead) return html;
+    const body = /<body\b[^>]*>/i.exec(html);
+    if (body?.index !== undefined) {
+      return `${html.slice(0, body.index)}<head></head>\n${html.slice(body.index)}`;
+    }
+    const root = /<html\b[^>]*>/i.exec(html);
+    if (!root || root.index === undefined) return html;
+    const insertion = root.index + root[0].length;
+    return `${html.slice(0, insertion)}\n<head></head>${html.slice(insertion)}`;
+  }
+
+  if (hasBody) {
+    return `<!doctype html>\n<html>\n${hasHead ? "" : "<head></head>\n"}${html}\n</html>`;
+  }
+
+  return `<!doctype html>\n<html>\n<head></head>\n<body>\n${html}\n</body>\n</html>`;
 }
 
 function injectStyles(html: string, styles: string): string {
