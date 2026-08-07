@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hatim-s/planloft/schemas/config.schema.json",
+  "title": "Planloft configuration",
+  "description": "Version 1 contract for ~/.planloft/config.json.",
+  "type": "object",
+  "required": ["version", "theme", "planFormat", "defaultTtlDays", "projects"],
+  "properties": {
+    "version": { "const": 1 },
+    "theme": { "$ref": "#/$defs/themeName" },
+    "planFormat": { "enum": ["md", "html"] },
+    "defaultTtlDays": { "type": "integer", "minimum": 1, "maximum": 100000000 },
+    "projects": {
+      "type": "object",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/project" }
+    },
+    "giscus": { "$ref": "#/$defs/giscus" },
+    "github": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 },
+        "repo": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "vercel": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "themeName": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+    },
+    "giscus": {
+      "type": "object",
+      "properties": {
+        "repo": { "type": "string", "minLength": 1 },
+        "repoId": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "categoryId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "theme": { "$ref": "#/$defs/themeName" },
+        "giscus": { "$ref": "#/$defs/giscus" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

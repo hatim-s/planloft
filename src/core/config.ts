@@ -1,11 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { configPath } from "./paths.js";
 import type { Config } from "./types.js";
 import { parseTtlDays } from "./ttl.js";
+import { assertThemeName, validateTheme } from "../render/themes.js";
+
+export type ConfigDiagnosticCode =
+  | "PLANLOFT_CONFIG_MALFORMED"
+  | "PLANLOFT_CONFIG_INACCESSIBLE"
+  | "PLANLOFT_CONFIG_INVALID";
+
+export class ConfigError extends Error {
+  constructor(
+    readonly code: ConfigDiagnosticCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(`[${code}] ${message}`, options);
+    this.name = "ConfigError";
+  }
+}
 
 // Defaults written on first plan (ADR-0001 §D23).
 export const DEFAULT_CONFIG: Config = {
+  version: 1,
   theme: "minimal",
   planFormat: "md",
   defaultTtlDays: 30,
@@ -13,25 +32,210 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 export function loadConfig(): Config {
-  let raw: Partial<Config>;
+  return readConfig().config;
+}
+
+/** Load the config and persist defaults only when the file is genuinely absent. */
+export function ensureConfig(): Config {
+  const result = readConfig();
+  if (result.absent) saveConfig(result.config);
+  return result.config;
+}
+
+function readConfig(): { config: Config; absent: boolean } {
+  const file = configPath();
+  let source: string;
   try {
-    raw = JSON.parse(fs.readFileSync(configPath(), "utf8")) as Partial<Config>;
+    source = fs.readFileSync(file, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return structuredClone(DEFAULT_CONFIG);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { config: structuredClone(DEFAULT_CONFIG), absent: true };
+    }
+    throw new ConfigError(
+      "PLANLOFT_CONFIG_INACCESSIBLE",
+      `Cannot read configuration at ${file}.`,
+      { cause: error },
+    );
   }
-  const merged = { ...DEFAULT_CONFIG, ...raw, projects: { ...raw.projects } };
-  merged.defaultTtlDays = parseTtlDays(merged.defaultTtlDays, "config.defaultTtlDays");
-  return merged;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(source);
+  } catch (error) {
+    throw new ConfigError(
+      "PLANLOFT_CONFIG_MALFORMED",
+      `Configuration at ${file} is not valid JSON.`,
+      { cause: error },
+    );
+  }
+
+  return { config: validateConfig(raw, file), absent: false };
 }
 
 export function saveConfig(cfg: Config): void {
-  parseTtlDays(cfg.defaultTtlDays, "config.defaultTtlDays");
-  fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-  fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2) + "\n");
+  const validated = validateConfig(cfg, "configuration to save");
+  const file = configPath();
+  const directory = path.dirname(file);
+  const temporary = path.join(directory, `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(temporary, JSON.stringify(validated, null, 2) + "\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporary);
+    } catch {
+      // Preserve the primary write failure. A same-directory temp file can be
+      // identified by its deliberately narrow name if manual cleanup is needed.
+    }
+    throw new ConfigError(
+      "PLANLOFT_CONFIG_INACCESSIBLE",
+      `Cannot atomically write configuration at ${file}.`,
+      { cause: error },
+    );
+  }
+}
+
+export type ConfigPatch = Partial<Omit<Config, "version" | "projects" | "giscus" | "github" | "vercel">> & {
+  projects?: Config["projects"];
+  giscus?: NonNullable<Config["giscus"]>;
+  github?: NonNullable<Config["github"]>;
+  vercel?: NonNullable<Config["vercel"]>;
+};
+
+/** Apply a targeted update without discarding other valid configuration fields. */
+export function updateConfig(patch: ConfigPatch): Config {
+  const current = loadConfig();
+  const projects = { ...current.projects };
+  for (const [key, projectPatch] of Object.entries(patch.projects ?? {})) {
+    projects[key] = {
+      ...projects[key],
+      ...projectPatch,
+      giscus:
+        projectPatch.giscus === undefined
+          ? projects[key]?.giscus
+          : { ...projects[key]?.giscus, ...projectPatch.giscus },
+    };
+  }
+  const next: Config = {
+    ...current,
+    ...patch,
+    version: 1,
+    projects,
+    ...(patch.giscus === undefined ? {} : { giscus: { ...current.giscus, ...patch.giscus } }),
+    ...(patch.github === undefined ? {} : { github: { ...current.github, ...patch.github } }),
+    ...(patch.vercel === undefined ? {} : { vercel: { ...current.vercel, ...patch.vercel } }),
+  };
+  const validated = validateConfig(next, "configuration update");
+  saveConfig(validated);
+  return validated;
+}
+
+export function validateConfig(value: unknown, source = "configuration"): Config {
+  try {
+    return validateConfigValue(value);
+  } catch (error) {
+    if (error instanceof ConfigError) throw error;
+    throw new ConfigError(
+      "PLANLOFT_CONFIG_INVALID",
+      `${capitalize(source)} is semantically invalid: ${(error as Error).message}`,
+      { cause: error },
+    );
+  }
+}
+
+function validateConfigValue(value: unknown): Config {
+  const root = object(value, "$config");
+  exactKeys(root, ["version", "theme", "planFormat", "defaultTtlDays", "projects", "giscus", "github", "vercel"], "$config");
+  if (root.version !== 1) fail("$config.version must equal 1");
+  const theme = nonEmptyString(root.theme, "$config.theme");
+  assertThemeName(theme);
+  if (root.planFormat !== "md" && root.planFormat !== "html") {
+    fail('$config.planFormat must be "md" or "html"');
+  }
+  const defaultTtlDays = parseTtlDays(root.defaultTtlDays, "config.defaultTtlDays");
+  const projectValues = object(root.projects, "$config.projects");
+  const projects: Config["projects"] = {};
+  for (const [key, projectValue] of Object.entries(projectValues)) {
+    if (!key) fail("$config.projects keys must not be empty");
+    const project = object(projectValue, `$config.projects.${key}`);
+    exactKeys(project, ["theme", "giscus"], `$config.projects.${key}`);
+    const projectTheme = optionalString(project.theme, `$config.projects.${key}.theme`);
+    if (projectTheme !== undefined) assertThemeName(projectTheme);
+    projects[key] = {
+      ...(projectTheme === undefined ? {} : { theme: projectTheme }),
+      ...(project.giscus === undefined
+        ? {}
+        : { giscus: validateStringMap(project.giscus, `$config.projects.${key}.giscus`, GISCUS_KEYS) }),
+    };
+  }
+
+  return {
+    version: 1,
+    theme,
+    planFormat: root.planFormat,
+    defaultTtlDays,
+    projects,
+    ...(root.giscus === undefined ? {} : { giscus: validateStringMap(root.giscus, "$config.giscus", GISCUS_KEYS) }),
+    ...(root.github === undefined ? {} : { github: validateStringMap(root.github, "$config.github", GITHUB_KEYS) }),
+    ...(root.vercel === undefined ? {} : { vercel: validateStringMap(root.vercel, "$config.vercel", VERCEL_KEYS) }),
+  };
+}
+
+const GISCUS_KEYS = ["repo", "repoId", "category", "categoryId"] as const;
+const GITHUB_KEYS = ["token", "user", "repo"] as const;
+const VERCEL_KEYS = ["token"] as const;
+
+function validateStringMap<const K extends readonly string[]>(
+  value: unknown,
+  label: string,
+  keys: K,
+): Partial<Record<K[number], string>> {
+  const record = object(value, label);
+  exactKeys(record, keys, label);
+  const validated: Record<string, string> = {};
+  for (const key of keys) {
+    const field = optionalString(record[key], `${label}.${key}`);
+    if (field !== undefined) validated[key] = field;
+  }
+  return validated as Partial<Record<K[number], string>>;
+}
+
+function object(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function exactKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown) fail(`${label} contains unknown property "${unknown}"`);
+}
+
+function nonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim() === "") fail(`${label} must be a non-empty string`);
+  return value;
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : nonEmptyString(value, label);
+}
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /** Theme resolution order: plan > project > global (ADR-0001 §D8). */
 export function resolveTheme(cfg: Config, projectKey: string, planTheme?: string): string {
-  return planTheme ?? cfg.projects[projectKey]?.theme ?? cfg.theme;
+  const theme = planTheme ?? cfg.projects[projectKey]?.theme ?? cfg.theme;
+  validateTheme(theme);
+  return theme;
 }
