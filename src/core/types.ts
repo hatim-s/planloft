@@ -61,13 +61,22 @@ export interface Config {
   theme: string; // global default theme
   planFormat: PlanFormat; // md | html
   defaultTtlDays: number; // GitHub Pages TTL default
-  projects: Record<string, { theme?: string }>; // key -> per-project overrides
+  projects: Record<string, { theme?: string; giscus?: Partial<GiscusConfig> }>; // key -> overrides
+  giscus?: Partial<GiscusConfig>; // global defaults; project values take precedence
   github?: {
     token?: string;
     user?: string;
     repo?: string; // default: planloft-plans
   };
   vercel?: { token?: string }; // deferred host (ADR-0006); kept for the pluggable seam
+}
+
+/** Required giscus repository/category coordinates for opt-in comments. */
+export interface GiscusConfig {
+  repo: string;
+  repoId: string;
+  category: string;
+  categoryId: string;
 }
 
 /** ~/.planloft/index.json */

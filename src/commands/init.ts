@@ -19,7 +19,11 @@ export function init(): void {
   const repo = cfg.github?.repo ?? "planloft-plans";
   console.log(
     "github (gh) : " +
-      (hasGh() ? pc.green("ready") : pc.yellow("not found — will prompt for a PAT on deploy")) +
+      (hasGh()
+        ? pc.green("ready (preferred credential)")
+        : pc.yellow(
+            "not ready — deploy next checks PLANLOFT_GITHUB_TOKEN, github.token, then a TTY-only prompt",
+          )) +
       pc.dim(`  repo=${repo}`),
   );
 }

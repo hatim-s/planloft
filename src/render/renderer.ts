@@ -4,10 +4,11 @@ import path from "node:path";
 import { marked, Renderer } from "marked";
 import { ingestDocument } from "../core/ingest.js";
 import { readLayout, readStyle } from "./themes.js";
-import type { CanonicalDocument, DocMeta } from "../core/types.js";
+import { validateGiscusConfig } from "../core/giscus.js";
+import type { CanonicalDocument, DocMeta, GiscusConfig } from "../core/types.js";
 
 export interface RenderOptions {
-  comments?: boolean;
+  comments?: GiscusConfig;
   noindex?: boolean;
 }
 
@@ -28,19 +29,51 @@ export function renderDocument(
 
   const layout = readLayout(theme);
   const styles = themeStyles(readStyle(theme));
-  const html = renderLayout(layout, {
+  const comments = options.comments ? renderGiscus(options.comments) : "";
+  const robots = options.noindex
+    ? '\n<meta name="robots" content="noindex, nofollow" />'
+    : "";
+  const rendered = renderLayout(layout, {
     title: escapeHtml(doc.title),
     kind: escapeHtml(doc.kind),
     body,
     styles,
-    robots: options.noindex
-      ? '\n<meta name="robots" content="noindex, nofollow" />'
-      : "",
-    comments: options.comments
-      ? '\n<section class="planloft-comments"><!-- TODO(impl) mount giscus. --></section>'
-      : "",
+    // Metadata is injected after the document shell and all other render
+    // support so it always lands in a real head, even for fragment layouts.
+    robots: "",
+    comments,
   });
-  return injectThemeSupport(html, styles, layout.includes("{{styles}}"));
+  const structured = ensureDocumentStructure(rendered);
+  const withComments =
+    comments && !layout.includes("{{comments}}")
+      ? injectComments(structured, comments)
+      : structured;
+  const themed = injectThemeSupport(withComments, styles, layout.includes("{{styles}}"));
+  return robots ? injectHeadMetadata(themed, robots) : themed;
+}
+
+function renderGiscus(config: GiscusConfig): string {
+  const validated = validateGiscusConfig(config);
+  const attributes: Record<string, string> = {
+    src: "https://giscus.app/client.js",
+    "data-repo": validated.repo,
+    "data-repo-id": validated.repoId,
+    "data-category": validated.category,
+    "data-category-id": validated.categoryId,
+    "data-mapping": "pathname",
+    "data-strict": "1",
+    "data-reactions-enabled": "1",
+    "data-emit-metadata": "0",
+    "data-input-position": "bottom",
+    "data-theme": "preferred_color_scheme",
+    "data-lang": "en",
+    "data-loading": "lazy",
+    crossorigin: "anonymous",
+  };
+  const rendered = Object.entries(attributes)
+    .map(([name, value]) => `${name}="${escapeHtml(value)}"`)
+    .join("\n  ");
+  return `\n<section class="planloft-comments" aria-label="Comments">\n<script\n  ${rendered}\n  async>\n</script>\n</section>`;
 }
 
 /** Render an indexed store document to a temporary directory for preview/deploy. */
@@ -159,6 +192,30 @@ function injectThemeSupport(html: string, styles: string, layoutIncludesStyles: 
   return layoutIncludesStyles ? htmlWithToggle : injectStyles(htmlWithToggle, styles);
 }
 
+function ensureDocumentStructure(html: string): string {
+  const hasHtml = /<html\b[^>]*>/i.test(html);
+  const hasHead = /<head\b[^>]*>/i.test(html);
+  const hasBody = /<body\b[^>]*>/i.test(html);
+
+  if (hasHtml) {
+    if (hasHead) return html;
+    const body = /<body\b[^>]*>/i.exec(html);
+    if (body?.index !== undefined) {
+      return `${html.slice(0, body.index)}<head></head>\n${html.slice(body.index)}`;
+    }
+    const root = /<html\b[^>]*>/i.exec(html);
+    if (!root || root.index === undefined) return html;
+    const insertion = root.index + root[0].length;
+    return `${html.slice(0, insertion)}\n<head></head>${html.slice(insertion)}`;
+  }
+
+  if (hasBody) {
+    return `<!doctype html>\n<html>\n${hasHead ? "" : "<head></head>\n"}${html}\n</html>`;
+  }
+
+  return `<!doctype html>\n<html>\n<head></head>\n<body>\n${html}\n</body>\n</html>`;
+}
+
 function injectStyles(html: string, styles: string): string {
   const styleElement = `<style>${styles}</style>`;
   const headEnd = /<\/head\s*>/i.exec(html);
@@ -177,6 +234,26 @@ function injectThemeToggle(html: string): string {
   if (!body || body.index === undefined) return `${THEME_TOGGLE}\n${html}`;
   const insertion = body.index + body[0].length;
   return `${html.slice(0, insertion)}\n${THEME_TOGGLE}${html.slice(insertion)}`;
+}
+
+function injectComments(html: string, comments: string): string {
+  const bodyEnd = /<\/body\s*>/i.exec(html);
+  if (bodyEnd?.index !== undefined) {
+    return `${html.slice(0, bodyEnd.index)}${comments}\n${html.slice(bodyEnd.index)}`;
+  }
+  return `${html}${comments}`;
+}
+
+function injectHeadMetadata(html: string, metadata: string): string {
+  const headEnd = /<\/head\s*>/i.exec(html);
+  if (headEnd?.index !== undefined) {
+    return `${html.slice(0, headEnd.index)}${metadata}\n${html.slice(headEnd.index)}`;
+  }
+  const body = /<body\b[^>]*>/i.exec(html);
+  if (body?.index !== undefined) {
+    return `${html.slice(0, body.index)}${metadata}\n${html.slice(body.index)}`;
+  }
+  return `${metadata}\n${html}`;
 }
 
 function safeUrl(url: string): boolean {

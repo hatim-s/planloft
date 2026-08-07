@@ -24,6 +24,20 @@ export interface CommandKnowledge {
   trustAndPrivacy: string[];
 }
 
+export const PUBLICATION_PRIVACY_DISCLOSURE =
+  "Public deployment: the URL path is hard to guess and marked noindex, but the backing " +
+  "GitHub repository is public. Repository visitors can enumerate document folders and " +
+  "manifest metadata. Keep sensitive plans local.";
+export const GITHUB_AUTH_DISCLOSURE =
+  "GitHub auth precedence is authenticated gh, PLANLOFT_GITHUB_TOKEN, github.token, then " +
+  "a hidden TTY prompt; noninteractive runs never prompt.";
+export const GISCUS_REQUIREMENTS =
+  "--comments requires GitHub Discussions plus giscus.repo, giscus.repoId, " +
+  "giscus.category, and giscus.categoryId.";
+export const TTL_REQUIREMENTS =
+  "--ttl and config.defaultTtlDays must be finite positive integers; the configured default " +
+  "is used only when --ttl is omitted.";
+
 export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
   {
     name: "render",
@@ -71,9 +85,10 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     examples: ["planloft publish proposal.md --ttl 30"],
     trustAndPrivacy: [
       "Publishes to GitHub only when invoked explicitly.",
-      "The backing GitHub repository and manifest are public and enumerable.",
-      "--comments requires valid giscus configuration.",
-      "--ttl must be a positive integer.",
+      PUBLICATION_PRIVACY_DISCLOSURE,
+      GITHUB_AUTH_DISCLOSURE,
+      GISCUS_REQUIREMENTS,
+      TTL_REQUIREMENTS,
       "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
     ],
   },
@@ -140,9 +155,10 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     examples: ["planloft deploy architecture-roadmap --ttl 30"],
     trustAndPrivacy: [
       "Publishes to GitHub only when invoked explicitly.",
-      "The backing GitHub repository and manifest are public and enumerable.",
-      "--comments requires valid giscus configuration.",
-      "--ttl must be a positive integer.",
+      PUBLICATION_PRIVACY_DISCLOSURE,
+      GITHUB_AUTH_DISCLOSURE,
+      GISCUS_REQUIREMENTS,
+      TTL_REQUIREMENTS,
     ],
   },
   {
@@ -237,9 +253,11 @@ export function formatRootWorkflowHelp(): string {
     "",
     "Safety:",
     "  --trusted-html accepts only content you trust.",
-    "  publish and deploy write to GitHub; the backing repository and manifest are public.",
-    "  rm deletes stored source. --comments requires valid giscus configuration.",
-    "  --ttl must be a positive integer.",
+    `  ${PUBLICATION_PRIVACY_DISCLOSURE}`,
+    `  ${GITHUB_AUTH_DISCLOSURE}`,
+    `  ${GISCUS_REQUIREMENTS}`,
+    `  ${TTL_REQUIREMENTS}`,
+    "  rm deletes stored source.",
     "",
     "Run `planloft help <command>` for defaults, examples, and command-specific safety notes.",
   ].join("\n");

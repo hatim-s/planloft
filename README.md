@@ -23,8 +23,9 @@ publish it as a shareable review link that auto-expires.
 - **CLI copy** — `planloft copy` drops a stored source into `./.planloft/plans/` in your
   repo, ready to commit alongside code.
 - **Explicit deploy** — `planloft deploy` builds a themed static site and publishes it to
-  **GitHub Pages** — free, served at an unguessable URL, auto-expires after 30 days
-  (`--ttl 90`, redeploy bumps expiry).
+  **GitHub Pages** — free, served at a hard-to-guess path marked `noindex`, and
+  auto-expires after 30 days (`--ttl 90`; redeploy preserves the URL and moves the
+  expiry forward). The backing repository is public and enumerable.
 
 ## Install
 
@@ -78,9 +79,54 @@ printf '{"title":"Launch","content":"# Goal\\n\\nShip."}' |
 
 HTML input and embedded Markdown HTML are disabled for direct callers by default. Use
 `--trusted-html` only for content you control. `publish` and `deploy` write to GitHub;
-the backing GitHub Pages repository and manifest are public and enumerable. TTL values
-must be positive integers, `rm` deletes stored source, and comments require valid
-giscus configuration.
+the page path is hard to guess and marked `noindex`, but the backing GitHub Pages
+repository is public. Repository visitors can enumerate document folders and manifest
+metadata. Keep sensitive plans local. TTL values from `--ttl` and
+`config.defaultTtlDays` must be finite positive integers; the configured default is
+used only when `--ttl` is omitted. `rm` deletes stored source.
+
+### GitHub authentication
+
+Before any repository mutation, Planloft validates the selected credential with
+GitHub. Credential discovery has this exact precedence:
+
+1. An installed and authenticated `gh` CLI.
+2. `PLANLOFT_GITHUB_TOKEN`.
+3. `github.token` in Planloft configuration.
+4. A hidden prompt, only when both stdin and stdout are interactive terminals.
+
+Noninteractive runs never prompt and fail with stable `PLANLOFT_GITHUB_AUTH_*` error
+codes when credentials are missing, invalid, or cannot be validated. Planloft never
+prints tokens, prompted tokens are not saved, and Git remotes always retain clean
+`https://github.com/<owner>/<repo>.git` URLs rather than token-bearing URLs.
+
+### Giscus comments
+
+Comments are off by default. Before using `--comments`, enable GitHub Discussions on
+the selected public repository, install/enable the giscus GitHub App for that
+repository, and create or select a Discussions category supported by giscus. Use
+[giscus.app](https://giscus.app) to obtain the repository and category IDs, then set
+all four required fields:
+
+```jsonc
+{
+  "giscus": {
+    "repo": "owner/planloft-plans",
+    "repoId": "R_kg...",
+    "category": "Plan reviews",
+    "categoryId": "DIC_kw..."
+  },
+  "projects": {
+    "github.com/you/project": {
+      "giscus": { "category": "Project plan reviews", "categoryId": "DIC_kw..." }
+    }
+  }
+}
+```
+
+Project giscus fields override global fields individually. Planloft validates the
+effective `repo`, `repoId`, `category`, and `categoryId` before rendering or Git
+operations and emits the giscus client only for `--comments` deployments.
 
 ## JSON document format
 
@@ -144,18 +190,32 @@ override. Without the marker, Planloft supplies a readable system-color fallback
   "theme": "minimal",          // minimal | detailed | editorial | <custom>
   "planFormat": "md",          // md | html
   "defaultTtlDays": 30,
+  "github": {
+    "repo": "planloft-plans"   // optional; token may come from auth precedence above
+  },
+  "giscus": {                  // optional; required only with --comments
+    "repo": "owner/planloft-plans",
+    "repoId": "R_kg...",
+    "category": "Plan reviews",
+    "categoryId": "DIC_kw..."
+  },
   "projects": {                // per-project overrides (theme, etc.)
-    "github.com/you/subslot": { "theme": "editorial" }
+    "github.com/you/subslot": {
+      "theme": "editorial",
+      "giscus": { "category": "Project reviews", "categoryId": "DIC_kw..." }
+    }
   }
 }
 ```
 
 Theme resolution: **plan frontmatter > project override > global default**.
+Giscus resolution: **project field > global field**.
 
 ## Current scope
 
 planloft currently supports direct document ingestion/rendering, the local doc store,
 light-and-dark themed preview, copy-to-repo, one shared Claude Code/Codex plan skill,
 and GitHub Pages deploys. Saved docs stay local until you copy or publish them. Deployed
-review links are marked `noindex`, but their public repository remains enumerable, and
-they expire through the GitHub Pages cleanup workflow.
+review links use hard-to-guess paths marked `noindex`, but their public repository,
+document folders, and manifest metadata remain enumerable. Sensitive documents should
+remain local. Deploys expire through the GitHub Pages cleanup workflow.
