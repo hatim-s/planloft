@@ -1,6 +1,6 @@
 # ADR-0002 — generalize the store from plans to documents
 
-- **Status**: Accepted
+- **Status**: Accepted except E4, superseded by ADR-0008
 - **Date**: 2026-07-02
 - **Amends**: ADR-0001 §D3 (store layout), §D6 (capture). Does **not** supersede §D7.
 
@@ -44,6 +44,9 @@ but more moving parts; the user chose simplicity. Per-(kind×theme) template mat
 combinatorial explosion.
 
 ### E4 — Capture: keep plan auto-capture; add one generic `save-doc` skill
+> **Superseded by [ADR-0008](./0008-single-skill-command-knowledge.md).** Non-plan
+> documents now use the explicit `planloft hoist` command.
+
 The `write-plan` skill and its ExitPlanMode backstop are unchanged (§D6): plans still
 auto-capture. A single new **`save-doc`** skill handles every other kind. It triggers
 when the user asks to save/keep a doc, or when the agent finishes a substantial

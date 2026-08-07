@@ -16,3 +16,4 @@ Voice:
 - Active, direct, a little opinionated. Explain the *why*, not just the *what*.
 - Short paragraphs. Vary sentence length.
 - One strong closing line on the expected outcome.
+- Keep presentation color-free so the rendered document works in light and dark themes.

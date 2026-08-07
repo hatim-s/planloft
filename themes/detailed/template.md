@@ -25,3 +25,4 @@ Rules:
 - Be specific: name files, functions, commands.
 - Prefer tables for structured trade-offs.
 - Keep prose tight, but do not omit reasoning.
+- Keep presentation color-free so the rendered document works in light and dark themes.

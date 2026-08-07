@@ -1,7 +1,7 @@
 {
   "name": "planloft",
   "version": "0.0.1",
-  "description": "Render, hoist, and publish Markdown, JSON, HTML, and agent-written plans as consistently themed documents.",
+  "description": "Agent-native document compiler with one plan-writing skill, deep CLI help, and light/dark themed output.",
   "packageManager": "pnpm@10.8.1",
   "type": "module",
   "license": "MIT",
@@ -29,7 +29,6 @@
     "dist",
     "skills",
     "hooks",
-    "commands",
     "themes",
     "schemas",
     "templates",
@@ -39,7 +38,7 @@
   "scripts": {
     "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
     "dev": "tsx src/cli.ts",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts",
     "prepack": "npm run build && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
@@ -49,6 +48,14 @@
   "engines": {
     "node": ">=18"
   },
+  "keywords": [
+    "agent",
+    "cli",
+    "documents",
+    "markdown",
+    "planning",
+    "themes"
+  ],
   "dependencies": {
     "commander": "^12.1.0",
     "gray-matter": "^4.0.3",

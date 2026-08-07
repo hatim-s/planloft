@@ -1,7 +1,7 @@
 {
   "name": "planloft",
   "version": "0.0.1",
-  "description": "Capture, theme, preview, copy, and deploy agent-written plans and durable documents from Codex.",
+  "description": "Author substantial plans with one semantic skill and operate themed documents through the Planloft CLI.",
   "author": {
     "name": "planloft"
   },
@@ -11,14 +11,14 @@
     "plans",
     "codex",
     "documents",
-    "deploy",
-    "review"
+    "markdown",
+    "cli"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "planloft",
-    "shortDescription": "Store and share agent-written docs",
-    "longDescription": "Persist substantial Codex plans, ADRs, reviews, reports, research writeups, and notes into the planloft global store, then preview, copy, or deploy them for review through the bundled CLI.",
+    "shortDescription": "Author durable Planloft plans",
+    "longDescription": "Use the single write-plan skill to author substantial standalone Markdown plans. Discover rendering, storage, preview, copy, and explicit GitHub Pages publication through planloft help.",
     "developerName": "planloft",
     "category": "Productivity",
     "capabilities": [
@@ -26,9 +26,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Save this implementation plan with planloft.",
-      "Use planloft to preview my latest saved doc.",
-      "Deploy the latest planloft doc for review."
+      "Save this substantial implementation plan with planloft.",
+      "Run planloft help and show me the right operation for this document."
     ],
     "brandColor": "#111827",
     "screenshots": []

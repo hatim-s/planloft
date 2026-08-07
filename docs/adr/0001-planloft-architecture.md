@@ -1,6 +1,6 @@
 # ADR-0001 — planloft foundational architecture
 
-- **Status**: Accepted
+- **Status**: Accepted as amended by ADR-0008
 - **Date**: 2026-07-02
 - **Context**: Initial design of planloft, resolved in a single interactive design
   session. The decisions below (D1–D26) were made together and are interdependent;

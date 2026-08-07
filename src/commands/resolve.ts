@@ -10,8 +10,7 @@ import type { Kind, ResolvedContext } from "../core/types.js";
 
 /**
  * Print the target path + resolved kind/theme/format/template for the current project.
- * Consumed by the write-plan and save-doc skills (ADR-0001 §D2; ADR-0002). Zero-config:
- * writes defaults on first use (ADR-0001 §D23).
+ * Consumed by the write-plan skill (ADR-0008). Zero-config writes defaults on first use.
  */
 export function resolve(opts: { slug?: string; title?: string; kind?: string }): void {
   if (!fs.existsSync(configPath())) saveConfig(DEFAULT_CONFIG);
@@ -22,7 +21,9 @@ export function resolve(opts: { slug?: string; title?: string; kind?: string }):
   const title = opts.title ?? opts.slug ?? capitalize(kind);
   const slug = slugify(opts.slug ?? title);
   const theme = resolveTheme(cfg, key);
-  const format = cfg.planFormat;
+  // Agent-authored plans are always Markdown sources. Other explicit resolve callers
+  // retain the configured format until the configuration contract is simplified.
+  const format = kind === "plan" ? "md" : cfg.planFormat;
 
   // Register the project bucket + ensure its dir exists.
   const idx = loadIndex();

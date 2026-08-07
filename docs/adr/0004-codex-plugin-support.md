@@ -1,6 +1,6 @@
 # ADR-0004 — add Codex plugin support
 
-- **Status**: Accepted
+- **Status**: Accepted in part; the five-skill surface is superseded by ADR-0008
 - **Date**: 2026-07-03
 - **Amends**: ADR-0001 §D1, §D6, §D16.
 
@@ -25,6 +25,10 @@ Ship a Codex plugin manifest alongside the Claude manifest and reuse the same `s
 directory.
 
 Codex support has five skills:
+
+> **Superseded by [ADR-0008](./0008-single-skill-command-knowledge.md).** Codex and
+> Claude Code now share one semantic skill, `write-plan`; other operations remain CLI
+> commands.
 
 - `write-plan` — persist substantial implementation/design plans through
   `planloft resolve --kind plan`.
