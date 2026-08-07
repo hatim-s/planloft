@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { redactConfig } from "./commands/config.js";
+import { publish } from "./commands/publish.js";
 import { loadConfig, saveConfig } from "./core/config.js";
 import { resolveGiscusConfig } from "./core/giscus.js";
-import { parseTtlDays, resolveTtlDays } from "./core/ttl.js";
+import {
+  calculateExpiry,
+  MAX_TTL_DAYS,
+  parseTtlDays,
+  resolveTtlDays,
+} from "./core/ttl.js";
 import type { Config, DocMeta } from "./core/types.js";
 import type { DeployInput } from "./hosts/adapter.js";
 import {
   discoverGithubCredential,
+  authenticatedGit,
+  configureCleanRemote,
   GITHUB_AUTH_INVALID,
   GITHUB_AUTH_MISSING,
   GITHUB_AUTH_UNREACHABLE,
@@ -58,12 +67,33 @@ test("giscus configuration fails early with every missing field named", () => {
 test("TTL parser accepts only finite positive integers and uses config only when omitted", () => {
   assert.equal(parseTtlDays("1"), 1);
   assert.equal(parseTtlDays(90), 90);
-  for (const invalid of [0, -1, 1.2, Number.NaN, Number.POSITIVE_INFINITY, "0", "-1", "1.2", "3d", "01"]) {
+  for (const invalid of [
+    0,
+    -1,
+    1.2,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER,
+    "0",
+    "-1",
+    "1.2",
+    "3d",
+    "01",
+    String(Number.MAX_SAFE_INTEGER),
+  ]) {
     assert.throws(() => parseTtlDays(invalid), /finite positive integer/);
   }
   assert.equal(resolveTtlDays(undefined, 30), 30);
   assert.equal(resolveTtlDays(7, 30), 7);
   assert.throws(() => resolveTtlDays(undefined, 0), /config\.defaultTtlDays/);
+  assert.throws(
+    () => calculateExpiry(MAX_TTL_DAYS, new Date("2026-08-08T00:00:00.000Z")),
+    /does not produce a representable expiry/,
+  );
+  assert.equal(
+    calculateExpiry(30, new Date("2026-08-01T00:00:00.000Z")),
+    "2026-08-31T00:00:00.000Z",
+  );
 });
 
 test("configuration validates defaultTtlDays and redacts configured credentials", () => {
@@ -83,13 +113,49 @@ test("configuration validates defaultTtlDays and redacts configured credentials"
       JSON.stringify({ ...valid, defaultTtlDays: 0 }),
     );
     assert.throws(() => loadConfig(), /config\.defaultTtlDays must be a finite positive integer/);
+    fs.writeFileSync(
+      path.join(home, "config.json"),
+      JSON.stringify({ ...valid, defaultTtlDays: Number.MAX_SAFE_INTEGER }),
+    );
+    assert.throws(() => loadConfig(), /config\.defaultTtlDays must be a finite positive integer/);
     assert.throws(
       () => saveConfig({ ...valid, defaultTtlDays: Number.POSITIVE_INFINITY }),
+      /config\.defaultTtlDays must be a finite positive integer/,
+    );
+    assert.throws(
+      () => saveConfig({ ...valid, defaultTtlDays: Number.MAX_SAFE_INTEGER }),
       /config\.defaultTtlDays must be a finite positive integer/,
     );
   } finally {
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
     else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("publish computes configured expiry before hoisting source or index files", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-preflight-test-"));
+  const source = path.join(home, "proposal.md");
+  const previousHome = process.env.PLANLOFT_HOME;
+  const previousExitCode = process.exitCode;
+  process.env.PLANLOFT_HOME = home;
+  fs.writeFileSync(source, "# Proposal\n");
+  fs.writeFileSync(
+    path.join(home, "config.json"),
+    JSON.stringify({ ...config(), defaultTtlDays: MAX_TTL_DAYS }),
+  );
+  const previousConsoleError = console.error;
+  console.error = () => undefined;
+  try {
+    await publish(source, {});
+    assert.equal(process.exitCode, 1);
+    assert.equal(fs.existsSync(path.join(home, "index.json")), false);
+    assert.equal(fs.existsSync(path.join(home, "docs")), false);
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    console.error = previousConsoleError;
+    process.exitCode = previousExitCode;
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
@@ -185,6 +251,64 @@ test("interactive auth prompt is ephemeral and credential validation has stable 
   );
 });
 
+test("authenticated Git keeps token and reversible credentials out of argv and cleans askpass", () => {
+  const token = "github_pat_secret-material";
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  let askPass = "";
+  authenticatedGit(
+    "/tmp/planloft-hosting",
+    ["fetch", "--depth", "1", "origin", "main"],
+    token,
+    ((file: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+      assert.equal(file, "git");
+      const argv = args.join(" ");
+      assert.doesNotMatch(argv, new RegExp(token));
+      assert.doesNotMatch(argv, new RegExp(basic));
+      assert.doesNotMatch(argv, /AUTHORIZATION|extraheader|basic/i);
+      askPass = options.env?.GIT_ASKPASS ?? "";
+      assert.ok(askPass);
+      assert.equal(options.env?.PLANLOFT_GIT_TOKEN, token);
+      const helper = fs.readFileSync(askPass, "utf8");
+      assert.doesNotMatch(helper, new RegExp(token));
+      assert.doesNotMatch(helper, new RegExp(basic));
+      return Buffer.alloc(0);
+    }) as typeof execFileSync,
+  );
+  assert.equal(fs.existsSync(path.dirname(askPass)), false);
+});
+
+test("publication clones persist and repair only clean credential-free remotes", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-clean-remote-test-"));
+  const token = "github_pat_remote-secret";
+  try {
+    configureCleanRemote(dir, "owner", "plans");
+    assert.equal(
+      execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
+        encoding: "utf8",
+      }).trim(),
+      "https://github.com/owner/plans.git",
+    );
+
+    execFileSync("git", [
+      "-C",
+      dir,
+      "remote",
+      "set-url",
+      "origin",
+      `https://x-access-token:${token}@github.com/owner/plans.git`,
+    ]);
+    configureCleanRemote(dir, "owner", "plans");
+    const repaired = execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
+      encoding: "utf8",
+    }).trim();
+    assert.equal(repaired, "https://github.com/owner/plans.git");
+    assert.doesNotMatch(repaired, new RegExp(token));
+    assert.doesNotMatch(repaired, /x-access-token|@github\.com/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("redeploy keeps the stable URL id and moves expiry from the injected clock", () => {
   const manifest: Manifest = { version: 1, deploys: [] };
   const input = deployInput(30);
@@ -210,6 +334,14 @@ test("redeploy keeps the stable URL id and moves expiry from the injected clock"
 
 test("the GitHub adapter rejects invalid TTL before attempting authentication", async () => {
   await assert.rejects(githubPages.deploy(deployInput(0)), /TTL must be a finite positive integer/);
+  await assert.rejects(
+    githubPages.deploy(deployInput(Number.MAX_SAFE_INTEGER)),
+    /TTL must be a finite positive integer/,
+  );
+  await assert.rejects(
+    githubPages.deploy(deployInput(MAX_TTL_DAYS)),
+    /does not produce a representable expiry/,
+  );
 });
 
 function config(overrides: Partial<Config> = {}): Config {

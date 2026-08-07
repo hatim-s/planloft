@@ -6,7 +6,7 @@ import { buildSite } from "../render/renderer.js";
 import { shortId } from "../core/id.js";
 import { getAdapter } from "../hosts/adapter.js";
 import { resolveGiscusConfig } from "../core/giscus.js";
-import { resolveTtlDays } from "../core/ttl.js";
+import { calculateExpiry, resolveTtlDays } from "../core/ttl.js";
 import { PUBLICATION_PRIVACY_DISCLOSURE } from "../command-knowledge.js";
 
 export interface DeployFlags {
@@ -32,6 +32,11 @@ export async function deploy(slug: string | undefined, flags: DeployFlags): Prom
     const cfg = loadConfig();
     const theme = resolveTheme(cfg, key, meta.theme);
     const ttlDays = resolveTtlDays(flags.ttl, cfg.defaultTtlDays);
+    calculateExpiry(
+      ttlDays,
+      new Date(),
+      flags.ttl === undefined ? "config.defaultTtlDays" : "--ttl",
+    );
     const comments = flags.comments ? resolveGiscusConfig(cfg, key) : undefined;
     const adapter = getAdapter("github")!; // always registered
     const id = shortId();

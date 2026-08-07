@@ -99,6 +99,28 @@ test("comments are appended when a custom constrained layout omits the comments 
   }
 });
 
+test("noindex is injected when a custom constrained layout omits the robots slot", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-robots-layout-test-"));
+  const previousHome = process.env.PLANLOFT_HOME;
+  process.env.PLANLOFT_HOME = home;
+  try {
+    const theme = path.join(home, "themes", "no-robots-slot");
+    fs.mkdirSync(theme, { recursive: true });
+    fs.writeFileSync(path.join(theme, "style.css"), "");
+    fs.writeFileSync(
+      path.join(theme, "layout.html"),
+      "<!doctype html><html><head><title>{{title}}</title></head><body>{{body}}</body></html>",
+    );
+    const html = renderDocument(document({}), "no-robots-slot", { noindex: true });
+    assert.match(html, /<meta name="robots" content="noindex, nofollow" \/>/);
+    assert.ok(html.indexOf('name="robots"') < html.indexOf("</head>"));
+  } finally {
+    if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+    else process.env.PLANLOFT_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("rendered documents honor system theme and expose a top theme toggle", () => {
   for (const theme of ["minimal", "detailed", "editorial"]) {
     const html = renderDocument(document({ content: "# Both themes" }), theme);

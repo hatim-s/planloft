@@ -60,7 +60,15 @@ test("every command help page includes its tested example and effect markers", a
 
 test("TTL help contract is enforced by the CLI parser", async () => {
   for (const command of ["deploy", "publish"]) {
-    for (const invalid of ["0", "-1", "1.5", "12days", "Infinity", "NaN"]) {
+    for (const invalid of [
+      "0",
+      "-1",
+      "1.5",
+      "12days",
+      "Infinity",
+      "NaN",
+      String(Number.MAX_SAFE_INTEGER),
+    ]) {
       const subject = command === "deploy" ? "example" : "example.md";
       const result = await captureFailure([command, subject, "--ttl", invalid]);
       assert.match(result, /must be a finite positive integer/);

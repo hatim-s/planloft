@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../core/config.js";
-import { parseTtlDays } from "../core/ttl.js";
+import { calculateExpiry } from "../core/ttl.js";
 import { hostingDir, templatesDir } from "../core/paths.js";
 import type { Config } from "../core/types.js";
 import type { DeployInput, HostAdapter } from "./adapter.js";
@@ -173,26 +174,43 @@ function git(cwd: string, args: string[]): void {
   execFileSync("git", args, { cwd, stdio: "ignore" });
 }
 
-function cleanUrl(user: string, repo: string): string {
+export function cleanUrl(user: string, repo: string): string {
   return `https://github.com/${user}/${repo}.git`;
 }
 
-function authenticatedGit(cwd: string, args: string[], token: string): void {
-  const authorization = Buffer.from(`x-access-token:${token}`).toString("base64");
+type GitRunner = typeof execFileSync;
+
+export function authenticatedGit(
+  cwd: string,
+  args: string[],
+  token: string,
+  run: GitRunner = execFileSync,
+): void {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-git-auth-"));
+  const askPass = path.join(authDir, "askpass.sh");
   try {
-    execFileSync(
-      "git",
-      [
-        "-C",
-        cwd,
-        "-c",
-        `http.https://github.com/.extraheader=AUTHORIZATION: basic ${authorization}`,
-        ...args,
-      ],
-      { stdio: "ignore" },
+    fs.writeFileSync(
+      askPass,
+      '#!/bin/sh\ncase "$1" in\n  *Username*) printf \'%s\\n\' "$PLANLOFT_GIT_USERNAME" ;;\n  *) printf \'%s\\n\' "$PLANLOFT_GIT_TOKEN" ;;\nesac\n',
+      { mode: 0o700 },
     );
+    run("git", ["-C", cwd, ...args], {
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        GIT_ASKPASS: askPass,
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "credential.helper",
+        GIT_CONFIG_VALUE_0: "",
+        PLANLOFT_GIT_USERNAME: "x-access-token",
+        PLANLOFT_GIT_TOKEN: token,
+      },
+    });
   } catch {
     throw new Error("GitHub Git operation failed. Check credential and repository permissions.");
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
   }
 }
 
@@ -229,7 +247,7 @@ async function ensurePages(token: string, user: string, repo: string): Promise<v
 
 // ---- local working clone --------------------------------------------------
 
-function syncClone(dir: string, user: string, repo: string, token: string): void {
+export function configureCleanRemote(dir: string, user: string, repo: string): void {
   if (!fs.existsSync(path.join(dir, ".git"))) {
     fs.mkdirSync(dir, { recursive: true });
     git(dir, ["init"]);
@@ -238,6 +256,10 @@ function syncClone(dir: string, user: string, repo: string, token: string): void
     // Repair clones created by older versions before any authenticated operation.
     git(dir, ["remote", "set-url", "origin", cleanUrl(user, repo)]);
   }
+}
+
+function syncClone(dir: string, user: string, repo: string, token: string): void {
+  configureCleanRemote(dir, user, repo);
   // Remote is source of truth (the prune Action rewrites it) — hard-reset to it.
   authenticatedGit(dir, ["fetch", "--depth", "1", "origin", "main"], token);
   git(dir, ["reset", "--hard", "FETCH_HEAD"]);
@@ -308,8 +330,9 @@ export const githubPages: HostAdapter = {
   },
 
   async deploy(input: DeployInput) {
-    // Validate adapter callers before credential discovery or any Git/GitHub effect.
-    parseTtlDays(input.ttlDays, "TTL");
+    // Resolve the exact expiry before credential discovery or any Git/GitHub/filesystem effect.
+    const now = new Date();
+    const expiresAt = calculateExpiry(input.ttlDays, now, "TTL");
     const cfg = input.cfg;
     const repo = cfg.github?.repo ?? DEFAULT_REPO;
     const credential = await discoverGithubCredential(cfg);
@@ -331,7 +354,7 @@ export const githubPages: HostAdapter = {
 
     copyDist(input.dist, path.join(dir, "p", id));
 
-    const expiresAt = updateManifestDeployment(manifest, input, id, new Date());
+    updateManifestDeployment(manifest, input, id, now, expiresAt);
     writeManifest(dir, manifest);
 
     // Commit + push (Pages redeploys from the branch).
@@ -355,14 +378,13 @@ export function updateManifestDeployment(
   input: DeployInput,
   id: string,
   now: Date,
+  exactExpiry = calculateExpiry(input.ttlDays, now, "TTL"),
 ): string {
-  const ttlDays = parseTtlDays(input.ttlDays, "TTL");
   const existing = manifest.deploys.find(
     (entry) => entry.project === input.doc.project && entry.slug === input.doc.slug,
   );
   const stableId = existing?.id ?? id;
   const createdAt = now.toISOString();
-  const expiresAt = new Date(now.getTime() + ttlDays * 86_400_000).toISOString();
   manifest.deploys = manifest.deploys.filter((entry) => entry.id !== stableId);
   manifest.deploys.push({
     id: stableId,
@@ -371,7 +393,7 @@ export function updateManifestDeployment(
     title: input.doc.title,
     kind: input.doc.kind,
     createdAt: existing?.createdAt ?? createdAt,
-    expiresAt,
+    expiresAt: exactExpiry,
   });
-  return expiresAt;
+  return exactExpiry;
 }

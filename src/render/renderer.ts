@@ -30,20 +30,23 @@ export function renderDocument(
   const layout = readLayout(theme);
   const styles = themeStyles(readStyle(theme));
   const comments = options.comments ? renderGiscus(options.comments) : "";
+  const robots = options.noindex
+    ? '\n<meta name="robots" content="noindex, nofollow" />'
+    : "";
   const rendered = renderLayout(layout, {
     title: escapeHtml(doc.title),
     kind: escapeHtml(doc.kind),
     body,
     styles,
-    robots: options.noindex
-      ? '\n<meta name="robots" content="noindex, nofollow" />'
-      : "",
+    robots,
     comments,
   });
+  const withRobots =
+    robots && !layout.includes("{{robots}}") ? injectHeadMetadata(rendered, robots) : rendered;
   const html =
     comments && !layout.includes("{{comments}}")
-      ? injectComments(rendered, comments)
-      : rendered;
+      ? injectComments(withRobots, comments)
+      : withRobots;
   return injectThemeSupport(html, styles, layout.includes("{{styles}}"));
 }
 
@@ -213,6 +216,18 @@ function injectComments(html: string, comments: string): string {
     return `${html.slice(0, bodyEnd.index)}${comments}\n${html.slice(bodyEnd.index)}`;
   }
   return `${html}${comments}`;
+}
+
+function injectHeadMetadata(html: string, metadata: string): string {
+  const headEnd = /<\/head\s*>/i.exec(html);
+  if (headEnd?.index !== undefined) {
+    return `${html.slice(0, headEnd.index)}${metadata}\n${html.slice(headEnd.index)}`;
+  }
+  const body = /<body\b[^>]*>/i.exec(html);
+  if (body?.index !== undefined) {
+    return `${html.slice(0, body.index)}${metadata}\n${html.slice(body.index)}`;
+  }
+  return `${metadata}\n${html}`;
 }
 
 function safeUrl(url: string): boolean {
