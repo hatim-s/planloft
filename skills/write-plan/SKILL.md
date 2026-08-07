@@ -12,6 +12,18 @@ description: >-
 
 Persist the substantial plan directly. Keep it reviewable without conversation history.
 
+## Check the prerequisite
+
+This skill requires the separately installed Planloft CLI. Skill-only installation does
+not install the executable, hooks, themes, runtime assets, or plugin metadata.
+
+Run `command -v planloft` before resolving. If it is missing, stop and report this
+actionable message:
+
+> Planloft CLI is required by the write-plan skill. Install it with
+> `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then
+> retry in a new agent session.
+
 ## Resolve the target
 
 Derive a short kebab-case slug and a human title. Run this exact command with real

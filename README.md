@@ -29,22 +29,98 @@ publish it as a shareable review link that auto-expires.
 
 ## Install
 
-Planloft has three distinct installation surfaces:
+Planloft has three separate installation products. Pick the capability boundary you
+want; installing one does not silently install either of the others.
 
-| Install | Command | Includes |
+| Product | Includes | Does not include |
 |---|---|---|
-| CLI only | `pnpm add -g planloft` | Every `planloft` command and the Node library; no agent skill or hooks |
-| `write-plan` skill only | `npx skills add hatim-s/planloft --skill write-plan` | The semantic skill only; install the CLI separately so `planloft resolve` is available |
-| Full plugin | `/plugin install planloft` | One `write-plan` skill, plan-mode capture hooks, plugin metadata, and the bundled CLI |
+| CLI-only | Executable, Node library, themes, schemas, renderer, local store, and publication runtime | Agent discovery or plan-mode hooks |
+| Skill-only | One discoverable `write-plan` instruction directory | CLI, hooks, themes, schemas, runtime code, or plugin metadata |
+| Full plugin | Built CLI/runtime, one skill, plan-mode hook backstop, themes, schemas, and Codex/Claude plugin metadata | Automatic publication; deploy remains explicit |
 
-The skill installer also works as `pnpm dlx skills add hatim-s/planloft --skill
-write-plan` or `bunx skills add hatim-s/planloft --skill write-plan`. The runner is
-`npx`, `pnpm dlx`, or `bunx`; there is no generic `npm skills`, `pnpm skills`, or `bun
-skills` command.
+### CLI-only
 
-Codex and Claude Code consume the same `write-plan` skill. Preview, copy, and deploy
-are CLI commands rather than separately triggered skills. Configuration is created on
-first use; publishing remains an explicit action.
+Install the runtime globally with exactly one package manager:
+
+```bash
+npm install -g planloft
+pnpm add -g planloft
+bun add -g planloft
+```
+
+Pin a released runtime as `planloft@0.0.1`. An npm version pin applies to the CLI and
+full-plugin artifact only; it does not pin a skill fetched from GitHub.
+
+### CLI plus `write-plan`
+
+The skill requires `planloft` on `PATH`. Install the CLI above, then use the matching
+runner. These are the exact project/global and Codex/Claude recipes:
+
+| Package manager | Agent | Project scope | Global scope |
+|---|---|---|---|
+| npm | Codex | `npx skills add hatim-s/planloft --skill write-plan -a codex` | `npx skills add hatim-s/planloft --skill write-plan -g -a codex` |
+| npm | Claude Code | `npx skills add hatim-s/planloft --skill write-plan -a claude-code` | `npx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
+| pnpm | Codex | `pnpm dlx skills add hatim-s/planloft --skill write-plan -a codex` | `pnpm dlx skills add hatim-s/planloft --skill write-plan -g -a codex` |
+| pnpm | Claude Code | `pnpm dlx skills add hatim-s/planloft --skill write-plan -a claude-code` | `pnpm dlx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
+| Bun | Codex | `bunx skills add hatim-s/planloft --skill write-plan -a codex` | `bunx skills add hatim-s/planloft --skill write-plan -g -a codex` |
+| Bun | Claude Code | `bunx skills add hatim-s/planloft --skill write-plan -a claude-code` | `bunx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
+
+The default installation uses a canonical skill plus agent links. Add `--copy` when
+links are unsuitable. Reserve `-y` for CI and other deliberately noninteractive runs.
+Start a new Codex or Claude session after installation so the target reloads discovery.
+
+The runner is `npx`, `pnpm dlx`, or `bunx`; the executable is the separate `skills`
+package. There is no generic `npm skills`, `pnpm skills`, or `bun skills` command.
+
+`hatim-s/planloft` follows the repository's current default branch and is appropriate
+for latest development. Reproducible released skill installation uses the release tag
+in the GitHub tree URL, independently of the npm package version:
+
+```bash
+npx skills add https://github.com/hatim-s/planloft/tree/v0.0.1/skills/write-plan \
+  --skill write-plan -g -a codex
+```
+
+Use the same URL with `pnpm dlx skills` or `bunx skills`, and select
+`-a claude-code` or omit `-g` as needed. A release is not installation-ready until the
+tag exists and its repository contains exactly the intended `write-plan` skill.
+
+### Full plugin
+
+The repository exposes Codex and Claude marketplace catalogs whose Planloft entry pins
+the exact npm package version. The package must already be published before these
+recipes can succeed.
+
+Codex personal installation:
+
+```bash
+codex plugin marketplace add hatim-s/planloft --ref v0.0.1
+codex plugin add planloft@planloft
+```
+
+For a repository-curated Codex install, place the shipped
+`.agents/plugins/marketplace.json` in that repository, run
+`codex plugin marketplace list`, then `codex plugin add planloft@planloft`. Start a new
+session and review/trust the bundled hook before enabling it.
+
+Claude Code supports explicit user, project, and local scope:
+
+```bash
+claude plugin marketplace add https://github.com/hatim-s/planloft.git#v0.0.1 --scope user
+claude plugin install planloft@planloft --scope user
+
+# Replace both occurrences of "user" with "project" or "local" for that scope.
+```
+
+Skill-only installation never installs or enables hooks. Full-plugin installation adds
+the hook definition; the host may still require reload, enablement, and trust review.
+Both Codex and Claude require a new session or plugin reload before newly installed
+components are discoverable. See [the migration guide](https://github.com/hatim-s/planloft/blob/main/docs/installation-migration.md)
+before upgrading an installation that still exposes the retired skills.
+
+Codex and Claude Code consume the same `write-plan` instructions. Preview, copy, and
+deploy are CLI commands rather than separately triggered skills. Configuration is
+created on first use; publishing remains an explicit action.
 
 ## CLI
 

@@ -32,13 +32,17 @@
     "themes",
     "schemas",
     "templates",
+    ".agents",
     ".codex-plugin",
     ".claude-plugin"
   ],
   "scripts": {
     "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
     "dev": "tsx src/cli.ts",
-    "test": "tsx --test src/*.test.ts src/**/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts && node --test scripts/*.test.mjs",
+    "test:installer": "node --test scripts/installer-matrix.test.mjs && node scripts/installer-matrix.mjs --contract",
+    "test:installer:live": "node scripts/installer-matrix.mjs --live --quick --source local",
+    "test:installer:release": "node scripts/installer-matrix.mjs --live --full --source all",
     "prepack": "npm run build && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
