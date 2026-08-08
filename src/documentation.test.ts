@@ -14,8 +14,8 @@ test("README separates all three installation products and states their executab
   assert.match(readme, /Skill-only \| One discoverable `write-plan` instruction directory \| CLI, hooks/);
   assert.match(readme, /Skill-only installation never installs or enables hooks/);
   assert.match(readme, /does not add `planloft` globally to `PATH`/);
-  assert.match(readme, /not currently published to npm/);
-  assert.match(readme, /repository has no\s+release tag/);
+  assert.match(readme, /require both npm\s+`planloft@0\.1\.0` and repository tag `v0\.1\.0` to exist/);
+  assert.match(readme, /Until both release gates are\s+complete/);
 });
 
 test("README contains the complete npm, pnpm, and Bun skill recipe matrix", () => {
