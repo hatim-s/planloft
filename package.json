@@ -27,6 +27,7 @@
   },
   "files": [
     "dist",
+    "bin",
     "skills",
     "hooks",
     "themes",

@@ -36,7 +36,7 @@ want; installing one does not silently install either of the others.
 |---|---|---|
 | CLI-only | Executable, Node library, themes, schemas, renderer, local store, and publication runtime | Agent discovery or plan-mode hooks |
 | Skill-only | One discoverable `write-plan` instruction directory | CLI, hooks, themes, schemas, runtime code, or plugin metadata |
-| Full plugin | Built CLI/runtime, one skill, plan-mode hook backstop, themes, schemas, and Codex/Claude plugin metadata | Automatic publication; deploy remains explicit |
+| Full plugin | Plugin-root CLI bridge/runtime, one skill, plan-mode hook backstop, themes, schemas, and Codex/Claude plugin metadata | A global `planloft` command or automatic publication; deploy remains explicit |
 
 ### CLI-only
 
@@ -65,9 +65,11 @@ runner. These are the exact project/global and Codex/Claude recipes:
 | Bun | Codex | `bunx skills add hatim-s/planloft --skill write-plan -a codex` | `bunx skills add hatim-s/planloft --skill write-plan -g -a codex` |
 | Bun | Claude Code | `bunx skills add hatim-s/planloft --skill write-plan -a claude-code` | `bunx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
 
-The default installation uses a canonical skill plus agent links. Add `--copy` when
-links are unsuitable. Reserve `-y` for CI and other deliberately noninteractive runs.
-Start a new Codex or Claude session after installation so the target reloads discovery.
+Each recipe targets exactly one agent. With one target, `skills@1.5.22` installs a
+direct copy at that agent's discovery path; `--copy` makes the same choice explicit.
+Legacy multi-agent installs may use a canonical skill plus agent links. Reserve `-y`
+for CI and other deliberately noninteractive runs. Start a new Codex or Claude session
+after installation so the target reloads discovery.
 
 The runner is `npx`, `pnpm dlx`, or `bunx`; the executable is the separate `skills`
 package. There is no generic `npm skills`, `pnpm skills`, or `bun skills` command.
@@ -99,9 +101,16 @@ codex plugin add planloft@planloft
 ```
 
 For a repository-curated Codex install, place the shipped
-`.agents/plugins/marketplace.json` in that repository, run
-`codex plugin marketplace list`, then `codex plugin add planloft@planloft`. Start a new
-session and review/trust the bundled hook before enabling it.
+`.agents/plugins/marketplace.json` in that repository, then register that repository
+before installing from its catalog:
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+codex plugin marketplace add "$REPO_ROOT"
+codex plugin add planloft@planloft
+```
+
+Start a new session and review/trust the bundled hook before enabling it.
 
 Claude Code supports explicit user, project, and local scope:
 
@@ -113,7 +122,10 @@ claude plugin install planloft@planloft --scope user
 ```
 
 Skill-only installation never installs or enables hooks. Full-plugin installation adds
-the hook definition; the host may still require reload, enablement, and trust review.
+the hook definition and a plugin-root `bin/planloft` bridge used by both the hook and
+the bundled skill. It does not add `planloft` globally to `PATH`; install the CLI-only
+product separately for shells outside the plugin. The host may still require reload,
+enablement, and trust review.
 Both Codex and Claude require a new session or plugin reload before newly installed
 components are discoverable. See [the migration guide](https://github.com/hatim-s/planloft/blob/main/docs/installation-migration.md)
 before upgrading an installation that still exposes the retired skills.

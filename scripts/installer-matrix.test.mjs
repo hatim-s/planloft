@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   DIMENSIONS,
   SKILLS_CLI_VERSION,
+  agentHookConfigPaths,
   agentSkillPath,
   buildMatrix,
   canonicalSkillPath,
@@ -18,6 +19,7 @@ test("full contract enumerates every installer dimension exactly once", () => {
   const matrix = buildMatrix();
   assert.equal(matrix.length, 96);
   assert.equal(new Set(matrix.map(({ id }) => id)).size, 96);
+  assert.deepEqual(DIMENSIONS.method, ["default", "copy"]);
   for (const [dimension, values] of Object.entries(DIMENSIONS)) {
     assert.deepEqual([...new Set(matrix.map((entry) => entry[dimension]))].sort(), [...values].sort());
   }
@@ -57,6 +59,13 @@ test("discovery paths stay inside the disposable project or home", () => {
   assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/write-plan"));
   assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/write-plan"));
   assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/write-plan"));
+});
+
+test("agent hook and plugin configuration probes stay inside disposable roots", () => {
+  const paths = agentHookConfigPaths({ agent: "claude-code", project: "/tmp/project", home: "/tmp/home" });
+  assert.ok(paths.includes(path.join("/tmp/project", ".claude/settings.json")));
+  assert.ok(paths.includes(path.join("/tmp/home", ".claude/plugins")));
+  assert.ok(paths.every((entry) => entry.startsWith("/tmp/project/") || entry.startsWith("/tmp/home/")));
 });
 
 test("repository satisfies the Phase 3 installation contract", () => {

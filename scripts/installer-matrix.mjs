@@ -8,11 +8,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
+export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the write-plan skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
 export const DIMENSIONS = Object.freeze({
   runner: ["npx", "pnpm", "bunx"],
   agent: ["codex", "claude-code"],
   scope: ["project", "global"],
-  method: ["symlink", "copy"],
+  method: ["default", "copy"],
   cli: ["absent", "installed"],
   source: ["latest", "tagged"],
 });
@@ -66,12 +67,12 @@ export function agentSkillPath({ agent, scope, project, home }) {
 
 export function quickMatrix(source = "local") {
   const rows = [
-    ["npx", "codex", "project", "symlink", "absent"],
+    ["npx", "codex", "project", "default", "absent"],
     ["pnpm", "claude-code", "global", "copy", "installed"],
     ["bunx", "codex", "global", "copy", "absent"],
-    ["npx", "claude-code", "project", "symlink", "installed"],
+    ["npx", "claude-code", "project", "default", "installed"],
     ["pnpm", "codex", "project", "copy", "absent"],
-    ["bunx", "claude-code", "global", "symlink", "installed"],
+    ["bunx", "claude-code", "global", "default", "installed"],
   ];
   return rows.map(([runner, agent, scope, method, cli]) => {
     const entry = { runner, agent, scope, method, cli, source };
@@ -90,17 +91,40 @@ export function validateRepositoryContract() {
     .map((entry) => entry.name);
   assert.deepEqual(discovered, ["write-plan"]);
 
-  const skill = fs.readFileSync(path.join(skillRoot, "write-plan", "SKILL.md"), "utf8");
+  const skillPath = path.join(skillRoot, "write-plan");
+  const skill = fs.readFileSync(path.join(skillPath, "SKILL.md"), "utf8");
+  const resolverPath = path.join(skillPath, "scripts", "resolve-planloft-command.sh");
   assert.match(skill, /^name:\s*write-plan$/m);
-  assert.match(skill, /Planloft CLI is required by the write-plan skill/);
-  assert.match(skill, /npm install -g planloft/);
-  assert.match(skill, /Skill-only installation does\s+not install the executable, hooks, themes, runtime assets, or plugin metadata\./);
+  assert.match(skill, /scripts\/resolve-planloft-command\.sh/);
+  assert.match(skill, /`bin\/planloft` bridge/);
+  assert.ok(skill.replace(/\s+/g, " ").includes("Skill-only installation does not install the executable, hooks, themes, runtime assets, or plugin metadata."));
   assert.doesNotMatch(skill, /hooks? (?:were|are|have been) installed/i);
+  assert.ok(fs.statSync(resolverPath).mode & 0o111, "skill CLI resolver must be executable");
+
+  const resolverRoot = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolver-contract-"));
+  try {
+    const installedSkill = path.join(resolverRoot, ".agents", "skills", "write-plan");
+    fs.cpSync(skillPath, installedSkill, { recursive: true });
+    const resolver = spawnSync(path.join(installedSkill, "scripts", "resolve-planloft-command.sh"), [], {
+      cwd: resolverRoot,
+      env: { HOME: resolverRoot, PATH: "/usr/bin:/bin" },
+      encoding: "utf8",
+    });
+    assert.equal(resolver.status, 127, "standalone skill resolver must fail when the CLI is absent");
+    assert.equal(resolver.stderr.trim(), MISSING_CLI_MESSAGE);
+  } finally {
+    fs.rmSync(resolverRoot, { recursive: true, force: true });
+  }
 
   const packageJson = readJson("package.json");
-  for (const asset of ["dist", "skills", "hooks", "themes", "schemas", ".agents", ".codex-plugin", ".claude-plugin"]) {
+  for (const asset of ["dist", "bin", "skills", "hooks", "themes", "schemas", ".agents", ".codex-plugin", ".claude-plugin"]) {
     assert.ok(packageJson.files.includes(asset), `npm package must include ${asset}`);
   }
+  const pluginBridge = path.join(ROOT, "bin", "planloft");
+  assert.ok(fs.statSync(pluginBridge).mode & 0o111, "plugin-root bin/planloft bridge must be executable");
+  const hooks = fs.readFileSync(path.join(ROOT, "hooks", "hooks.json"), "utf8");
+  assert.match(hooks, /\/bin\/planloft/);
+  assert.doesNotMatch(hooks, /\/dist\/cli\.js/);
   for (const file of [".agents/plugins/marketplace.json", ".claude-plugin/marketplace.json"]) {
     const marketplace = readJson(file);
     assert.equal(marketplace.plugins.length, 1);
@@ -135,6 +159,8 @@ export function validateRepositoryContract() {
   }
   assert.match(readme, /does not pin a skill fetched from GitHub/);
   assert.match(readme, /Skill-only installation never installs or enables hooks/);
+  assert.match(readme, /codex plugin marketplace add "\$REPO_ROOT"[\s\S]+codex plugin add planloft@planloft/);
+  assert.match(readme, /does not add `planloft` globally to `PATH`/);
   assert.ok(readme.includes(taggedSkillSource(`v${packageJson.version}`)));
 
   const migration = fs.readFileSync(path.join(ROOT, "docs", "installation-migration.md"), "utf8");
@@ -215,6 +241,8 @@ function controlledEnvironment(root, cliState) {
       XDG_CONFIG_HOME: path.join(home, ".config"),
       XDG_CACHE_HOME: path.join(root, "cache", "xdg"),
       PLANLOFT_HOME: path.join(home, ".planloft"),
+      CODEX_HOME: path.join(home, ".codex"),
+      CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       BUN_INSTALL: path.join(home, ".bun"),
       PNPM_HOME: path.join(home, ".pnpm"),
       npm_config_cache: path.join(root, "cache", "npm"),
@@ -251,10 +279,9 @@ function executeSkills(entry, args, context) {
 }
 
 function addArgs(entry, source) {
-  const secondaryAgent = entry.agent === "codex" ? "claude-code" : "codex";
   return [
     "add", source, "--skill", "write-plan",
-    "--agent", entry.agent, "--agent", secondaryAgent,
+    "--agent", entry.agent,
     ...(entry.scope === "global" ? ["--global"] : []),
     ...(entry.method === "copy" ? ["--copy"] : []),
     "--yes",
@@ -262,31 +289,98 @@ function addArgs(entry, source) {
 }
 
 function listInstalled(entry, context) {
-  const output = executeSkills(entry, ["list", ...(entry.scope === "global" ? ["--global"] : []), "--json"], context);
+  const output = executeSkills(entry, [
+    "list", "--agent", entry.agent,
+    ...(entry.scope === "global" ? ["--global"] : []),
+    "--json",
+  ], context);
   return JSON.parse(output.trim());
+}
+
+export function agentHookConfigPaths({ agent, project, home }) {
+  const bases = [project, home];
+  return bases.flatMap((base) => agent === "claude-code"
+    ? [
+        path.join(base, ".claude", "settings.json"),
+        path.join(base, ".claude", "settings.local.json"),
+        path.join(base, ".claude", "hooks"),
+        path.join(base, ".claude", "plugins"),
+      ]
+    : [
+        path.join(base, ".codex", "config.toml"),
+        path.join(base, ".codex", "hooks.json"),
+        path.join(base, ".agents", "hooks.json"),
+        path.join(base, ".agents", "plugins"),
+      ]);
+}
+
+function installationPaths(entry, context) {
+  return [...new Set([
+    canonicalSkillPath({ ...entry, ...context }),
+    agentSkillPath({ ...entry, ...context }),
+  ])];
+}
+
+function assertNoAgentHookConfig(entry, context) {
+  for (const statePath of agentHookConfigPaths({ ...entry, ...context })) {
+    assert.ok(!fs.existsSync(statePath), `${entry.id}: skill-only install mutated hook/config state at ${statePath}`);
+  }
+}
+
+function assertSkillCliBehavior(entry, context) {
+  const target = agentSkillPath({ ...entry, ...context });
+  const resolverPath = path.join(target, "scripts", "resolve-planloft-command.sh");
+  const resolver = spawnSync(resolverPath, [], {
+    cwd: context.project,
+    env: context.env,
+    encoding: "utf8",
+  });
+  if (entry.cli === "absent") {
+    assert.equal(resolver.status, 127, `${entry.id}: missing-CLI resolver must exit 127`);
+    assert.equal(resolver.stderr.trim(), MISSING_CLI_MESSAGE, `${entry.id}: missing-CLI guidance drift`);
+    return;
+  }
+
+  assert.equal(resolver.status, 0, `${entry.id}: installed CLI resolver failed: ${resolver.stderr}`);
+  const command = resolver.stdout.trim();
+  assert.ok(command, `${entry.id}: resolver returned an empty CLI path`);
+  const probe = spawnSync(command, ["resolve", "--kind", "plan", "--slug", "matrix", "--title", "Matrix"], {
+    cwd: context.project,
+    env: context.env,
+    encoding: "utf8",
+  });
+  assert.equal(probe.status, 0, `${entry.id}: resolved CLI path failed: ${probe.stderr}`);
 }
 
 function assertInstalled(entry, context, expected) {
   const canonical = canonicalSkillPath({ ...entry, ...context });
   const target = agentSkillPath({ ...entry, ...context });
-  const claudeTarget = agentSkillPath({ ...entry, ...context, agent: "claude-code" });
-  assert.ok(fs.existsSync(path.join(canonical, "SKILL.md")), `${entry.id}: canonical skill missing`);
   assert.ok(fs.existsSync(path.join(target, "SKILL.md")), `${entry.id}: agent skill missing`);
-  assert.ok(fs.existsSync(path.join(claudeTarget, "SKILL.md")), `${entry.id}: Claude discovery path missing`);
   assert.equal(fs.readFileSync(path.join(target, "SKILL.md"), "utf8"), expected, `${entry.id}: installed content drift`);
-  assert.equal(fs.readFileSync(path.join(claudeTarget, "SKILL.md"), "utf8"), expected, `${entry.id}: secondary agent content drift`);
-
-  assert.ok(fs.lstatSync(canonical).isDirectory(), `${entry.id}: Codex canonical skill must be a directory`);
-  assert.equal(fs.lstatSync(claudeTarget).isSymbolicLink(), entry.method === "symlink", `${entry.id}: copy/symlink mismatch`);
+  assert.ok(fs.lstatSync(target).isDirectory(), `${entry.id}: single-agent ${entry.method} install must be a direct directory copy`);
+  assert.ok(!fs.lstatSync(target).isSymbolicLink(), `${entry.id}: exact agent path unexpectedly became a symlink`);
+  if (canonical !== target) {
+    assert.ok(!fs.existsSync(canonical), `${entry.id}: single-agent install leaked a canonical copy outside the agent path`);
+  }
   for (const forbidden of ["hooks", "themes", ".codex-plugin", ".claude-plugin"]) {
     assert.ok(!fs.existsSync(path.join(target, forbidden)), `${entry.id}: skill-only leaked ${forbidden}`);
   }
-  assert.match(expected, /Planloft CLI is required by the write-plan skill/);
+  assert.match(expected, /scripts\/resolve-planloft-command\.sh/);
   assert.doesNotMatch(expected, /hooks? (?:were|are|have been) installed/i);
+  assertNoAgentHookConfig(entry, context);
+  assertSkillCliBehavior(entry, context);
 
   const listed = listInstalled(entry, context);
   assert.deepEqual([...new Set(listed.map(({ name }) => name))], ["write-plan"], `${entry.id}: discovery list mismatch`);
   assert.equal(listed.length, 1, `${entry.id}: expected exactly one discovered skill`);
+}
+
+function assertRemoved(entry, context) {
+  for (const installPath of installationPaths(entry, context)) {
+    assert.ok(!fs.existsSync(installPath), `${entry.id}: remove left installer path ${installPath}`);
+  }
+  assert.equal(listInstalled(entry, context).filter(({ name }) => name === "write-plan").length, 0, `${entry.id}: remove left the skill discoverable`);
+  assertNoAgentHookConfig(entry, context);
 }
 
 async function runLiveCase(entry, tag, keep) {
@@ -306,16 +400,17 @@ async function runLiveCase(entry, tag, keep) {
 
     const addOutput = executeSkills(entry, addArgs(entry, source), context);
     assert.match(addOutput, /Found 1 skill/, `${entry.id}: source did not discover exactly one skill`);
+    assert.match(addOutput, /write-plan \(copied\)/, `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
     assertInstalled(entry, context, expected);
 
     executeSkills(entry, ["update", "write-plan", entry.scope === "global" ? "--global" : "--project", "--yes"], context);
     assertInstalled(entry, context, expected);
 
     executeSkills(entry, [
-      "remove", "write-plan", "--agent", "codex", "--agent", "claude-code",
+      "remove", "write-plan", "--agent", entry.agent,
       ...(entry.scope === "global" ? ["--global"] : []), "--yes",
     ], context);
-    assert.equal(listInstalled(entry, context).filter(({ name }) => name === "write-plan").length, 0, `${entry.id}: remove failed`);
+    assertRemoved(entry, context);
 
     executeSkills(entry, addArgs(entry, source), context);
     assertInstalled(entry, context, expected);

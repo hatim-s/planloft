@@ -74,9 +74,18 @@ PLANLOFT_RELEASE_TAG=v0.0.1 pnpm test:installer:release
 ```
 
 Every live case creates and removes its own temporary project, `HOME`, Planloft home,
-and npm/pnpm/Bun caches. It installs to both Codex and Claude discovery paths so
-symlink versus `--copy` behavior is observable, while the case's named agent remains
-the primary assertion target. The lifecycle is add, list, update, remove, and reinstall.
+and npm/pnpm/Bun caches. It installs and inspects only the case's named agent. With one
+target, `skills@1.5.22` normalizes the default mode and explicit `--copy` to a direct
+copy at that agent's exact discovery path. The lifecycle is add, list, update, remove,
+assert every canonical/agent path is absent, and reinstall; hook/config state must stay
+untouched throughout skill-only installation.
+
+After building and packing, execute the extracted full-plugin bridge rather than merely
+inspecting tar entries:
+
+```bash
+node scripts/validate-packed-plugin.mjs /path/to/planloft-0.0.1.tgz
+```
 
 The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It compares the
 installed tagged skill byte-for-byte with the tag's raw `SKILL.md`; it does not infer a
