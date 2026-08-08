@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import { config as editConfig } from "../commands/config.js";
+import { createPlanloftApplication, PlanloftApplicationError } from "../application.js";
 import {
   ConfigError,
   DEFAULT_CONFIG,
@@ -210,24 +210,24 @@ test("targeted updates ignore explicit undefined values at every optional patch 
   });
 });
 
-test("config command validates the file after the editor closes", () => {
-  withHome((home) => {
-    saveConfig(DEFAULT_CONFIG);
-    const editor = path.join(home, "invalid-editor.sh");
-    fs.writeFileSync(editor, '#!/bin/sh\nprintf "{" > "$1"\n', { mode: 0o755 });
-    const previousEditor = process.env.EDITOR;
-    const previousVisual = process.env.VISUAL;
-    process.env.EDITOR = editor;
-    delete process.env.VISUAL;
-    try {
-      assertConfigError(() => editConfig(), "PLANLOFT_CONFIG_MALFORMED");
-    } finally {
-      if (previousEditor === undefined) delete process.env.EDITOR;
-      else process.env.EDITOR = previousEditor;
-      if (previousVisual === undefined) delete process.env.VISUAL;
-      else process.env.VISUAL = previousVisual;
-    }
-  });
+test("config application operation validates the file after the editor closes", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-config-application-test-"));
+  try {
+    const application = createPlanloftApplication({
+      planloftHome: home,
+      environment: { EDITOR: "test-editor" },
+      editFile: (_editor, file) => fs.writeFileSync(file, "{"),
+    });
+    await application.init();
+    await assert.rejects(application.config(), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.category, "configuration");
+      assert.match(error.message, /PLANLOFT_CONFIG_MALFORMED/);
+      return true;
+    });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 function assertConfigError(

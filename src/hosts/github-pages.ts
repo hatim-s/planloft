@@ -233,16 +233,15 @@ async function ensureRepo(token: string, user: string, repo: string): Promise<vo
   }
 }
 
-async function ensurePages(token: string, user: string, repo: string): Promise<void> {
+async function ensurePages(token: string, user: string, repo: string): Promise<string | undefined> {
   const res = await api(token, "POST", `/repos/${user}/${repo}/pages`, {
     source: { branch: "main", path: "/" },
   });
   // 201 created, 409 already enabled — both fine. Anything else: warn, don't fail the deploy.
   if (!res.ok && res.status !== 409) {
-    console.warn(
-      `planloft: could not auto-enable Pages (${res.status}). Enable it once in repo Settings → Pages (branch: main, /).`,
-    );
+    return `Could not auto-enable Pages (${res.status}). Enable it once in repo Settings → Pages (branch: main, /).`;
   }
+  return undefined;
 }
 
 // ---- local working clone --------------------------------------------------
@@ -338,7 +337,7 @@ export const githubPages: HostAdapter = {
 
   async deploy(input: DeployInput) {
     // Resolve the exact expiry before credential discovery or any Git/GitHub/filesystem effect.
-    const now = new Date();
+    const now = input.now ?? new Date();
     const expiresAt = calculateExpiry(input.ttlDays, now, "TTL");
     const cfg = input.cfg;
     const repo = cfg.github?.repo ?? DEFAULT_REPO;
@@ -373,9 +372,13 @@ export const githubPages: HostAdapter = {
     }
     authenticatedGit(dir, ["push", "origin", "HEAD:main"], token);
 
-    await ensurePages(token, user, repo);
+    const pagesWarning = await ensurePages(token, user, repo);
 
-    return { url: `https://${user}.github.io/${repo}/p/${id}/`, expiresAt };
+    return {
+      url: `https://${user}.github.io/${repo}/p/${id}/`,
+      expiresAt,
+      ...(pagesWarning ? { warnings: [pagesWarning] } : {}),
+    };
   },
 };
 

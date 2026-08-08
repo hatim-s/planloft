@@ -8,11 +8,14 @@ export interface DeployInput {
   doc: DocMeta;
   ttlDays: number;
   cfg: Config;
+  /** The application clock captured before effects begin. */
+  now?: Date;
 }
 
 export interface DeployResult {
   url: string;
   expiresAt: string;
+  warnings?: string[];
 }
 
 /** Pluggable host interface (ADR-0001 §D11). Add Cloudflare/Netlify by implementing this. */
