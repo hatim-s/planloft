@@ -8,11 +8,13 @@ import {
   COMMAND_KNOWLEDGE,
   PLUGIN_DEFAULT_PROMPTS,
   PUBLICATION_PRIVACY_DISCLOSURE,
+  renderCommandExample,
   renderReadmeCliExamples,
   renderReadmeCliReference,
   renderSkillDiscoveryReference,
 } from "./command-knowledge.js";
 import { createProgram } from "./program.js";
+import type { PlanloftApplication } from "./application.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -69,8 +71,88 @@ test("every command help page includes its tested example and effect markers", a
     assert.match(help, /Local write:/);
     assert.match(help, /External write:/);
     assert.match(help, /Destructive:/);
-    for (const example of command.examples) assert.ok(help.includes(example));
+    for (const example of command.examples) {
+      assert.ok(help.includes(renderCommandExample(example)));
+    }
   }
+});
+
+test("every structured example reaches the expected application operation and normalized inputs", async () => {
+  const expected: Record<
+    string,
+    {
+      method: string;
+      args: readonly unknown[];
+      environment?: Readonly<Record<string, string>>;
+      preconditions?: readonly string[];
+    }
+  > = {
+    render: {
+      method: "render",
+      args: ["proposal.md", { theme: "editorial", out: "./proposal-site" }],
+    },
+    hoist: { method: "hoist", args: ["proposal.json", {}] },
+    publish: { method: "publish", args: ["proposal.md", { ttl: 30 }] },
+    list: { method: "list", args: [{ kind: "plan" }] },
+    preview: { method: "preview", args: ["architecture-roadmap"] },
+    copy: { method: "copy", args: ["architecture-roadmap", { force: undefined }] },
+    deploy: {
+      method: "deploy",
+      args: ["architecture-roadmap", { ttl: 30, comments: undefined }],
+    },
+    rm: { method: "remove", args: ["obsolete-roadmap"] },
+    resolve: {
+      method: "resolve",
+      args: [{ kind: "plan", slug: "auth-refactor", title: "Authentication Refactor" }],
+    },
+    config: { method: "config", args: [], environment: { EDITOR: "nano" } },
+    init: { method: "init", args: [] },
+  };
+
+  for (const command of COMMAND_KNOWLEDGE) {
+    const contract = expected[command.name];
+    assert.ok(contract, `missing independent invocation expectation for ${command.name}`);
+    assert.equal(command.examples.length, 1, `${command.name} should have one canonical example`);
+    const example = command.examples[0];
+    assert.ok(example);
+    assert.deepEqual(example.environment, contract.environment);
+    assert.deepEqual(example.preconditions, contract.preconditions);
+
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const application = mockApplication(calls);
+    const program = createProgram({
+      application,
+      writeOut: () => undefined,
+      writeErr: () => undefined,
+      setExitCode: () => undefined,
+    });
+    program.exitOverride();
+    await program.parseAsync(["node", "planloft", ...example.argv]);
+    assert.deepEqual(calls, [{ method: contract.method, args: contract.args }]);
+  }
+});
+
+test("unknown example options fail parsing before any application operation", async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  let output = "";
+  const program = createProgram({
+    application: mockApplication(calls),
+    writeOut: (value) => (output += value),
+    writeErr: (value) => (output += value),
+    setExitCode: () => undefined,
+  });
+  program.exitOverride();
+  program.configureOutput({
+    writeOut: (value) => (output += value),
+    writeErr: (value) => (output += value),
+  });
+  await assert.rejects(
+    program.parseAsync(["node", "planloft", "render", "proposal.md", "--unknown-option"]),
+    (error: unknown) =>
+      (error as { code?: string }).code === "commander.unknownOption",
+  );
+  assert.match(output, /unknown option '--unknown-option'/);
+  assert.deepEqual(calls, []);
 });
 
 test("TTL help contract is enforced by the CLI parser", async () => {
@@ -110,7 +192,11 @@ test("README, write-plan, and plugin metadata are projections of command knowled
   for (const example of renderReadmeCliExamples().split("\n")) {
     const command = example.split(/\s+/)[1];
     assert.ok(command);
-    assert.ok(COMMAND_KNOWLEDGE.find((entry) => entry.name === command)?.examples.includes(example));
+    assert.ok(
+      COMMAND_KNOWLEDGE.find((entry) => entry.name === command)?.examples.some(
+        (entry) => renderCommandExample(entry) === example,
+      ),
+    );
   }
 
   const skill = fs.readFileSync(path.join(ROOT, "skills", "write-plan", "SKILL.md"), "utf8");
@@ -192,4 +278,90 @@ function markedBlock(content: string, name: string): string {
   );
   assert.ok(match?.[1]);
   return match[1];
+}
+
+function mockApplication(
+  calls: Array<{ method: string; args: unknown[] }>,
+): PlanloftApplication {
+  return new Proxy({} as PlanloftApplication, {
+    get: (_target, property) =>
+      (...args: unknown[]) => {
+        const method = String(property);
+        calls.push({ method, args });
+        return Promise.resolve(mockResult(method));
+      },
+  });
+}
+
+function mockResult(method: string): unknown {
+  const deployment = {
+    url: "https://example.test/p/example/",
+    expiresAt: "2026-09-07T00:00:00.000Z",
+    ttlDays: 30,
+    warnings: [],
+  };
+  const document = {
+    slug: "example",
+    title: "Example",
+    kind: "plan",
+    format: "md",
+    updatedAt: "2026-08-08T00:00:00.000Z",
+    file: "/tmp/example.md",
+  };
+  switch (method) {
+    case "render":
+      return { operation: "render", output: "stdout", html: "" };
+    case "hoist":
+      return { operation: "hoist", document };
+    case "publish":
+      return { operation: "publish", document, deployment };
+    case "resolve":
+      return {
+        operation: "resolve",
+        context: {
+          path: "/tmp/example.md",
+          kind: "plan",
+          format: "md",
+          theme: "detailed",
+          template: "# Plan",
+        },
+      };
+    case "list":
+      return { operation: "list", projects: [] };
+    case "preview":
+      return {
+        operation: "preview",
+        slug: "example",
+        directory: "/tmp/example",
+        url: "file:///tmp/example/index.html",
+        opened: false,
+      };
+    case "copy":
+      return {
+        operation: "copy",
+        slug: "example",
+        path: "/tmp/example.md",
+        relativePath: ".planloft/plans/example.md",
+        usedCurrentDirectory: false,
+        replaced: false,
+      };
+    case "deploy":
+      return { operation: "deploy", slug: "example", deployment };
+    case "remove":
+      return { operation: "remove", slug: "example", sourceRemoved: true };
+    case "config":
+      return { operation: "config", mode: "edited", path: "/tmp/config.json" };
+    case "init":
+      return {
+        operation: "init",
+        configPath: "/tmp/config.json",
+        configCreated: true,
+        theme: "detailed",
+        captureFormat: "md",
+        defaultTtlDays: 30,
+        github: { ready: false, repo: "planloft-plans" },
+      };
+    default:
+      throw new Error(`Unexpected mock application method: ${method}`);
+  }
 }

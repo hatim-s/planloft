@@ -261,7 +261,8 @@ rejected. The version-1 machine-readable contract is shipped at
 Use the asynchronous application interface when a Node caller needs the same complete
 operation as the CLI, with structured results and stable error categories:
 
-```ts
+<!-- planloft:node-application-example:start -->
+```js
 import { createPlanloftApplication } from "planloft";
 
 const planloft = createPlanloftApplication({ cwd: process.cwd() });
@@ -270,8 +271,9 @@ const result = await planloft.resolve({
   slug: "launch-plan",
   title: "Launch plan",
 });
-console.log(result.path);
+console.log(result.context.path);
 ```
+<!-- planloft:node-application-example:end -->
 
 Use the focused compiler exports when only ingestion or rendering is needed:
 
