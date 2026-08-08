@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   createPlanloftConfiguration,
-  type ConfigError,
   type ConfigDiagnosticCode,
   type RedactedConfiguration,
 } from "./configuration.js";
@@ -17,7 +16,6 @@ import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
 import { githubPages, hasGh } from "./hosts/github-pages.js";
 import {
   createDocumentPersistence,
-  DocumentCopyConflictError,
 } from "./persistence.js";
 import {
   createPublicationModule,
@@ -25,12 +23,11 @@ import {
   type ApplicationPublicationAdapterResult,
   type ApplicationPublicationInput,
   type PreparedPublication,
-  PublicationEffectError,
   type PublicationEffectStage,
   type PublicationOptions,
 } from "./publication.js";
 import { buildSite, renderDocument } from "./render/renderer.js";
-import { ThemeError, type ThemeDiagnosticCode } from "./render/themes.js";
+import type { ThemeDiagnosticCode } from "./render/themes.js";
 import {
   readCanonicalDocument,
   type SourceFlags,
@@ -112,9 +109,9 @@ export interface PlanloftApplicationErrorDetails {
 }
 
 export class PlanloftApplicationError extends Error {
-  readonly code: string;
-  readonly category: ApplicationErrorCategory;
-  readonly operation: ApplicationOperation;
+  readonly code!: string;
+  readonly category!: ApplicationErrorCategory;
+  readonly operation!: ApplicationOperation;
   readonly stage?: ApplicationErrorStage;
   readonly diagnosticCode?: ApplicationDiagnosticCode;
   readonly field?: ApplicationDiagnosticField;
@@ -127,16 +124,44 @@ export class PlanloftApplicationError extends Error {
     const safeCategory = APPLICATION_ERROR_CATEGORIES.includes(category) ? category : "internal";
     const safeOperation = APPLICATION_OPERATIONS.has(operation) ? operation : "init";
     const safeDetails = sanitizeErrorDetails(details);
-    super(applicationErrorMessage(safeCategory, safeOperation, safeDetails));
-    this.name = "PlanloftApplicationError";
-    this.category = safeCategory;
-    this.operation = safeOperation;
-    this.code = ERROR_CODES[safeCategory];
-    if (safeDetails.stage !== undefined) this.stage = safeDetails.stage;
-    if (safeDetails.diagnosticCode !== undefined) this.diagnosticCode = safeDetails.diagnosticCode;
-    if (safeDetails.field !== undefined) this.field = safeDetails.field;
+    const message = applicationErrorMessage(safeCategory, safeOperation, safeDetails);
+    super(message);
+
+    // A public error is a value object, not a carrier for a lower-layer Error. Resetting the
+    // prototype prevents a subclass from inserting a hostile toJSON/toString between this
+    // object and the frozen public prototype. Defining every public field before freezing also
+    // makes construction order explicit for Error's normally mutable message/stack properties.
+    Object.setPrototypeOf(this, PlanloftApplicationError.prototype);
+    Object.defineProperties(this, {
+      name: immutableProperty("PlanloftApplicationError", false),
+      message: immutableProperty(message, false),
+      stack: immutableProperty(`PlanloftApplicationError: ${message}`, false),
+      code: immutableProperty(ERROR_CODES[safeCategory], true),
+      category: immutableProperty(safeCategory, true),
+      operation: immutableProperty(safeOperation, true),
+      stage: immutableProperty(safeDetails.stage, true),
+      diagnosticCode: immutableProperty(safeDetails.diagnosticCode, true),
+      field: immutableProperty(safeDetails.field, true),
+    });
+    Object.freeze(this);
+  }
+
+  toJSON(): Readonly<Record<string, string>> {
+    const output: Record<string, string> = {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      category: this.category,
+      operation: this.operation,
+    };
+    if (this.stage !== undefined) output.stage = this.stage;
+    if (this.diagnosticCode !== undefined) output.diagnosticCode = this.diagnosticCode;
+    if (this.field !== undefined) output.field = this.field;
+    return Object.freeze(output);
   }
 }
+
+Object.freeze(PlanloftApplicationError.prototype);
 
 export interface ApplicationFileSystem {
   readText(file: string): string;
@@ -482,7 +507,7 @@ export function createPlanloftApplication(
         try {
           copied = persistence.copy(slug, options);
         } catch (error) {
-          if (error instanceof DocumentCopyConflictError) {
+          if (isNamedDataError(error, "DocumentCopyConflictError")) {
             throw applicationError("conflict", "copy", {
               diagnosticCode: "PLANLOFT_COPY_CONFLICT",
             });
@@ -609,30 +634,64 @@ function classifyError(
   operation: ApplicationOperation,
   error: unknown,
 ): PlanloftApplicationError {
-  if (error instanceof PlanloftApplicationError) {
-    return error.operation === operation
-      ? error
-      : new PlanloftApplicationError(error.category, operation, {
-          stage: error.stage,
-          diagnosticCode: error.diagnosticCode,
-          field: error.field,
-        });
+  const inspected = inspectCaughtValue(error);
+  if (!inspected.safe) return applicationError("local_effect", operation);
+  const candidate = inspected.values;
+
+  if (candidate.name === "PlanloftApplicationError") {
+    const category = validCategory(candidate.category);
+    const incomingOperation = validOperation(candidate.operation);
+    if (category !== undefined && incomingOperation !== undefined) {
+      return applicationError(category, operation, {
+        stage: validStage(candidate.stage),
+        diagnosticCode: validDiagnostic(candidate.diagnosticCode),
+        field: validField(candidate.field),
+      });
+    }
+    return applicationError("local_effect", operation);
   }
-  if (error instanceof PublicationEffectError) {
-    return applicationError(error.category, operation, {
-      stage: error.stage,
-      diagnosticCode: publicationDiagnostic(error),
-    });
+  if (candidate.name === "PublicationEffectError") {
+    const category = candidate.category === "external_effect" ? "external_effect" :
+      candidate.category === "local_effect" ? "local_effect" : undefined;
+    const stage = validStage(candidate.stage);
+    if (category !== undefined && stage !== undefined) {
+      return applicationError(category, operation, {
+        stage,
+        diagnosticCode: publicationDiagnostic(candidate.message),
+      });
+    }
+    return applicationError("local_effect", operation);
   }
-  if (isConfigError(error)) {
-    return applicationError("configuration", operation, { diagnosticCode: error.code });
+  if (candidate.name === "ConfigError" && validConfigDiagnostic(candidate.code)) {
+    return applicationError("configuration", operation, { diagnosticCode: candidate.code });
   }
-  if (error instanceof ThemeError) {
-    return applicationError("validation", operation, { diagnosticCode: error.code });
+  if (candidate.name === "ThemeError" && validThemeDiagnostic(candidate.code)) {
+    return applicationError("validation", operation, { diagnosticCode: candidate.code });
   }
-  const validation = validationDiagnostic(error);
+  const validation = validationDiagnostic(candidate.message);
   if (validation) return applicationError("validation", operation, validation);
   return applicationError("local_effect", operation);
+}
+
+/** Rebuild a caught value for the CLI without trusting identity, prototypes, or accessors. */
+export function canonicalizePlanloftApplicationError(
+  error: unknown,
+  operation: ApplicationOperation,
+): PlanloftApplicationError {
+  const inspected = inspectCaughtValue(error);
+  if (!inspected.safe || inspected.values.name !== "PlanloftApplicationError") {
+    return applicationError("internal", operation);
+  }
+  const category = validCategory(inspected.values.category);
+  const incomingOperation = validOperation(inspected.values.operation);
+  if (category === undefined || incomingOperation === undefined) {
+    return applicationError("internal", operation);
+  }
+  return applicationError(category, operation, {
+    stage: validStage(inspected.values.stage),
+    diagnosticCode: validDiagnostic(inspected.values.diagnosticCode),
+    field: validField(inspected.values.field),
+  });
 }
 
 function applicationError(
@@ -643,24 +702,20 @@ function applicationError(
   return new PlanloftApplicationError(category, operation, details);
 }
 
-function isConfigError(error: unknown): error is ConfigError {
-  return error instanceof Error && error.name === "ConfigError";
-}
-
-function publicationDiagnostic(error: PublicationEffectError): ApplicationDiagnosticCode | undefined {
+function publicationDiagnostic(message: unknown): ApplicationDiagnosticCode | undefined {
+  if (typeof message !== "string") return undefined;
   for (const code of [
     "PLANLOFT_GITHUB_AUTH_MISSING",
     "PLANLOFT_GITHUB_AUTH_INVALID",
     "PLANLOFT_GITHUB_AUTH_UNREACHABLE",
   ] as const) {
-    if (error.message.startsWith(`${code}:`)) return code;
+    if (message.startsWith(`${code}:`)) return code;
   }
   return undefined;
 }
 
-function validationDiagnostic(error: unknown): PlanloftApplicationErrorDetails | undefined {
-  if (!(error instanceof Error)) return undefined;
-  const message = error.message;
+function validationDiagnostic(message: unknown): PlanloftApplicationErrorDetails | undefined {
+  if (typeof message !== "string") return undefined;
   const metadata = message.match(
     /^(?:resolve options|Markdown frontmatter|JSON document) metadata "(title|slug|kind|theme|status)" must be a nonblank string when provided\.$/,
   );
@@ -735,23 +790,101 @@ const DIAGNOSTIC_FIELDS = new Set<ApplicationDiagnosticField>([
 ]);
 
 function sanitizeErrorDetails(details: unknown): PlanloftApplicationErrorDetails {
-  const candidate = details && typeof details === "object"
-    ? details as Record<string, unknown>
-    : {};
-  const stage = ERROR_STAGES.has(candidate.stage as ApplicationErrorStage)
-    ? candidate.stage as ApplicationErrorStage
-    : undefined;
-  const diagnosticCode = DIAGNOSTIC_CODES.has(candidate.diagnosticCode as ApplicationDiagnosticCode)
-    ? candidate.diagnosticCode as ApplicationDiagnosticCode
-    : undefined;
-  const field = DIAGNOSTIC_FIELDS.has(candidate.field as ApplicationDiagnosticField)
-    ? candidate.field as ApplicationDiagnosticField
-    : undefined;
+  const inspected = inspectOwnDataProperties(details, ["stage", "diagnosticCode", "field"]);
+  if (!inspected.safe) return {};
+  const stage = validStage(inspected.values.stage);
+  const diagnosticCode = validDiagnostic(inspected.values.diagnosticCode);
+  const field = validField(inspected.values.field);
   return {
     ...(stage === undefined ? {} : { stage }),
     ...(diagnosticCode === undefined ? {} : { diagnosticCode }),
     ...(field === undefined ? {} : { field }),
   };
+}
+
+const CAUGHT_VALUE_PROPERTIES = [
+  "name",
+  "category",
+  "operation",
+  "stage",
+  "diagnosticCode",
+  "field",
+  "code",
+  "message",
+] as const;
+
+type InspectedValues = Record<(typeof CAUGHT_VALUE_PROPERTIES)[number] | "stage" | "diagnosticCode" | "field", unknown>;
+
+function inspectCaughtValue(value: unknown): { safe: true; values: InspectedValues } | { safe: false } {
+  return inspectOwnDataProperties(value, CAUGHT_VALUE_PROPERTIES);
+}
+
+function isNamedDataError(value: unknown, expectedName: string): boolean {
+  const inspected = inspectOwnDataProperties(value, ["name"] as const);
+  return inspected.safe && inspected.values.name === expectedName;
+}
+
+function inspectOwnDataProperties<const K extends readonly string[]>(
+  value: unknown,
+  properties: K,
+): { safe: true; values: Record<K[number], unknown> } | { safe: false } {
+  const values = Object.create(null) as Record<K[number], unknown>;
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return { safe: true, values };
+  }
+  try {
+    for (const property of properties) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor)) return { safe: false };
+      values[property as K[number]] = descriptor.value;
+    }
+    return { safe: true, values };
+  } catch {
+    return { safe: false };
+  }
+}
+
+function validCategory(value: unknown): ApplicationErrorCategory | undefined {
+  return typeof value === "string" && APPLICATION_ERROR_CATEGORIES.includes(value as ApplicationErrorCategory)
+    ? value as ApplicationErrorCategory
+    : undefined;
+}
+
+function validOperation(value: unknown): ApplicationOperation | undefined {
+  return typeof value === "string" && APPLICATION_OPERATIONS.has(value as ApplicationOperation)
+    ? value as ApplicationOperation
+    : undefined;
+}
+
+function validStage(value: unknown): ApplicationErrorStage | undefined {
+  return typeof value === "string" && ERROR_STAGES.has(value as ApplicationErrorStage)
+    ? value as ApplicationErrorStage
+    : undefined;
+}
+
+function validDiagnostic(value: unknown): ApplicationDiagnosticCode | undefined {
+  return typeof value === "string" && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode)
+    ? value as ApplicationDiagnosticCode
+    : undefined;
+}
+
+function validField(value: unknown): ApplicationDiagnosticField | undefined {
+  return typeof value === "string" && DIAGNOSTIC_FIELDS.has(value as ApplicationDiagnosticField)
+    ? value as ApplicationDiagnosticField
+    : undefined;
+}
+
+function validConfigDiagnostic(value: unknown): value is ConfigDiagnosticCode {
+  return typeof value === "string" && value.startsWith("PLANLOFT_CONFIG_") && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode);
+}
+
+function validThemeDiagnostic(value: unknown): value is ThemeDiagnosticCode {
+  return typeof value === "string" && value.startsWith("PLANLOFT_THEME_") && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode);
+}
+
+function immutableProperty(value: unknown, enumerable: boolean): PropertyDescriptor {
+  return { value, enumerable, writable: false, configurable: false };
 }
 
 function applicationErrorMessage(

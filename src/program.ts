@@ -1,8 +1,8 @@
 import { Command, InvalidArgumentError } from "commander";
 import pc from "picocolors";
 import {
+  canonicalizePlanloftApplicationError,
   createPlanloftApplication,
-  PlanloftApplicationError,
   type ConfigResult,
   type CopyResult,
   type DeployResult,
@@ -49,10 +49,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       const output = present(await operation());
       if (output) writeOut(output);
     } catch (error) {
-      const failure =
-        error instanceof PlanloftApplicationError
-          ? error
-          : new PlanloftApplicationError("internal", operationName);
+      const failure = canonicalizePlanloftApplicationError(error, operationName);
       writeErr(`${pc.red(operationLabel(failure.operation) + " failed: ")}${failure.message}\n`);
       setExitCode(1);
     }
@@ -90,8 +87,11 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--noindex", "include noindex/nofollow metadata")
     .action(async (input, parsed) => {
-      const flags = await sourceOptions(input, parsed);
-      await run("render", () => application.render(input, flags), presentRender);
+      await run(
+        "render",
+        async () => application.render(input, await sourceOptions(input, parsed)),
+        presentRender,
+      );
     });
 
   withKnowledge(program.command("hoist <input>"), "hoist")
@@ -103,8 +103,11 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--status <status>", "override document status")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .action(async (input, parsed) => {
-      const flags = await sourceOptions(input, parsed);
-      await run("hoist", () => application.hoist(input, flags), presentHoist);
+      await run(
+        "hoist",
+        async () => application.hoist(input, await sourceOptions(input, parsed)),
+        presentHoist,
+      );
     });
 
   withKnowledge(program.command("publish <input>"), "publish")
@@ -118,8 +121,11 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--ttl <days>", "GitHub Pages expiry in days", positiveInteger)
     .option("--comments", "enable giscus review comments")
     .action(async (input, parsed) => {
-      const flags = await sourceOptions(input, parsed);
-      await run("publish", () => application.publish(input, flags), presentPublish);
+      await run(
+        "publish",
+        async () => application.publish(input, await sourceOptions(input, parsed)),
+        presentPublish,
+      );
     });
 
   withKnowledge(program.command("resolve"), "resolve")

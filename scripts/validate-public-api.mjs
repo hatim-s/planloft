@@ -138,7 +138,81 @@ function validatePackedReadmeNodeExample() {
       output.startsWith(`${planloftHome}${path.sep}`),
       `resolved path escaped the isolated Planloft home: ${output}`,
     );
+
+    validatePackedErrorBoundary(callerRoot);
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
+}
+
+function validatePackedErrorBoundary(callerRoot) {
+  const attackFile = path.join(callerRoot, "packed-error-boundary.mjs");
+  fs.writeFileSync(attackFile, String.raw`
+import assert from "node:assert/strict";
+import { PlanloftApplicationError, createPlanloftApplication } from "planloft";
+
+const sentinel = "SECRET_packed-error-boundary";
+const details = new Proxy({}, {
+  getOwnPropertyDescriptor() { throw new Error(sentinel); },
+});
+const safe = new PlanloftApplicationError("external_effect", "deploy", details);
+assert.equal(Object.isFrozen(safe), true);
+assert.equal(Object.isExtensible(safe), false);
+assert.throws(() => Object.assign(safe, { message: sentinel, extra: sentinel }));
+
+class Poisoned extends PlanloftApplicationError {
+  toJSON() { return { leaked: sentinel }; }
+}
+const subclassed = new Poisoned("external_effect", "deploy", { stage: "host" });
+assert.equal(Object.getPrototypeOf(subclassed), PlanloftApplicationError.prototype);
+
+const forged = Object.create(PlanloftApplicationError.prototype);
+Object.defineProperties(forged, {
+  name: { value: "PlanloftApplicationError" },
+  category: { value: "external_effect", enumerable: true },
+  operation: { value: "render", enumerable: true },
+  stage: { value: "host", enumerable: true },
+  diagnosticCode: { value: undefined, enumerable: true },
+  field: { value: undefined, enumerable: true },
+  message: { value: sentinel },
+  stack: { value: sentinel },
+  extra: { value: sentinel, enumerable: true },
+  toJSON: { value: () => ({ leaked: sentinel }) },
+});
+const fail = () => { throw forged; };
+const application = createPlanloftApplication({
+  fileSystem: {
+    readText: fail,
+    readBytes: fail,
+    writeText: fail,
+    writeBytes: fail,
+    exists: fail,
+    makeDirectory: fail,
+    removeFile: fail,
+  },
+});
+let caught;
+try { await application.render("attack.md"); } catch (error) { caught = error; }
+assert.ok(caught instanceof PlanloftApplicationError);
+assert.notEqual(caught, forged);
+assert.equal(caught.category, "external_effect");
+assert.equal(caught.operation, "render");
+for (const surface of [
+  caught.message,
+  String(caught),
+  caught.stack,
+  JSON.stringify(caught),
+  JSON.stringify(Object.keys(caught)),
+  JSON.stringify(Object.getOwnPropertyDescriptors(caught)),
+  String(subclassed),
+  JSON.stringify(subclassed),
+]) assert.doesNotMatch(surface, new RegExp(sentinel));
+assert.equal(Object.prototype.hasOwnProperty.call(caught, "cause"), false);
+console.log("packed public error boundary: ok");
+`);
+  const output = execFileSync(process.execPath, [attackFile], {
+    cwd: callerRoot,
+    encoding: "utf8",
+  }).trim();
+  assert.equal(output, "packed public error boundary: ok");
 }

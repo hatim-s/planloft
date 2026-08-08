@@ -65,8 +65,7 @@ export class PublicationEffectError extends Error {
     readonly stage: PublicationEffectStage,
     error: unknown,
   ) {
-    const message = error instanceof Error ? error.message : String(error);
-    super(message, { ...(error instanceof Error ? { cause: error } : {}) });
+    super(safePublicationMessage(error) ?? "Publication effect failed.");
     this.name = "PublicationEffectError";
   }
 }
@@ -215,9 +214,52 @@ function publicationEffectError(
   stage: PublicationEffectStage,
   error: unknown,
 ): PublicationEffectError {
-  return error instanceof PublicationEffectError
-    ? error
-    : new PublicationEffectError(category, stage, error);
+  const preserved = inspectPublicationEffect(error);
+  if (preserved) {
+    return new PublicationEffectError(preserved.category, preserved.stage, error);
+  }
+  return new PublicationEffectError(category, stage, error);
+}
+
+function inspectPublicationEffect(error: unknown): {
+  category: PublicationEffectCategory;
+  stage: PublicationEffectStage;
+} | undefined {
+  const inspected = inspectOwnData(error, ["name", "category", "stage"] as const);
+  if (!inspected || inspected.name !== "PublicationEffectError") return undefined;
+  const category = inspected.category === "local_effect" || inspected.category === "external_effect"
+    ? inspected.category
+    : undefined;
+  const stage = inspected.stage === "render" || inspected.stage === "authentication" ||
+      inspected.stage === "host" || inspected.stage === "cleanup"
+    ? inspected.stage
+    : undefined;
+  return category && stage ? { category, stage } : undefined;
+}
+
+function safePublicationMessage(error: unknown): string | undefined {
+  const inspected = inspectOwnData(error, ["message"] as const);
+  if (!inspected || typeof inspected.message !== "string") return undefined;
+  return inspected.message;
+}
+
+function inspectOwnData<const K extends readonly string[]>(
+  value: unknown,
+  properties: K,
+): Record<K[number], unknown> | undefined {
+  const values = Object.create(null) as Record<K[number], unknown>;
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") return values;
+  try {
+    for (const property of properties) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor)) return undefined;
+      values[property as K[number]] = descriptor.value;
+    }
+    return values;
+  } catch {
+    return undefined;
+  }
 }
 
 function externalPublicationValue<T>(
