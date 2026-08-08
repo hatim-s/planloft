@@ -36,6 +36,8 @@ try {
   const node = process.execPath;
   const nodeWrapper = path.join(runnerBin, "node");
   fs.writeFileSync(nodeWrapper, `#!/bin/sh\nexec "${node}" "$@"\n`, { mode: 0o755 });
+  const competingGlobal = path.join(runnerBin, "planloft");
+  fs.writeFileSync(competingGlobal, "#!/bin/sh\nprintf '%s\\n' 'competing global planloft'\n", { mode: 0o755 });
   const planloftHome = path.join(root, "planloft-home");
   const env = {
     ...process.env,
@@ -46,15 +48,27 @@ try {
     PATH: `${runnerBin}:/usr/bin:/bin`,
   };
 
+  const globalProbe = spawnSync("planloft", [], { cwd: root, env, encoding: "utf8" });
+  assert.equal(globalProbe.status, 0, globalProbe.stderr);
+  assert.equal(globalProbe.stdout.trim(), "competing global planloft");
+
   const version = spawnSync(bridge, ["--version"], { cwd: root, env, encoding: "utf8" });
   assert.equal(version.status, 0, version.stderr);
   assert.equal(version.stdout.trim(), JSON.parse(fs.readFileSync(path.join(pluginRoot, "package.json"), "utf8")).version);
 
-  const resolved = spawnSync(resolver, [], { cwd: root, env, encoding: "utf8" });
-  assert.equal(resolved.status, 0, resolved.stderr);
-  assert.equal(resolved.stdout.trim(), bridge);
+  let resolvedBridge;
+  for (const packagedEnv of [
+    { ...env, PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_ROOT: "" },
+    { ...env, PLUGIN_ROOT: "", CLAUDE_PLUGIN_ROOT: pluginRoot },
+    { ...env, PLUGIN_ROOT: "", CLAUDE_PLUGIN_ROOT: "" },
+  ]) {
+    const resolved = spawnSync(resolver, [], { cwd: root, env: packagedEnv, encoding: "utf8" });
+    assert.equal(resolved.status, 0, resolved.stderr);
+    assert.equal(resolved.stdout.trim(), bridge, "packed bridge must take precedence over a global planloft on PATH");
+    resolvedBridge ??= resolved.stdout.trim();
+  }
 
-  const command = spawnSync(resolved.stdout.trim(), [
+  const command = spawnSync(resolvedBridge, [
     "resolve", "--kind", "plan", "--slug", "packed-plugin", "--title", "Packed plugin",
   ], { cwd: root, env, encoding: "utf8" });
   assert.equal(command.status, 0, command.stderr);
