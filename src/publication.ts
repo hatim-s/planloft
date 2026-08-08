@@ -113,7 +113,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
         : undefined;
       const id = createId();
       const basePath = options.applicationAdapter
-        ? options.applicationAdapter.basePath(id)
+        ? externalPublicationValue("host", () => options.applicationAdapter!.basePath(id))
         : undefined;
       return { id, now, ttlDays, expiresAt, theme, comments, basePath, config };
     },
@@ -218,6 +218,17 @@ function publicationEffectError(
   return error instanceof PublicationEffectError
     ? error
     : new PublicationEffectError(category, stage, error);
+}
+
+function externalPublicationValue<T>(
+  stage: "authentication" | "host",
+  effect: () => T,
+): T {
+  try {
+    return effect();
+  } catch (error) {
+    throw publicationEffectError("external_effect", stage, error);
+  }
 }
 
 async function externalPublicationEffect<T>(

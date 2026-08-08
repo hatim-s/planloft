@@ -550,6 +550,9 @@ function classifyError(
       ? error
       : new PlanloftApplicationError(error.category, operation, error.message, { cause: error });
   }
+  if (error instanceof PublicationEffectError) {
+    return applicationError(error.category, operation, error);
+  }
   if (isConfigError(error)) return applicationError("configuration", operation, error);
   if (isValidationError(error)) return applicationError("validation", operation, error);
   return applicationError("local_effect", operation, error);
