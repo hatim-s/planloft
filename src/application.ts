@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   createPlanloftConfiguration,
-  type ConfigError,
+  type ConfigDiagnosticCode,
   type RedactedConfiguration,
 } from "./configuration.js";
 import { docFile } from "./core/doc.js";
@@ -16,7 +16,6 @@ import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
 import { githubPages, hasGh } from "./hosts/github-pages.js";
 import {
   createDocumentPersistence,
-  DocumentCopyConflictError,
 } from "./persistence.js";
 import {
   createPublicationModule,
@@ -24,10 +23,11 @@ import {
   type ApplicationPublicationAdapterResult,
   type ApplicationPublicationInput,
   type PreparedPublication,
-  PublicationEffectError,
+  type PublicationEffectStage,
   type PublicationOptions,
 } from "./publication.js";
 import { buildSite, renderDocument } from "./render/renderer.js";
+import type { ThemeDiagnosticCode } from "./render/themes.js";
 import {
   readCanonicalDocument,
   type SourceFlags,
@@ -58,6 +58,20 @@ export type ApplicationOperation =
   | "config"
   | "init";
 
+const APPLICATION_OPERATIONS = new Set<ApplicationOperation>([
+  "render",
+  "hoist",
+  "publish",
+  "resolve",
+  "list",
+  "preview",
+  "copy",
+  "deploy",
+  "remove",
+  "config",
+  "init",
+]);
+
 const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
   validation: "PLANLOFT_APPLICATION_VALIDATION",
   not_found: "PLANLOFT_APPLICATION_NOT_FOUND",
@@ -68,20 +82,86 @@ const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
   internal: "PLANLOFT_APPLICATION_INTERNAL",
 };
 
+export type ApplicationErrorStage = PublicationEffectStage;
+
+export type ApplicationDiagnosticCode =
+  | ConfigDiagnosticCode
+  | ThemeDiagnosticCode
+  | "PLANLOFT_DOCUMENT_METADATA_INVALID"
+  | "PLANLOFT_DOCUMENT_INPUT_INVALID"
+  | "PLANLOFT_DOCUMENT_FORMAT_INVALID"
+  | "PLANLOFT_TRUSTED_HTML_REQUIRED"
+  | "PLANLOFT_TTL_INVALID"
+  | "PLANLOFT_EXPIRY_INVALID"
+  | "PLANLOFT_GISCUS_CONFIG_INCOMPLETE"
+  | "PLANLOFT_GITHUB_AUTH_MISSING"
+  | "PLANLOFT_GITHUB_AUTH_INVALID"
+  | "PLANLOFT_GITHUB_AUTH_UNREACHABLE"
+  | "PLANLOFT_DOCUMENT_NOT_FOUND"
+  | "PLANLOFT_COPY_CONFLICT";
+
+export type ApplicationDiagnosticField = "title" | "slug" | "kind" | "theme" | "status";
+
+export interface PlanloftApplicationErrorDetails {
+  stage?: ApplicationErrorStage;
+  diagnosticCode?: ApplicationDiagnosticCode;
+  field?: ApplicationDiagnosticField;
+}
+
 export class PlanloftApplicationError extends Error {
-  readonly code: string;
+  readonly code!: string;
+  readonly category!: ApplicationErrorCategory;
+  readonly operation!: ApplicationOperation;
+  readonly stage?: ApplicationErrorStage;
+  readonly diagnosticCode?: ApplicationDiagnosticCode;
+  readonly field?: ApplicationDiagnosticField;
 
   constructor(
-    readonly category: ApplicationErrorCategory,
-    readonly operation: ApplicationOperation,
-    message: string,
-    options?: ErrorOptions,
+    category: ApplicationErrorCategory,
+    operation: ApplicationOperation,
+    details: PlanloftApplicationErrorDetails = {},
   ) {
-    super(message, options);
-    this.name = "PlanloftApplicationError";
-    this.code = ERROR_CODES[category];
+    const safeCategory = APPLICATION_ERROR_CATEGORIES.includes(category) ? category : "internal";
+    const safeOperation = APPLICATION_OPERATIONS.has(operation) ? operation : "init";
+    const safeDetails = sanitizeErrorDetails(details);
+    const message = applicationErrorMessage(safeCategory, safeOperation, safeDetails);
+    super(message);
+
+    // A public error is a value object, not a carrier for a lower-layer Error. Resetting the
+    // prototype prevents a subclass from inserting a hostile toJSON/toString between this
+    // object and the frozen public prototype. Defining every public field before freezing also
+    // makes construction order explicit for Error's normally mutable message/stack properties.
+    Object.setPrototypeOf(this, PlanloftApplicationError.prototype);
+    Object.defineProperties(this, {
+      name: immutableProperty("PlanloftApplicationError", false),
+      message: immutableProperty(message, false),
+      stack: immutableProperty(`PlanloftApplicationError: ${message}`, false),
+      code: immutableProperty(ERROR_CODES[safeCategory], true),
+      category: immutableProperty(safeCategory, true),
+      operation: immutableProperty(safeOperation, true),
+      stage: immutableProperty(safeDetails.stage, true),
+      diagnosticCode: immutableProperty(safeDetails.diagnosticCode, true),
+      field: immutableProperty(safeDetails.field, true),
+    });
+    Object.freeze(this);
+  }
+
+  toJSON(): Readonly<Record<string, string>> {
+    const output: Record<string, string> = {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      category: this.category,
+      operation: this.operation,
+    };
+    if (this.stage !== undefined) output.stage = this.stage;
+    if (this.diagnosticCode !== undefined) output.diagnosticCode = this.diagnosticCode;
+    if (this.field !== undefined) output.field = this.field;
+    return Object.freeze(output);
   }
 }
+
+Object.freeze(PlanloftApplicationError.prototype);
 
 export interface ApplicationFileSystem {
   readText(file: string): string;
@@ -298,11 +378,7 @@ export function createPlanloftApplication(
     try {
       return await publication.publish(meta, validated);
     } catch (error) {
-      throw applicationError(
-        error instanceof PublicationEffectError ? error.category : "local_effect",
-        "deploy",
-        error,
-      );
+      throw classifyError("deploy", error);
     }
   };
 
@@ -414,7 +490,9 @@ export function createPlanloftApplication(
         const cwd = currentDirectory();
         const { key } = projectKey(cwd);
         const meta = persistence.find(slug);
-        if (!meta) throw applicationError("not_found", "preview", "No matching doc to preview.");
+        if (!meta) throw applicationError("not_found", "preview", {
+          diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
+        });
         const theme = configuration.resolveProject(key, meta.theme).theme;
         const directory = buildSite({ doc: meta, theme, base: "/" });
         const url = `file://${directory}/index.html`;
@@ -429,13 +507,17 @@ export function createPlanloftApplication(
         try {
           copied = persistence.copy(slug, options);
         } catch (error) {
-          if (error instanceof DocumentCopyConflictError) {
-            throw applicationError("conflict", "copy", error);
+          if (isNamedDataError(error, "DocumentCopyConflictError")) {
+            throw applicationError("conflict", "copy", {
+              diagnosticCode: "PLANLOFT_COPY_CONFLICT",
+            });
           }
           throw error;
         }
         if (!copied) {
-          throw applicationError("not_found", "copy", "No matching doc in the store for this project.");
+          throw applicationError("not_found", "copy", {
+            diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
+          });
         }
         return {
           operation: "copy",
@@ -451,7 +533,9 @@ export function createPlanloftApplication(
       run("deploy", async () => {
         const cwd = currentDirectory();
         const meta = persistence.find(slug);
-        if (!meta) throw applicationError("not_found", "deploy", "No matching doc to deploy.");
+        if (!meta) throw applicationError("not_found", "deploy", {
+          diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
+        });
         const deployment = await deployMeta(meta, options);
         return { operation: "deploy", slug: meta.slug, deployment };
       }),
@@ -459,11 +543,16 @@ export function createPlanloftApplication(
     remove: (slug) =>
       run("remove", () => {
         if (typeof slug !== "string" || slug.trim() === "") {
-          throw applicationError("validation", "remove", "Document slug must be a nonblank string.");
+          throw applicationError("validation", "remove", {
+            diagnosticCode: "PLANLOFT_DOCUMENT_METADATA_INVALID",
+            field: "slug",
+          });
         }
         const removed = persistence.remove(slug);
         if (!removed) {
-          throw applicationError("not_found", "remove", `No doc '${slug}' for this project.`);
+          throw applicationError("not_found", "remove", {
+            diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
+          });
         }
         return { operation: "remove", slug, sourceRemoved: removed.sourceRemoved };
       }),
@@ -545,39 +634,310 @@ function classifyError(
   operation: ApplicationOperation,
   error: unknown,
 ): PlanloftApplicationError {
-  if (error instanceof PlanloftApplicationError) {
-    return error.operation === operation
-      ? error
-      : new PlanloftApplicationError(error.category, operation, error.message, { cause: error });
+  const inspected = inspectCaughtValue(error);
+  if (!inspected.safe) return applicationError("local_effect", operation);
+  const candidate = inspected.values;
+
+  if (candidate.name === "PlanloftApplicationError") {
+    const category = validCategory(candidate.category);
+    const incomingOperation = validOperation(candidate.operation);
+    if (category !== undefined && incomingOperation !== undefined) {
+      return applicationError(category, operation, {
+        stage: validStage(candidate.stage),
+        diagnosticCode: validDiagnostic(candidate.diagnosticCode),
+        field: validField(candidate.field),
+      });
+    }
+    return applicationError("local_effect", operation);
   }
-  if (error instanceof PublicationEffectError) {
-    return applicationError(error.category, operation, error);
+  if (candidate.name === "PublicationEffectError") {
+    const category = candidate.category === "external_effect" ? "external_effect" :
+      candidate.category === "local_effect" ? "local_effect" : undefined;
+    const stage = validStage(candidate.stage);
+    if (category !== undefined && stage !== undefined) {
+      return applicationError(category, operation, {
+        stage,
+        diagnosticCode: publicationDiagnostic(candidate.message),
+      });
+    }
+    return applicationError("local_effect", operation);
   }
-  if (isConfigError(error)) return applicationError("configuration", operation, error);
-  if (isValidationError(error)) return applicationError("validation", operation, error);
-  return applicationError("local_effect", operation, error);
+  if (candidate.name === "ConfigError" && validConfigDiagnostic(candidate.code)) {
+    return applicationError("configuration", operation, { diagnosticCode: candidate.code });
+  }
+  if (candidate.name === "ThemeError" && validThemeDiagnostic(candidate.code)) {
+    return applicationError("validation", operation, { diagnosticCode: candidate.code });
+  }
+  const validation = validationDiagnostic(candidate.message);
+  if (validation) return applicationError("validation", operation, validation);
+  return applicationError("local_effect", operation);
+}
+
+/** Rebuild a caught value for the CLI without trusting identity, prototypes, or accessors. */
+export function canonicalizePlanloftApplicationError(
+  error: unknown,
+  operation: ApplicationOperation,
+): PlanloftApplicationError {
+  const inspected = inspectCaughtValue(error);
+  if (!inspected.safe || inspected.values.name !== "PlanloftApplicationError") {
+    return applicationError("internal", operation);
+  }
+  const category = validCategory(inspected.values.category);
+  const incomingOperation = validOperation(inspected.values.operation);
+  if (category === undefined || incomingOperation === undefined) {
+    return applicationError("internal", operation);
+  }
+  return applicationError(category, operation, {
+    stage: validStage(inspected.values.stage),
+    diagnosticCode: validDiagnostic(inspected.values.diagnosticCode),
+    field: validField(inspected.values.field),
+  });
 }
 
 function applicationError(
   category: ApplicationErrorCategory,
   operation: ApplicationOperation,
-  error: unknown,
+  details: PlanloftApplicationErrorDetails = {},
 ): PlanloftApplicationError {
-  const message = typeof error === "string" ? error : error instanceof Error ? error.message : String(error);
-  return new PlanloftApplicationError(category, operation, message, {
-    ...(error instanceof Error ? { cause: error } : {}),
-  });
+  return new PlanloftApplicationError(category, operation, details);
 }
 
-function isConfigError(error: unknown): error is ConfigError {
-  return error instanceof Error && error.name === "ConfigError";
+function publicationDiagnostic(message: unknown): ApplicationDiagnosticCode | undefined {
+  if (typeof message !== "string") return undefined;
+  for (const code of [
+    "PLANLOFT_GITHUB_AUTH_MISSING",
+    "PLANLOFT_GITHUB_AUTH_INVALID",
+    "PLANLOFT_GITHUB_AUTH_UNREACHABLE",
+  ] as const) {
+    if (message.startsWith(`${code}:`)) return code;
+  }
+  return undefined;
 }
 
-function isValidationError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return /(?:must|required|invalid|unsupported|cannot infer|disabled by default|unknown .* field|TTL|expiry|metadata|PLANLOFT_THEME)/i.test(
-    error.message,
+function validationDiagnostic(message: unknown): PlanloftApplicationErrorDetails | undefined {
+  if (typeof message !== "string") return undefined;
+  const metadata = message.match(
+    /^(?:resolve options|Markdown frontmatter|JSON document) metadata "(title|slug|kind|theme|status)" must be a nonblank string when provided\.$/,
   );
+  if (metadata) {
+    return {
+      diagnosticCode: "PLANLOFT_DOCUMENT_METADATA_INVALID",
+      field: metadata[1] as ApplicationDiagnosticField,
+    };
+  }
+  if (message.startsWith("PLANLOFT_GISCUS_CONFIG_INCOMPLETE:")) {
+    return { diagnosticCode: "PLANLOFT_GISCUS_CONFIG_INCOMPLETE" };
+  }
+  if (/^(?:--ttl|TTL|config\.defaultTtlDays) must be /.test(message)) {
+    return { diagnosticCode: "PLANLOFT_TTL_INVALID" };
+  }
+  if (/^(?:--ttl|TTL|config\.defaultTtlDays) does not produce a representable expiry/.test(message)) {
+    return { diagnosticCode: "PLANLOFT_EXPIRY_INVALID" };
+  }
+  if (/^(?:HTML input|JSON HTML content) is disabled by default\./.test(message)) {
+    return { diagnosticCode: "PLANLOFT_TRUSTED_HTML_REQUIRED" };
+  }
+  if (/^(?:Stdin input requires --format|Input format must be|Cannot infer input format from)/.test(message)) {
+    return { diagnosticCode: "PLANLOFT_DOCUMENT_FORMAT_INVALID" };
+  }
+  if (
+    /^(?:Stdin input must be supplied|Invalid JSON document:|A JSON document must be an object|Unknown JSON document field|Unsupported JSON document version:|A JSON document requires a string "content" field|"contentFormat" must be)/.test(
+      message,
+    )
+  ) {
+    return { diagnosticCode: "PLANLOFT_DOCUMENT_INPUT_INVALID" };
+  }
+  return undefined;
+}
+
+const ERROR_STAGES = new Set<ApplicationErrorStage>([
+  "render",
+  "authentication",
+  "host",
+  "cleanup",
+]);
+
+const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
+  "PLANLOFT_CONFIG_MALFORMED",
+  "PLANLOFT_CONFIG_INACCESSIBLE",
+  "PLANLOFT_CONFIG_INVALID",
+  "PLANLOFT_CONFIG_MIGRATION_REQUIRED",
+  "PLANLOFT_THEME_INVALID_NAME",
+  "PLANLOFT_THEME_MISSING",
+  "PLANLOFT_THEME_INACCESSIBLE",
+  "PLANLOFT_THEME_INVALID_ASSET",
+  "PLANLOFT_THEME_INVALID_LAYOUT",
+  "PLANLOFT_DOCUMENT_METADATA_INVALID",
+  "PLANLOFT_DOCUMENT_INPUT_INVALID",
+  "PLANLOFT_DOCUMENT_FORMAT_INVALID",
+  "PLANLOFT_TRUSTED_HTML_REQUIRED",
+  "PLANLOFT_TTL_INVALID",
+  "PLANLOFT_EXPIRY_INVALID",
+  "PLANLOFT_GISCUS_CONFIG_INCOMPLETE",
+  "PLANLOFT_GITHUB_AUTH_MISSING",
+  "PLANLOFT_GITHUB_AUTH_INVALID",
+  "PLANLOFT_GITHUB_AUTH_UNREACHABLE",
+  "PLANLOFT_DOCUMENT_NOT_FOUND",
+  "PLANLOFT_COPY_CONFLICT",
+]);
+
+const DIAGNOSTIC_FIELDS = new Set<ApplicationDiagnosticField>([
+  "title",
+  "slug",
+  "kind",
+  "theme",
+  "status",
+]);
+
+function sanitizeErrorDetails(details: unknown): PlanloftApplicationErrorDetails {
+  const inspected = inspectOwnDataProperties(details, ["stage", "diagnosticCode", "field"]);
+  if (!inspected.safe) return {};
+  const stage = validStage(inspected.values.stage);
+  const diagnosticCode = validDiagnostic(inspected.values.diagnosticCode);
+  const field = validField(inspected.values.field);
+  return {
+    ...(stage === undefined ? {} : { stage }),
+    ...(diagnosticCode === undefined ? {} : { diagnosticCode }),
+    ...(field === undefined ? {} : { field }),
+  };
+}
+
+const CAUGHT_VALUE_PROPERTIES = [
+  "name",
+  "category",
+  "operation",
+  "stage",
+  "diagnosticCode",
+  "field",
+  "code",
+  "message",
+] as const;
+
+type InspectedValues = Record<(typeof CAUGHT_VALUE_PROPERTIES)[number] | "stage" | "diagnosticCode" | "field", unknown>;
+
+function inspectCaughtValue(value: unknown): { safe: true; values: InspectedValues } | { safe: false } {
+  return inspectOwnDataProperties(value, CAUGHT_VALUE_PROPERTIES);
+}
+
+function isNamedDataError(value: unknown, expectedName: string): boolean {
+  const inspected = inspectOwnDataProperties(value, ["name"] as const);
+  return inspected.safe && inspected.values.name === expectedName;
+}
+
+function inspectOwnDataProperties<const K extends readonly string[]>(
+  value: unknown,
+  properties: K,
+): { safe: true; values: Record<K[number], unknown> } | { safe: false } {
+  const values = Object.create(null) as Record<K[number], unknown>;
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return { safe: true, values };
+  }
+  try {
+    for (const property of properties) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, property);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor)) return { safe: false };
+      values[property as K[number]] = descriptor.value;
+    }
+    return { safe: true, values };
+  } catch {
+    return { safe: false };
+  }
+}
+
+function validCategory(value: unknown): ApplicationErrorCategory | undefined {
+  return typeof value === "string" && APPLICATION_ERROR_CATEGORIES.includes(value as ApplicationErrorCategory)
+    ? value as ApplicationErrorCategory
+    : undefined;
+}
+
+function validOperation(value: unknown): ApplicationOperation | undefined {
+  return typeof value === "string" && APPLICATION_OPERATIONS.has(value as ApplicationOperation)
+    ? value as ApplicationOperation
+    : undefined;
+}
+
+function validStage(value: unknown): ApplicationErrorStage | undefined {
+  return typeof value === "string" && ERROR_STAGES.has(value as ApplicationErrorStage)
+    ? value as ApplicationErrorStage
+    : undefined;
+}
+
+function validDiagnostic(value: unknown): ApplicationDiagnosticCode | undefined {
+  return typeof value === "string" && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode)
+    ? value as ApplicationDiagnosticCode
+    : undefined;
+}
+
+function validField(value: unknown): ApplicationDiagnosticField | undefined {
+  return typeof value === "string" && DIAGNOSTIC_FIELDS.has(value as ApplicationDiagnosticField)
+    ? value as ApplicationDiagnosticField
+    : undefined;
+}
+
+function validConfigDiagnostic(value: unknown): value is ConfigDiagnosticCode {
+  return typeof value === "string" && value.startsWith("PLANLOFT_CONFIG_") && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode);
+}
+
+function validThemeDiagnostic(value: unknown): value is ThemeDiagnosticCode {
+  return typeof value === "string" && value.startsWith("PLANLOFT_THEME_") && DIAGNOSTIC_CODES.has(value as ApplicationDiagnosticCode);
+}
+
+function immutableProperty(value: unknown, enumerable: boolean): PropertyDescriptor {
+  return { value, enumerable, writable: false, configurable: false };
+}
+
+function applicationErrorMessage(
+  category: ApplicationErrorCategory,
+  operation: ApplicationOperation,
+  details: PlanloftApplicationErrorDetails,
+): string {
+  const label = operation === "remove"
+    ? "Remove"
+    : operation.charAt(0).toUpperCase() + operation.slice(1);
+  const diagnostic = details.diagnosticCode;
+  const prefix = diagnostic ? `[${diagnostic}] ` : "";
+  const messages: Partial<Record<ApplicationDiagnosticCode, string>> = {
+    PLANLOFT_CONFIG_MALFORMED: "Configuration JSON is malformed. Fix config.json and try again.",
+    PLANLOFT_CONFIG_INACCESSIBLE: "Configuration is inaccessible. Check Planloft home permissions and try again.",
+    PLANLOFT_CONFIG_INVALID: "Configuration is semantically invalid. Check supported fields and values.",
+    PLANLOFT_CONFIG_MIGRATION_REQUIRED: "Configuration uses a removed setting. Remove planFormat from config.json.",
+    PLANLOFT_THEME_INVALID_NAME: "The selected theme name is invalid. Use letters, numbers, dots, underscores, or hyphens.",
+    PLANLOFT_THEME_MISSING: "The selected theme does not exist. Install it or choose an available theme.",
+    PLANLOFT_THEME_INACCESSIBLE: "The selected theme is inaccessible. Check theme permissions and try again.",
+    PLANLOFT_THEME_INVALID_ASSET: "The selected theme contains an invalid asset.",
+    PLANLOFT_THEME_INVALID_LAYOUT: "The selected theme layout is invalid. Check its required slots.",
+    PLANLOFT_DOCUMENT_METADATA_INVALID: details.field
+      ? `Document metadata "${details.field}" must be a nonblank string when provided.`
+      : "Document metadata is invalid.",
+    PLANLOFT_DOCUMENT_INPUT_INVALID: "Document input is invalid. Check its structure and required fields.",
+    PLANLOFT_DOCUMENT_FORMAT_INVALID: "Document format is invalid. Use md, json, or html and specify stdin format explicitly.",
+    PLANLOFT_TRUSTED_HTML_REQUIRED: "HTML input is disabled by default. Enable trusted HTML only for content you trust.",
+    PLANLOFT_TTL_INVALID: "TTL must be a supported finite positive integer.",
+    PLANLOFT_EXPIRY_INVALID: "TTL does not produce a representable expiry from the current time.",
+    PLANLOFT_GISCUS_CONFIG_INCOMPLETE: "Comments require complete valid giscus configuration.",
+    PLANLOFT_GITHUB_AUTH_MISSING: "GitHub authentication is missing. Authenticate with gh or configure a token.",
+    PLANLOFT_GITHUB_AUTH_INVALID: "GitHub rejected the configured credential. Authenticate again and retry.",
+    PLANLOFT_GITHUB_AUTH_UNREACHABLE: "GitHub authentication could not be validated. Check connectivity and retry.",
+    PLANLOFT_DOCUMENT_NOT_FOUND: "No matching stored document was found.",
+    PLANLOFT_COPY_CONFLICT: "Copy would overwrite an existing repository document. Retry with force to replace it.",
+  };
+  if (diagnostic && messages[diagnostic]) return `${prefix}${messages[diagnostic]}`;
+
+  const fallbacks: Record<ApplicationErrorCategory, string> = {
+    validation: `${label} input is invalid. Check command arguments and document metadata.`,
+    not_found: `${label} could not find the requested document.`,
+    conflict: `${label} conflicts with existing state.`,
+    configuration: `${label} could not use Planloft configuration.`,
+    local_effect: details.stage
+      ? `${label} failed during the ${details.stage} stage of a local effect.`
+      : `${label} failed during a local effect.`,
+    external_effect: details.stage
+      ? `${label} failed during the ${details.stage} stage of an external effect.`
+      : `${label} failed during an external effect.`,
+    internal: `${label} failed because of an internal application error.`,
+  };
+  return fallbacks[category];
 }
 
 function capitalize(value: string): string {

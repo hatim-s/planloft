@@ -156,7 +156,7 @@ test("publish computes configured expiry before hoisting source or index files",
   );
   try {
     const application = createPlanloftApplication({ planloftHome: home });
-    await assert.rejects(application.publish(source), /does not produce a representable expiry/);
+    await assert.rejects(application.publish(source), /PLANLOFT_EXPIRY_INVALID/);
     assert.equal(fs.existsSync(path.join(home, "index.json")), false);
     assert.equal(fs.existsSync(path.join(home, "docs")), false);
   } finally {

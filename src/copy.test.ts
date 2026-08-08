@@ -51,7 +51,7 @@ test("copy reports the cwd fallback outside Git and requires force to replace", 
     const first = await application.copy("fallback");
     assert.equal(first.usedCurrentDirectory, true);
     fs.writeFileSync(first.path, "local edit\n");
-    await assert.rejects(application.copy("fallback"), /Refusing to overwrite/);
+    await assert.rejects(application.copy("fallback"), /PLANLOFT_COPY_CONFLICT/);
     assert.equal(fs.readFileSync(first.path, "utf8"), "local edit\n");
     const replaced = await application.copy("fallback", { force: true });
     assert.equal(replaced.replaced, true);

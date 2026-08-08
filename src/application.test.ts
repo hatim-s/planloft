@@ -8,6 +8,7 @@ import {
   PlanloftApplicationError,
   createPlanloftApplication,
 } from "./application.js";
+import { createProgram } from "./program.js";
 import { DEFAULT_CONFIG, saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
 import {
@@ -277,7 +278,9 @@ test("deploy reports a missing indexed source as a local publication effect", as
     await assert.rejects(application.deploy("missing-after-index"), (error: unknown) => {
       assertApplicationError(error, "local_effect", "PLANLOFT_APPLICATION_LOCAL_EFFECT");
       assert.equal(error.operation, "deploy");
-      assert.match(error.message, /ENOENT/);
+      assert.equal(error.stage, "render");
+      assert.equal(error.message, "Deploy failed during the render stage of a local effect.");
+      assert.equal(error.cause, undefined);
       return true;
     });
     assert.equal(hostCalls, 0);
@@ -310,7 +313,9 @@ test("deploy reports an adapter failure as an external publication effect", asyn
     await assert.rejects(application.deploy("host-failure"), (error: unknown) => {
       assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
       assert.equal(error.operation, "deploy");
-      assert.match(error.message, /simulated host mutation failure/);
+      assert.equal(error.stage, "host");
+      assert.equal(error.message, "Deploy failed during the host stage of an external effect.");
+      assert.equal(error.cause, undefined);
       return true;
     });
   } finally {
@@ -351,8 +356,9 @@ test("publish reports a base-path provider failure before config, store, render,
     await assert.rejects(application.publish(source), (error: unknown) => {
       assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
       assert.equal(error.operation, "publish");
-      assert.match(error.message, /simulated base-path provider failure/);
-      assertPublicationEffect(error.cause, "external_effect", "host");
+      assert.equal(error.stage, "host");
+      assert.equal(error.message, "Publish failed during the host stage of an external effect.");
+      assert.equal(error.cause, undefined);
       return true;
     });
     assert.equal(basePathCalls, 1);
@@ -402,8 +408,9 @@ test("deploy reports a base-path provider failure without mutating the store or 
     await assert.rejects(application.deploy("indexed-base-path-failure"), (error: unknown) => {
       assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
       assert.equal(error.operation, "deploy");
-      assert.match(error.message, /simulated indexed base-path provider failure/);
-      assertPublicationEffect(error.cause, "external_effect", "host");
+      assert.equal(error.stage, "host");
+      assert.equal(error.message, "Deploy failed during the host stage of an external effect.");
+      assert.equal(error.cause, undefined);
       return true;
     });
     assert.equal(basePathCalls, 1);
@@ -474,6 +481,147 @@ test("application error categories are a stable exhaustive vocabulary", () => {
   ]);
 });
 
+test("public application and CLI error boundaries never expose adapter secrets or raw causes", async () => {
+  const sentinel = "SECRET_TOKEN_auth-bearer_path-user-private";
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-secret-boundary-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "secret-boundary.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Secret boundary\n");
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "secret-boundary-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        throw new Error(`Authorization: Bearer ${sentinel}; https://token@host.invalid/private`);
+      },
+    },
+  });
+
+  try {
+    await application.hoist(source);
+    await assert.rejects(application.deploy("secret-boundary"), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.stage, "host");
+      assertSecretFreeError(error, sentinel);
+      return true;
+    });
+
+    let stderr = "";
+    let exitCode: number | undefined;
+    const program = createProgram({
+      application,
+      writeOut: () => undefined,
+      writeErr: (value) => (stderr += value),
+      setExitCode: (value) => (exitCode = value),
+    });
+    await program.parseAsync(["node", "planloft", "deploy", "secret-boundary"]);
+    assert.equal(exitCode, 1);
+    assert.match(stderr, /Deploy failed: Deploy failed during the host stage of an external effect\./);
+    assert.doesNotMatch(stderr, new RegExp(escapeRegExp(sentinel)));
+
+    stderr = "";
+    exitCode = undefined;
+    const unexpectedProgram = createProgram({
+      application: {
+        ...application,
+        deploy: async () => {
+          throw new Error(`unexpected CLI adapter failure ${sentinel}`);
+        },
+      },
+      writeOut: () => undefined,
+      writeErr: (value) => (stderr += value),
+      setExitCode: (value) => (exitCode = value),
+    });
+    await unexpectedProgram.parseAsync(["node", "planloft", "deploy", "secret-boundary"]);
+    assert.equal(exitCode, 1);
+    assert.match(stderr, /Deploy failed: Deploy failed because of an internal application error\./);
+    assert.doesNotMatch(stderr, new RegExp(escapeRegExp(sentinel)));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("authentication and local filesystem diagnostics preserve safe typing without token or path text", async () => {
+  const sentinel = "SECRET_auth-token_private-path";
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-safe-diagnostics-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "auth.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Auth\n");
+  const authApplication = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "auth-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        throw new PublicationEffectError(
+          "external_effect",
+          "authentication",
+          new Error(`PLANLOFT_GITHUB_AUTH_INVALID: rejected token ${sentinel}`),
+        );
+      },
+    },
+  });
+
+  try {
+    await authApplication.hoist(source);
+    await assert.rejects(authApplication.deploy("auth"), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.stage, "authentication");
+      assert.equal(error.diagnosticCode, "PLANLOFT_GITHUB_AUTH_INVALID");
+      assert.match(error.message, /GitHub rejected the configured credential/);
+      assertSecretFreeError(error, sentinel);
+      return true;
+    });
+
+    const sensitiveFile = path.join(cwd, `${sentinel}.md`);
+    await assert.rejects(authApplication.render(sensitiveFile), (error: unknown) => {
+      assertApplicationError(error, "local_effect", "PLANLOFT_APPLICATION_LOCAL_EFFECT");
+      assert.equal(error.message, "Render failed during a local effect.");
+      assertSecretFreeError(error, sentinel);
+      return true;
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("public error constructor ignores non-allowlisted diagnostic metadata", () => {
+  const sentinel = "SECRET_arbitrary-public-error";
+  const error = new PlanloftApplicationError(
+    "external_effect",
+    "deploy",
+    {
+      stage: sentinel,
+      diagnosticCode: sentinel,
+      field: sentinel,
+      cause: new Error(sentinel),
+      message: sentinel,
+      token: sentinel,
+      url: `https://${sentinel}@example.test`,
+    } as unknown as never,
+  );
+  assert.equal(error.stage, undefined);
+  assert.equal(error.diagnosticCode, undefined);
+  assert.equal(error.field, undefined);
+  assertSecretFreeError(error, sentinel);
+
+  const invalidVocabulary = new PlanloftApplicationError(
+    sentinel as never,
+    sentinel as never,
+    null as never,
+  );
+  assert.equal(invalidVocabulary.category, "internal");
+  assert.equal(invalidVocabulary.operation, "init");
+  assertSecretFreeError(invalidVocabulary, sentinel);
+});
+
 function assertApplicationError(
   error: unknown,
   category: PlanloftApplicationError["category"],
@@ -484,14 +632,21 @@ function assertApplicationError(
   assert.equal(error.code, code);
 }
 
-function assertPublicationEffect(
-  error: unknown,
-  category: PublicationEffectError["category"],
-  stage: PublicationEffectError["stage"],
-): asserts error is PublicationEffectError {
-  assert.ok(error instanceof PublicationEffectError);
-  assert.equal(error.category, category);
-  assert.equal(error.stage, stage);
+function assertSecretFreeError(error: PlanloftApplicationError, sentinel: string): void {
+  assert.equal(error.cause, undefined);
+  assert.equal(Object.prototype.hasOwnProperty.call(error, "cause"), false);
+  const ownProperties = Object.fromEntries(
+    Object.getOwnPropertyNames(error).map((name) => [name, (error as unknown as Record<string, unknown>)[name]]),
+  );
+  for (const value of [
+    error.message,
+    error.stack ?? "",
+    String(error),
+    JSON.stringify(error),
+    JSON.stringify(ownProperties),
+  ]) {
+    assert.doesNotMatch(value, new RegExp(escapeRegExp(sentinel)));
+  }
 }
 
 function snapshotDirectory(root: string): Record<string, string> {
