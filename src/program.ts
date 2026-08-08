@@ -57,6 +57,15 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       setExitCode(1);
     }
   };
+  const runHook = async (event: HookEvent): Promise<void> => {
+    try {
+      const output = presentHook(executeHook(event));
+      if (output) writeOut(output);
+    } catch (error) {
+      writeErr(`${pc.red("Hook failed: ")}${errorMessage(error)}\n`);
+      setExitCode(1);
+    }
+  };
 
   const sourceOptions = async (input: string, parsed: SourceFlags): Promise<SourceFlags> => ({
     ...parsed,
@@ -162,7 +171,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     } catch {
       return;
     }
-    await run("hook", () => Promise.resolve(executeHook(event)), presentHook);
+    await runHook(event);
   });
 
   return program;

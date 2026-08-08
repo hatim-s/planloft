@@ -48,8 +48,7 @@ export type ApplicationOperation =
   | "deploy"
   | "remove"
   | "config"
-  | "init"
-  | "hook";
+  | "init";
 
 const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
   validation: "PLANLOFT_APPLICATION_VALIDATION",
@@ -287,8 +286,12 @@ export function createPlanloftApplication(
   const makeId = dependencies.id ?? shortId;
   const host = getAdapter("github")!;
   const environment = dependencies.environment ?? process.env;
-  const currentDirectory = () =>
-    path.resolve(typeof dependencies.cwd === "function" ? dependencies.cwd() : dependencies.cwd ?? process.cwd());
+  const applicationCwd = path.resolve(
+    typeof dependencies.cwd === "function"
+      ? dependencies.cwd()
+      : dependencies.cwd ?? process.cwd(),
+  );
+  const currentDirectory = () => applicationCwd;
 
   const run = <T>(operation: ApplicationOperation, effect: () => Promise<T> | T): Promise<T> =>
     withPlanloftHome(dependencies.planloftHome, async () => {
@@ -345,23 +348,31 @@ export function createPlanloftApplication(
   return {
     render: (input, options = {}) =>
       run("render", async () => {
-        const doc = await readCanonicalDocument(input, options, sourceReader);
         const cwd = currentDirectory();
+        const doc = await readCanonicalDocument(
+          resolveSourceInput(input, cwd),
+          options,
+          sourceReader,
+        );
         const { key } = projectKey(cwd);
         const theme = doc.theme ?? resolveTheme(loadConfig(), key);
         const html = renderDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
-        const destination = outputFile(options.out);
+        const destination = outputFile(path.resolve(cwd, options.out));
         fileSystem.makeDirectory(path.dirname(destination));
         fileSystem.writeText(destination, html);
-        return { operation: "render", output: "file", path: path.resolve(destination) };
+        return { operation: "render", output: "file", path: destination };
       }),
 
     hoist: (input, options = {}) =>
       run("hoist", async () => {
-        const doc = await readCanonicalDocument(input, options, sourceReader);
         const cwd = currentDirectory();
+        const doc = await readCanonicalDocument(
+          resolveSourceInput(input, cwd),
+          options,
+          sourceReader,
+        );
         const key = projectKey(cwd).key;
         resolveTheme(loadConfig(), key, doc.theme);
         const meta = hoistDocument(doc, { cwd, now: clock() });
@@ -371,8 +382,12 @@ export function createPlanloftApplication(
     publish: (input, options = {}) =>
       run("publish", async () => {
         // Parse and validate every locally knowable input before the first store write.
-        const doc = await readCanonicalDocument(input, options, sourceReader);
         const cwd = currentDirectory();
+        const doc = await readCanonicalDocument(
+          resolveSourceInput(input, cwd),
+          options,
+          sourceReader,
+        );
         const { key } = projectKey(cwd);
         const cfg = loadConfig();
         const theme = resolveTheme(cfg, key, doc.theme);
@@ -575,6 +590,10 @@ function publicDocument(meta: DocMeta, includeFile: boolean): DocumentSummary & 
 
 function outputFile(output: string): string {
   return path.extname(output).toLowerCase() === ".html" ? output : path.join(output, "index.html");
+}
+
+function resolveSourceInput(input: string, cwd: string): string {
+  return input === "-" ? input : path.resolve(cwd, input);
 }
 
 function openUrl(url: string): boolean {

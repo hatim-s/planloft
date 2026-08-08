@@ -42,8 +42,8 @@ async, including operations whose current implementation is synchronous. This gi
 callers one error model and permits later adapters to become asynchronous without a
 second breaking transition.
 
-The hidden hook protocol also crosses this seam but is not part of command knowledge or
-the public `PlanloftApplication` command vocabulary.
+The hidden hook protocol remains a private CLI adapter concern and is not part of the
+application seam, command knowledge, or public `PlanloftApplication` vocabulary.
 
 ### H2 — The CLI is an adapter
 
@@ -53,8 +53,8 @@ that layer must not use `console.*`, set `process.exitCode`, parse argv, or manu
 terminal-formatted output.
 
 Application operations return discriminated structured results. HTML destined for
-stdout is data in a render result; hook JSON is protocol data in a hook result. Their
-serialization remains the CLI adapter's responsibility.
+stdout is data in a render result. Hidden hook JSON is produced and serialized entirely
+inside the CLI adapter.
 
 ### H3 — Stable error taxonomy
 
@@ -102,7 +102,8 @@ stored GitHub token with `[redacted]`.
 The factory accepts only dependencies needed by current callers and deterministic
 tests:
 
-- `cwd` for project identity and repository-relative operations.
+- `cwd`, captured when the application is created, for project identity and for resolving
+  repository-relative source and output paths.
 - `planloftHome`, scoped with async-local state so concurrent Node operations do not
   mutate `process.env`.
 - `clock` for persistence timestamps, expiry checks, deploy manifests, and hook markers.

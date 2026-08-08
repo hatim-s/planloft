@@ -93,6 +93,53 @@ test("application publication is host-injectable and returns a secret-free resul
   }
 });
 
+test("application captures injected cwd and resolves relative render, hoist, and publish paths", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-relative-paths-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const otherCwd = path.join(root, "other");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.mkdirSync(otherCwd, { recursive: true });
+  fs.writeFileSync(path.join(cwd, "render.md"), "# Relative render\n");
+  fs.writeFileSync(path.join(cwd, "hoist.md"), "# Relative hoist\n");
+  fs.writeFileSync(path.join(cwd, "publish.md"), "# Relative publish\n");
+
+  let injectedCwd = cwd;
+  const application = createPlanloftApplication({
+    cwd: () => injectedCwd,
+    planloftHome: home,
+    id: () => "relative-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => ({
+        url: "https://example.test/relative",
+        expiresAt: "2032-01-08T00:00:00.000Z",
+      }),
+    },
+  });
+  injectedCwd = otherCwd;
+
+  try {
+    const rendered = await application.render("render.md", { out: "rendered" });
+    assert.deepEqual(rendered, {
+      operation: "render",
+      output: "file",
+      path: path.join(cwd, "rendered", "index.html"),
+    });
+    assert.equal(fs.existsSync(path.join(cwd, "rendered", "index.html")), true);
+    assert.equal(fs.existsSync(path.join(otherCwd, "rendered", "index.html")), false);
+
+    const hoisted = await application.hoist("hoist.md");
+    assert.equal(hoisted.document.slug, "relative-hoist");
+
+    const published = await application.publish("publish.md");
+    assert.equal(published.document.slug, "relative-publish");
+    assert.equal(published.deployment.url, "https://example.test/relative");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("application uses stable not-found and conflict error categories before copy writes", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-errors-test-"));
   const home = path.join(root, "home");

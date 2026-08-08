@@ -28,15 +28,16 @@ export function executeHook(event: HookEvent, clock: () => Date = () => new Date
   const toolName = event.tool_name;
   if (toolName === "Write") {
     const file = extractFilePath(event.tool_input);
-    if (file?.startsWith(docsDir())) {
+    const storedFile = file === undefined ? undefined : path.resolve(event.cwd ?? process.cwd(), file);
+    if (storedFile && isInsideDirectory(storedFile, docsDir())) {
       const { key, label } = projectKey(event.cwd);
       try {
-        normalizeDocFile(file, key, label);
+        normalizeDocFile(storedFile, key, label);
       } catch {
         // A hook normalization failure must never break the user's write.
       }
+      return {};
     }
-    return {};
   }
 
   if (toolName === "ExitPlanMode") return { output: postToolUseOutput(planModeNudge()) };
@@ -68,6 +69,16 @@ function extractFilePath(input: unknown): string | undefined {
   const record = input as Record<string, unknown>;
   const file = record.file_path ?? record.filePath;
   return typeof file === "string" ? file : undefined;
+}
+
+function isInsideDirectory(file: string, directory: string): boolean {
+  const relative = path.relative(path.resolve(directory), file);
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
 }
 
 function postToolUseOutput(additionalContext: string): HookProtocolOutput {

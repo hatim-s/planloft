@@ -58,7 +58,17 @@ for (const required of [
 ]) {
   assert.match(declarations, new RegExp(required));
 }
-for (const privateType of ["CliAdapterOptions", "HookEvent", "HookResult", "Commander"]) {
+for (const privateType of [
+  "CliAdapterOptions",
+  "HookEvent",
+  "HookResult",
+  "HookProtocolOutput",
+  "PostToolUse",
+  "hookSpecificOutput",
+  "__hook",
+  '"hook"',
+  "Commander",
+]) {
   assert.doesNotMatch(declarations, new RegExp(privateType));
 }
 
