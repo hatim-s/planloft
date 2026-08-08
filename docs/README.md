@@ -36,6 +36,10 @@ implementation rationale. It can mention future hosts or internal seams that sho
 appear in install docs, plugin descriptions, skill instructions, or CLI
 help until they are actually supported.
 
+Maintainers preparing a release must follow the [operator release
+runbook](./releasing.md). It pins one candidate to one `origin/main` commit, verifies
+the published registry bytes before tagging, and records the release evidence.
+
 ### Local or generated surface
 
 These are not committed as source:
