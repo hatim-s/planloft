@@ -122,3 +122,103 @@ test("release runbook pins one candidate from origin/main through publish, diges
     "registry integrity must be verified before the release tag is created",
   );
 });
+
+test("release runbook documents operator gates, recovery, evidence, and safe ordering", () => {
+  const guide = read("docs/releasing.md");
+  const docsReadme = read("docs/README.md");
+
+  for (const heading of [
+    "## Release-state overview",
+    "## Prerequisites and operating assumptions",
+    "## 1. Pin a clean release checkout",
+    "## 2. Verify tools, npm identity, and version availability",
+    "## 3. Run deterministic release gates",
+    "## 4. Create and inspect the one candidate tarball",
+    "## 5. Revalidate immediately before publication",
+    "### Decision checkpoint: publish to npm",
+    "## 6. Verify registry bytes before tagging",
+    "### Decision checkpoint: create and push the tag",
+    "## 7. Validate released installation surfaces",
+    "## 8. Record evidence and clean up",
+    "## Failure and recovery guide",
+  ]) {
+    assert.ok(guide.includes(heading), `release runbook is missing heading: ${heading}`);
+  }
+
+  for (const boundary of [
+    "all shell blocks from checkout creation through cleanup in the same shell",
+    "npm publication is irreversible",
+    "must not be created or pushed before both registry digests equal",
+    "public tag must never be force-moved",
+    "**Expected:**",
+    "**Stop if:**",
+  ]) {
+    assert.ok(guide.includes(boundary), `release runbook is missing safety boundary: ${boundary}`);
+  }
+  assert.match(guide, /cannot\s+be overwritten, replaced, or reused/);
+  assert.ok((guide.match(/\*\*Expected(?: patterns)?:\*\*/g) ?? []).length >= 8);
+  assert.ok((guide.match(/\*\*Stop if:\*\*/g) ?? []).length >= 8);
+
+  for (const expected of [
+    "105 source tests and 7 script tests",
+    "all 96 contract combinations passing",
+    "all 6 pairwise lifecycle cases passing",
+    'test "$PACK_ENTRY_COUNT" = "29"',
+    'test "$SKILL_ENTRY_COUNT" = "1"',
+    "*E404*)",
+    "E401",
+    'test "$REMOTE_TAG_COMMIT" = "$RELEASE_COMMIT"',
+  ]) {
+    assert.ok(guide.includes(expected), `release expected-output contract is missing: ${expected}`);
+  }
+
+  for (const evidence of [
+    "RELEASE_COMMIT: <40-character commit>",
+    "Candidate filename: planloft-0.1.0.tgz",
+    "Candidate shasum: <CANDIDATE_SHASUM>",
+    "Candidate integrity: <CANDIDATE_INTEGRITY>",
+    "Registry shasum: <PUBLISHED_SHASUM>",
+    "Registry integrity: <PUBLISHED_INTEGRITY>",
+    "Remote tag object: <REMOTE_TAG_OBJECT>",
+    "Remote tag dereferenced commit: <REMOTE_TAG_COMMIT, equal to RELEASE_COMMIT>",
+    "Published at: <ISO-8601 timestamp>",
+    "Operator: <name or handle>",
+  ]) {
+    assert.ok(guide.includes(evidence), `release evidence template is missing: ${evidence}`);
+  }
+
+  for (const recovery of [
+    "npm authentication, 2FA, or ownership failure",
+    "`planloft@0.1.0` already exists",
+    "`v0.1.0` already exists",
+    "`origin/main` advances before publication",
+    "Publish result is ambiguous because the connection failed",
+    "Publish reports success but registry metadata is delayed",
+    "Published registry digest differs from candidate",
+    "Tag creation or push fails",
+    "Source-all installer or host visibility fails",
+  ]) {
+    assert.ok(guide.includes(recovery), `release recovery table is missing: ${recovery}`);
+  }
+
+  const order = [
+    "pnpm test",
+    'PACK_JSON="$(npm pack --json --ignore-scripts --pack-destination "$RELEASE_ARTIFACTS")"',
+    'npm publish --dry-run "$CANDIDATE_PATH"',
+    "### Decision checkpoint: publish to npm",
+    'npm publish --access public "$CANDIDATE_PATH"',
+    'test "$PUBLISHED_INTEGRITY" = "$CANDIDATE_INTEGRITY"',
+    "### Decision checkpoint: create and push the tag",
+    `git tag -a ${EXPECTED_RELEASE_TAG} "$RELEASE_COMMIT"`,
+    `PLANLOFT_RELEASE_TAG=${EXPECTED_RELEASE_TAG} pnpm test:installer:release`,
+    'git worktree remove "$RELEASE_CHECKOUT"',
+  ];
+  for (let index = 1; index < order.length; index += 1) {
+    assert.ok(
+      guide.indexOf(order[index - 1]!) < guide.indexOf(order[index]!),
+      `release operation is out of order: ${order[index - 1]} before ${order[index]}`,
+    );
+  }
+
+  assert.ok(docsReadme.includes("[operator release\nrunbook](./releasing.md)"));
+});
