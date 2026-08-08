@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/dist/cli.js\" __hook",
+            "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/bin/planloft\" __hook",
             "statusMessage": "Checking planloft capture"
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/dist/cli.js\" __hook",
+            "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/bin/planloft\" __hook",
             "statusMessage": "Checking planloft plan capture"
           }
         ]

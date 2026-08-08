@@ -11,7 +11,7 @@ These files are read by users installing or running planloft:
 
 - `README.md`
 - `package.json` metadata
-- `.claude-plugin/` and `.codex-plugin/`
+- `.claude-plugin/`, `.codex-plugin/`, and `.agents/plugins/` marketplace metadata
 - `skills/`
 - `hooks/`
 - `themes/`
@@ -29,6 +29,7 @@ These files are public repo docs for maintainers and contributors:
 - `docs/adr/`
 - `CONTEXT.md`
 - future planning, architecture, release, or investigation notes under `docs/`
+- `scripts/installer-matrix.mjs` and its contract tests
 
 This segment can record decision history, rejected options, deferred work, and
 implementation rationale. It can mention future hosts or internal seams that should not
@@ -58,3 +59,36 @@ npm pack --dry-run
 
 If a development doc appears in the package preview, remove it from the publishable
 segment rather than diluting consumer-facing docs with internal caveats.
+
+## Installation verification
+
+The external skill installer is pinned in the verification harness so upstream changes
+are reviewed deliberately:
+
+```bash
+pnpm test:installer       # 96-case contract enumeration, no network or global writes
+pnpm test:installer:live  # six pairwise lifecycle cases against this checkout
+
+# Run only after publishing the npm version and matching repository tag:
+PLANLOFT_RELEASE_TAG=v0.0.1 pnpm test:installer:release
+```
+
+Every live case creates and removes its own temporary project, `HOME`, Planloft home,
+and npm/pnpm/Bun caches. It installs and inspects only the case's named agent. With one
+target, `skills@1.5.22` normalizes the default mode and explicit `--copy` to a direct
+copy at that agent's exact discovery path. The lifecycle is add, list, update, remove,
+assert every canonical/agent path is absent, and reinstall; hook/config state must stay
+untouched throughout skill-only installation.
+
+After building and packing, execute the extracted full-plugin bridge rather than merely
+inspecting tar entries:
+
+```bash
+node scripts/validate-packed-plugin.mjs /path/to/planloft-0.0.1.tgz
+```
+
+The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It compares the
+installed tagged skill byte-for-byte with the tag's raw `SKILL.md`; it does not infer a
+skill pin from the npm version. After the suite passes, start fresh Codex and Claude
+sessions and confirm `write-plan` is visible. Agent discovery has no stable noninteractive
+cross-host command, so that reload check remains a manual release assertion.

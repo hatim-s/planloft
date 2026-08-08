@@ -12,13 +12,28 @@ description: >-
 
 Persist the substantial plan directly. Keep it reviewable without conversation history.
 
+## Check the prerequisite
+
+Run the bundled `scripts/resolve-planloft-command.sh` from this skill directory before
+resolving and capture the executable path it prints. A skill-only install requires a
+separately installed Planloft CLI. A full-plugin install instead resolves the packaged
+`bin/planloft` bridge without adding a global executable to `PATH`.
+
+```sh
+PLANLOFT_COMMAND="$(./scripts/resolve-planloft-command.sh)"
+```
+
+If the resolver exits non-zero, stop and relay its actionable installation message.
+Skill-only installation does not install the executable, hooks, themes, runtime assets,
+or plugin metadata.
+
 ## Resolve the target
 
 Derive a short kebab-case slug and a human title. Run this exact command with real
 values:
 
 ```!
-planloft resolve --kind plan --slug "<slug>" --title "<title>"
+"$PLANLOFT_COMMAND" resolve --kind plan --slug "<slug>" --title "<title>"
 ```
 
 Use the returned path. Never guess or synthesize a store path. If the command fails,
@@ -49,14 +64,15 @@ only when it preserves both appearances.
 ## Discover other operations
 
 <!-- planloft:command-knowledge:start -->
-Run `planloft help` to discover all operations.
+Run `"$PLANLOFT_COMMAND" help` to discover all operations.
 
 Common next actions:
-- `planloft render <input>` produces HTML without storing or publishing.
-- `planloft preview [slug]` opens a stored plan locally.
-- `planloft copy [slug]` copies raw source into the repository.
-- `planloft deploy [slug]` explicitly publishes a stored plan.
-- `planloft hoist <input>` stores another Markdown, JSON, or trusted HTML document.
+- `"$PLANLOFT_COMMAND" render <input>` produces HTML without storing or publishing.
+- `"$PLANLOFT_COMMAND" preview [slug]` opens a stored plan locally.
+- `"$PLANLOFT_COMMAND" copy [slug]` copies raw source into the repository.
+- `"$PLANLOFT_COMMAND" deploy [slug]` explicitly publishes a stored plan.
+- `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, JSON, or trusted HTML
+  document.
 <!-- planloft:command-knowledge:end -->
 
 Never deploy unless the user explicitly requests publication. GitHub Pages publication

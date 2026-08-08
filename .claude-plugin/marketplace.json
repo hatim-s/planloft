@@ -1,0 +1,21 @@
+{
+  "name": "planloft",
+  "owner": {
+    "name": "Planloft",
+    "url": "https://github.com/hatim-s/planloft"
+  },
+  "description": "Planloft CLI, write-plan skill, and plan-mode capture hooks.",
+  "plugins": [
+    {
+      "name": "planloft",
+      "source": {
+        "source": "npm",
+        "package": "planloft",
+        "version": "0.0.1"
+      },
+      "description": "Author substantial plans with one semantic skill and operate themed documents through the Planloft CLI.",
+      "version": "0.0.1",
+      "author": { "name": "Planloft" }
+    }
+  ]
+}

@@ -23,6 +23,7 @@ is shaped the way it is, not just *what* it does.
 | [0009](./0009-publication-contracts.md) | explicit publication security, comments, and expiry contracts | Accepted (supersedes 0001 D12; amends D19-D21 and D23) |
 | [0010](./0010-configuration-and-theme-validation.md) | strict configuration and explicit theme resolution | Accepted (amends 0001, 0007; amended by 0011) |
 | [0011](./0011-document-persistence-contracts.md) | Markdown capture and repository-root persistence contracts | Accepted (supersedes 0001 D9; amends 0001 D17, 0007, 0010) |
+| [0012](./0012-installation-products-and-external-installer.md) | installation products and the external skills installer | Accepted (amends 0001 D1 and D23, 0008 G6) |
 
 ## Conventions
 
