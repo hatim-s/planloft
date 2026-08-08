@@ -1,10 +1,84 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { configPath } from "./paths.js";
-import type { Config } from "./types.js";
-import { MAX_TTL_DAYS, TTL_RULE } from "./ttl.js";
-import { assertThemeName, validateTheme } from "../render/themes.js";
+import { configPath } from "./core/paths.js";
+import type { Config } from "./core/types.js";
+import { MAX_TTL_DAYS, TTL_RULE } from "./core/ttl.js";
+import { assertThemeName, readTemplate, validateTheme } from "./render/themes.js";
+
+export interface ResolvedProjectConfiguration {
+  config: Config;
+  theme: string;
+}
+
+interface GiscusCoordinates {
+  repo: string;
+  repoId: string;
+  category: string;
+  categoryId: string;
+}
+
+export interface RedactedConfiguration {
+  version: 1;
+  theme: string;
+  defaultTtlDays: number;
+  projects: Record<string, { theme?: string; giscus?: Partial<GiscusCoordinates> }>;
+  giscus?: Partial<GiscusCoordinates>;
+  github?: { token?: "[redacted]"; user?: string; repo?: string };
+  vercel?: { token?: "[redacted]" };
+}
+
+export interface PlanloftConfiguration {
+  load(): Config;
+  ensure(): Config;
+  save(config: Config): void;
+  update(patch: ConfigPatch): Config;
+  resolveProject(projectKey: string, documentTheme?: string): ResolvedProjectConfiguration;
+  resolveAuthoring(projectKey: string): ResolvedProjectConfiguration & { template: string };
+  redact(config?: Config): RedactedConfiguration;
+}
+
+/**
+ * The single configuration interface used by application, persistence, rendering,
+ * publication, and tests. Parsing and storage remain private implementation details.
+ */
+export function createPlanloftConfiguration(): PlanloftConfiguration {
+  return {
+    load: loadConfig,
+    ensure: ensureConfig,
+    save: saveConfig,
+    update: updateConfig,
+    resolveProject(projectKey, documentTheme) {
+      const config = loadConfig();
+      return { config, theme: resolveTheme(config, projectKey, documentTheme) };
+    },
+    resolveAuthoring(projectKey) {
+      const resolved = this.resolveProject(projectKey);
+      return { ...resolved, template: readTemplate(resolved.theme) };
+    },
+    redact(config = loadConfig()) {
+      return redactConfig(config);
+    },
+  };
+}
+
+export function redactConfig(config: Config): RedactedConfiguration {
+  const { github: _github, vercel: _vercel, ...visibleConfig } = config;
+  const github = config.github
+    ? (({ token: _token, ...visible }) => ({
+        ...visible,
+        ...(config.github?.token === undefined ? {} : { token: "[redacted]" as const }),
+      }))(config.github)
+    : undefined;
+  const vercel = config.vercel
+    ? { ...(config.vercel.token === undefined ? {} : { token: "[redacted]" as const }) }
+    : undefined;
+  return {
+    ...visibleConfig,
+    ...(github ? { github } : {}),
+    ...(vercel ? { vercel } : {}),
+  };
+}
 
 export type ConfigDiagnosticCode =
   | "PLANLOFT_CONFIG_MALFORMED"

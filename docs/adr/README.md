@@ -25,6 +25,7 @@ is shaped the way it is, not just *what* it does.
 | [0011](./0011-document-persistence-contracts.md) | Markdown capture and repository-root persistence contracts | Accepted (supersedes 0001 D9; amends 0001 D17, 0007, 0010) |
 | [0012](./0012-installation-products-and-external-installer.md) | installation products and the external skills installer | Accepted (amends 0001 D1 and D23, 0008 G6) |
 | [0013](./0013-application-interface-and-cli-seam.md) | application interface and CLI seam | Accepted (amends 0001 D1 and D23, 0008 G2-G3) |
+| [0014](./0014-deep-configuration-persistence-publication-modules.md) | deep configuration, persistence, and publication modules | Accepted (amends 0007, 0009, 0010, 0011, 0013) |
 
 ## Conventions
 

@@ -9,12 +9,13 @@ import { createPlanloftApplication, PlanloftApplicationError } from "../applicat
 import {
   ConfigError,
   DEFAULT_CONFIG,
+  createPlanloftConfiguration,
   ensureConfig,
   loadConfig,
   saveConfig,
   updateConfig,
   validateConfig,
-} from "./config.js";
+} from "../configuration.js";
 
 test("absent configuration alone receives defaults", () => {
   withHome((home) => {
@@ -207,6 +208,24 @@ test("targeted updates ignore explicit undefined values at every optional patch 
       github: { ...initial.github, repo: "new-plans" },
     });
     assert.deepEqual(loadConfig(), updated);
+  });
+});
+
+test("the configuration interface resolves project overrides and returns only redacted diagnostics", () => {
+  withHome(() => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      theme: "minimal",
+      projects: { project: { theme: "editorial" } },
+      github: { repo: "plans", token: "configuration-secret" },
+    });
+    const configuration = createPlanloftConfiguration();
+    const resolved = configuration.resolveAuthoring("project");
+    assert.equal(resolved.theme, "editorial");
+    assert.match(resolved.template, /Author Markdown only/);
+    const diagnostic = JSON.stringify(configuration.redact(resolved.config));
+    assert.match(diagnostic, /\[redacted\]/);
+    assert.doesNotMatch(diagnostic, /configuration-secret/);
   });
 });
 

@@ -1,15 +1,37 @@
 import type { Config, DocMeta } from "../core/types.js";
+
+export interface HostAuthentication {
+  token: string;
+  user: string;
+}
+
+export interface ManifestEntry {
+  id: string;
+  project: string;
+  slug: string;
+  title: string;
+  kind: string;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface Manifest {
+  version: 1;
+  deploys: ManifestEntry[];
+}
 import { githubPages } from "./github-pages.js";
 import { vercel } from "./vercel.js";
 
 export interface DeployInput {
   id: string;
-  dist: string; // built site directory
   doc: DocMeta;
   ttlDays: number;
   cfg: Config;
   /** The application clock captured before effects begin. */
-  now?: Date;
+  now: Date;
+  authentication: HostAuthentication;
+  updateManifest(manifest: Manifest, candidateId: string): string;
+  render(id: string): string;
 }
 
 export interface DeployResult {
@@ -22,7 +44,7 @@ export interface DeployResult {
 export interface HostAdapter {
   name: string;
   /** URL base path to build the site with, e.g. "/planloft-plans/p/<id>/". */
-  basePath(id: string): string;
+  basePath(id: string, cfg: Config): string;
   /** Publish the built dist and return the public URL. */
   deploy(input: DeployInput): Promise<DeployResult>;
 }

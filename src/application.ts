@@ -2,24 +2,32 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  PUBLICATION_PRIVACY_DISCLOSURE,
-} from "./command-knowledge.js";
-import { loadConfig, ensureConfig, resolveTheme, type ConfigError } from "./core/config.js";
-import { docDir, docFile } from "./core/doc.js";
-import { resolveGiscusConfig } from "./core/giscus.js";
-import { hoistDocument } from "./core/hoist.js";
+  createPlanloftConfiguration,
+  type ConfigError,
+  type RedactedConfiguration,
+} from "./configuration.js";
+import { docFile } from "./core/doc.js";
 import { shortId } from "./core/id.js";
 import { normalizeDocumentMetadata } from "./core/ingest.js";
 import { configPath, withPlanloftHome } from "./core/paths.js";
-import { gitRoot, projectKey } from "./core/project.js";
+import { projectKey } from "./core/project.js";
 import { slugify } from "./core/slug.js";
-import { ensureProject, getDoc, latestDoc, loadIndex, removeDoc, saveIndex } from "./core/store.js";
-import { calculateExpiry, resolveTtlDays } from "./core/ttl.js";
-import type { Config, DocMeta, Kind, ResolvedContext } from "./core/types.js";
-import { getAdapter } from "./hosts/adapter.js";
-import { hasGh } from "./hosts/github-pages.js";
+import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
+import { githubPages, hasGh } from "./hosts/github-pages.js";
+import {
+  createDocumentPersistence,
+  DocumentCopyConflictError,
+} from "./persistence.js";
+import {
+  createPublicationModule,
+  type ApplicationPublicationAdapter,
+  type ApplicationPublicationAdapterResult,
+  type ApplicationPublicationInput,
+  type PreparedPublication,
+  PublicationEffectError,
+  type PublicationOptions,
+} from "./publication.js";
 import { buildSite, renderDocument } from "./render/renderer.js";
-import { readTemplate } from "./render/themes.js";
 import {
   readCanonicalDocument,
   type SourceFlags,
@@ -96,26 +104,14 @@ export interface ApplicationDependencies {
   editFile?: (editor: string, file: string) => void;
   hasGithubCli?: () => boolean;
   environment?: Readonly<Record<string, string | undefined>>;
+  promptGithubToken?: () => Promise<string>;
 }
 
-export interface ApplicationPublicationInput {
-  id: string;
-  dist: string;
-  ttlDays: number;
-  now: Date;
-  document: { project: string; slug: string; title: string; kind: string };
-}
-
-export interface ApplicationPublicationAdapterResult {
-  url: string;
-  expiresAt: string;
-  warnings?: string[];
-}
-
-export interface ApplicationPublicationAdapter {
-  basePath(id: string): string;
-  deploy(input: ApplicationPublicationInput): Promise<ApplicationPublicationAdapterResult>;
-}
+export type {
+  ApplicationPublicationAdapter,
+  ApplicationPublicationAdapterResult,
+  ApplicationPublicationInput,
+} from "./publication.js";
 
 export interface DocumentSourceOptions extends SourceFlags {}
 
@@ -124,10 +120,7 @@ export interface ApplicationRenderOptions extends DocumentSourceOptions {
   noindex?: boolean;
 }
 
-export interface DeployOptions {
-  ttl?: number;
-  comments?: boolean;
-}
+export interface DeployOptions extends PublicationOptions {}
 
 export interface PublishOptions extends DocumentSourceOptions, DeployOptions {}
 
@@ -208,28 +201,7 @@ export interface RemoveResult {
   sourceRemoved: boolean;
 }
 
-export interface RedactedConfiguration {
-  version: 1;
-  theme: string;
-  defaultTtlDays: number;
-  projects: Record<
-    string,
-    {
-      theme?: string;
-      giscus?: Partial<GiscusCoordinates>;
-    }
-  >;
-  giscus?: Partial<GiscusCoordinates>;
-  github?: { token?: "[redacted]"; user?: string; repo?: string };
-  vercel?: { token?: "[redacted]" };
-}
-
-interface GiscusCoordinates {
-  repo: string;
-  repoId: string;
-  category: string;
-  categoryId: string;
-}
+export type { RedactedConfiguration } from "./configuration.js";
 
 export type ConfigResult =
   | { operation: "config"; mode: "edited"; path: string }
@@ -284,7 +256,6 @@ export function createPlanloftApplication(
   const sourceReader: SourceReader = fileSystem;
   const clock = dependencies.clock ?? (() => new Date());
   const makeId = dependencies.id ?? shortId;
-  const host = getAdapter("github")!;
   const environment = dependencies.environment ?? process.env;
   const applicationCwd = path.resolve(
     typeof dependencies.cwd === "function"
@@ -292,6 +263,22 @@ export function createPlanloftApplication(
       : dependencies.cwd ?? process.cwd(),
   );
   const currentDirectory = () => applicationCwd;
+  const configuration = createPlanloftConfiguration();
+  const persistence = createDocumentPersistence({
+    cwd: applicationCwd,
+    clock,
+    fileSystem,
+    configuration,
+  });
+  const publication = createPublicationModule({
+    configuration,
+    clock,
+    id: makeId,
+    applicationAdapter: dependencies.publicationAdapter,
+    environment,
+    host: githubPages,
+    auth: { promptToken: dependencies.promptGithubToken },
+  });
 
   const run = <T>(operation: ApplicationOperation, effect: () => Promise<T> | T): Promise<T> =>
     withPlanloftHome(dependencies.planloftHome, async () => {
@@ -305,44 +292,18 @@ export function createPlanloftApplication(
   const deployMeta = async (
     meta: DocMeta,
     options: DeployOptions,
-    prepared?: { cfg: Config; theme: string; ttlDays: number; now: Date },
+    prepared?: PreparedPublication,
   ): Promise<DeploymentSummary> => {
-    const cwd = currentDirectory();
-    const key = projectKey(cwd).key;
-    const cfg = prepared?.cfg ?? loadConfig();
-    const theme = prepared?.theme ?? resolveTheme(cfg, key, meta.theme);
-    const ttlDays = prepared?.ttlDays ?? resolveTtlDays(options.ttl, cfg.defaultTtlDays);
-    const now = prepared?.now ?? clock();
-    calculateExpiry(ttlDays, now, options.ttl === undefined ? "config.defaultTtlDays" : "--ttl");
-    const comments = options.comments ? resolveGiscusConfig(cfg, key) : undefined;
-    const id = makeId();
-    const base = dependencies.publicationAdapter?.basePath(id) ?? host.basePath(id);
-    const dist = buildSite({ doc: meta, theme, base, comments, noindex: true });
-    let result;
+    const validated = prepared ?? publication.prepare(meta, options);
     try {
-      result = dependencies.publicationAdapter
-        ? await dependencies.publicationAdapter.deploy({
-            id,
-            dist,
-            ttlDays,
-            now,
-            document: {
-              project: meta.project,
-              slug: meta.slug,
-              title: meta.title,
-              kind: meta.kind,
-            },
-          })
-        : await host.deploy({ id, dist, doc: meta, ttlDays, cfg, now });
+      return await publication.publish(meta, validated);
     } catch (error) {
-      throw applicationError("external_effect", "deploy", error);
+      throw applicationError(
+        error instanceof PublicationEffectError ? error.category : "local_effect",
+        "deploy",
+        error,
+      );
     }
-    return {
-      url: result.url,
-      expiresAt: result.expiresAt,
-      ttlDays,
-      warnings: [...(result.warnings ?? []), PUBLICATION_PRIVACY_DISCLOSURE],
-    };
   };
 
   return {
@@ -355,7 +316,7 @@ export function createPlanloftApplication(
           sourceReader,
         );
         const { key } = projectKey(cwd);
-        const theme = doc.theme ?? resolveTheme(loadConfig(), key);
+        const theme = configuration.resolveProject(key, doc.theme).theme;
         const html = renderDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
@@ -373,9 +334,7 @@ export function createPlanloftApplication(
           options,
           sourceReader,
         );
-        const key = projectKey(cwd).key;
-        resolveTheme(loadConfig(), key, doc.theme);
-        const meta = hoistDocument(doc, { cwd, now: clock() });
+        const meta = persistence.hoist(doc, clock());
         return { operation: "hoist", document: publicDocument(meta, true) };
       }),
 
@@ -388,16 +347,25 @@ export function createPlanloftApplication(
           options,
           sourceReader,
         );
-        const { key } = projectKey(cwd);
-        const cfg = loadConfig();
-        const theme = resolveTheme(cfg, key, doc.theme);
-        const ttlDays = resolveTtlDays(options.ttl, cfg.defaultTtlDays);
         const now = clock();
-        calculateExpiry(ttlDays, now, options.ttl === undefined ? "config.defaultTtlDays" : "--ttl");
-        if (options.comments) resolveGiscusConfig(cfg, key);
-
-        const meta = hoistDocument(doc, { cwd, now });
-        const deployment = await deployMeta(meta, options, { cfg, theme, ttlDays, now });
+        const project = persistence.project();
+        const draftMeta: DocMeta = {
+          slug: doc.slug,
+          title: doc.title,
+          kind: doc.kind,
+          project: project.key,
+          theme: doc.theme,
+          status: doc.status,
+          format: doc.contentFormat,
+          trustedHtml: doc.trustedHtml,
+          file: docFile(project.label, doc.slug, doc.contentFormat),
+          updatedAt: now.toISOString(),
+        };
+        // Publication preparation validates configuration, theme, TTL, expiry, and comments
+        // before persistence performs the first mutation.
+        const prepared = publication.prepare(draftMeta, options, now);
+        const meta = persistence.hoist(doc, now);
+        const deployment = await deployMeta(meta, options, prepared);
         return { operation: "publish", document: publicDocument(meta, true), deployment };
       }),
 
@@ -409,28 +377,26 @@ export function createPlanloftApplication(
         const kind: Kind = metadata.kind ?? "plan";
         const title = metadata.title ?? metadata.slug ?? capitalize(kind);
         const slug = slugify(metadata.slug ?? title);
-        const theme = resolveTheme(loadConfig(), key);
+        const resolved = configuration.resolveAuthoring(key);
+        const theme = resolved.theme;
         const format = "md" as const;
 
         // Defaults are persisted only after metadata/configuration/theme validation.
-        ensureConfig();
-        const index = loadIndex();
-        ensureProject(index, key, label);
-        saveIndex(index);
-        fileSystem.makeDirectory(docDir(label));
+        configuration.ensure();
+        persistence.ensureProject();
         const context: ResolvedContext = {
           path: docFile(label, slug, format),
           kind,
           format,
           theme,
-          template: readTemplate(theme),
+          template: resolved.template,
         };
         return { operation: "resolve", context };
       }),
 
     list: (options = {}) =>
       run("list", () => {
-        const projects = Object.values(loadIndex().projects)
+        const projects = Object.values(persistence.list().projects)
           .map((project) => ({
             key: project.key,
             label: project.label,
@@ -447,10 +413,9 @@ export function createPlanloftApplication(
       run("preview", () => {
         const cwd = currentDirectory();
         const { key } = projectKey(cwd);
-        const meta = slug ? getDoc(key, slug) : latestDoc(key);
+        const meta = persistence.find(slug);
         if (!meta) throw applicationError("not_found", "preview", "No matching doc to preview.");
-        const cfg = loadConfig();
-        const theme = resolveTheme(cfg, key, meta.theme);
+        const theme = configuration.resolveProject(key, meta.theme).theme;
         const directory = buildSite({ doc: meta, theme, base: "/" });
         const url = `file://${directory}/index.html`;
         const opened = (dependencies.openUrl ?? openUrl)(url);
@@ -460,40 +425,32 @@ export function createPlanloftApplication(
     copy: (slug, options = {}) =>
       run("copy", () => {
         const cwd = currentDirectory();
-        const { key } = projectKey(cwd);
-        const meta = slug ? getDoc(key, slug) : latestDoc(key);
-        if (!meta) {
+        let copied;
+        try {
+          copied = persistence.copy(slug, options);
+        } catch (error) {
+          if (error instanceof DocumentCopyConflictError) {
+            throw applicationError("conflict", "copy", error);
+          }
+          throw error;
+        }
+        if (!copied) {
           throw applicationError("not_found", "copy", "No matching doc in the store for this project.");
         }
-        const root = gitRoot(cwd);
-        const destination = path.join(root ?? cwd, ".planloft", "plans", path.basename(meta.file));
-        const replaced = fileSystem.exists(destination);
-        if (replaced && !options.force) {
-          throw applicationError(
-            "conflict",
-            "copy",
-            `Refusing to overwrite ${destination}. Re-run with --force to replace it.`,
-          );
-        }
-
-        const contents = fileSystem.readBytes(meta.file);
-        fileSystem.makeDirectory(path.dirname(destination));
-        fileSystem.writeBytes(destination, contents);
         return {
           operation: "copy",
-          slug: meta.slug,
-          path: destination,
-          relativePath: path.relative(root ?? cwd, destination),
-          usedCurrentDirectory: root === null,
-          replaced,
+          slug: copied.document.slug,
+          path: copied.path,
+          relativePath: copied.relativePath,
+          usedCurrentDirectory: copied.usedCurrentDirectory,
+          replaced: copied.replaced,
         };
       }),
 
     deploy: (slug, options = {}) =>
       run("deploy", async () => {
         const cwd = currentDirectory();
-        const { key } = projectKey(cwd);
-        const meta = slug ? getDoc(key, slug) : latestDoc(key);
+        const meta = persistence.find(slug);
         if (!meta) throw applicationError("not_found", "deploy", "No matching doc to deploy.");
         const deployment = await deployMeta(meta, options);
         return { operation: "deploy", slug: meta.slug, deployment };
@@ -504,40 +461,31 @@ export function createPlanloftApplication(
         if (typeof slug !== "string" || slug.trim() === "") {
           throw applicationError("validation", "remove", "Document slug must be a nonblank string.");
         }
-        const { key } = projectKey(currentDirectory());
-        const meta = getDoc(key, slug);
-        if (!meta) {
+        const removed = persistence.remove(slug);
+        if (!removed) {
           throw applicationError("not_found", "remove", `No doc '${slug}' for this project.`);
         }
-        removeDoc(key, slug);
-        let sourceRemoved = false;
-        try {
-          fileSystem.removeFile(meta.file);
-          sourceRemoved = true;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        return { operation: "remove", slug, sourceRemoved };
+        return { operation: "remove", slug, sourceRemoved: removed.sourceRemoved };
       }),
 
     config: () =>
       run("config", () => {
-        ensureConfig();
+        configuration.ensure();
         const file = configPath();
         const editor = environment.EDITOR || environment.VISUAL;
         if (editor) {
           (dependencies.editFile ?? editFile)(editor, file);
-          loadConfig();
+          configuration.load();
           return { operation: "config", mode: "edited", path: file };
         }
-        return { operation: "config", mode: "printed", path: file, config: redactConfig(loadConfig()) };
+        return { operation: "config", mode: "printed", path: file, config: configuration.redact() };
       }),
 
     init: () =>
       run("init", () => {
         const file = configPath();
         const configCreated = !fileSystem.exists(file);
-        const cfg = configCreated ? ensureConfig() : loadConfig();
+        const cfg = configCreated ? configuration.ensure() : configuration.load();
         return {
           operation: "init",
           configPath: file,
@@ -552,24 +500,6 @@ export function createPlanloftApplication(
         };
       }),
 
-  };
-}
-
-export function redactConfig(config: Config): RedactedConfiguration {
-  const { github: _github, vercel: _vercel, ...visibleConfig } = config;
-  const github = config.github
-    ? (({ token: _token, ...visible }) => ({
-        ...visible,
-        ...(config.github?.token === undefined ? {} : { token: "[redacted]" as const }),
-      }))(config.github)
-    : undefined;
-  const vercel = config.vercel
-    ? { ...(config.vercel.token === undefined ? {} : { token: "[redacted]" as const }) }
-    : undefined;
-  return {
-    ...visibleConfig,
-    ...(github ? { github } : {}),
-    ...(vercel ? { vercel } : {}),
   };
 }
 
@@ -619,6 +549,9 @@ function classifyError(
     return error.operation === operation
       ? error
       : new PlanloftApplicationError(error.category, operation, error.message, { cause: error });
+  }
+  if (error instanceof PublicationEffectError) {
+    return applicationError(error.category, operation, error);
   }
   if (isConfigError(error)) return applicationError("configuration", operation, error);
   if (isValidationError(error)) return applicationError("validation", operation, error);

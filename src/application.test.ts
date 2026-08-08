@@ -8,8 +8,13 @@ import {
   PlanloftApplicationError,
   createPlanloftApplication,
 } from "./application.js";
-import { saveConfig } from "./core/config.js";
+import { DEFAULT_CONFIG, saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
+import {
+  PublicationEffectError,
+  updatePublicationManifest,
+  type Manifest,
+} from "./publication.js";
 import type {
   ApplicationPublicationAdapter,
   ApplicationPublicationInput,
@@ -87,7 +92,84 @@ test("application publication is host-injectable and returns a secret-free resul
     assert.equal(result.deployment.ttlDays, 7);
     assert.equal(received?.id, "fixed-id");
     assert.equal(received?.now, now);
+    assert.equal(fs.existsSync(received?.dist ?? ""), false);
     assert.doesNotMatch(JSON.stringify(result), /never-return-this-secret/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("first application hoist and publish persist exact defaults after validation", async () => {
+  for (const operation of ["hoist", "publish"] as const) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), `planloft-first-${operation}-test-`));
+    const home = path.join(root, "home");
+    const cwd = path.join(root, "project");
+    const source = path.join(cwd, `${operation}.md`);
+    fs.mkdirSync(cwd, { recursive: true });
+    fs.writeFileSync(source, `# First ${operation}\n`);
+    const application = createPlanloftApplication({
+      cwd,
+      planloftHome: home,
+      id: () => "first-id",
+      publicationAdapter: {
+        basePath: (id) => `/plans/${id}/`,
+        deploy: async () => ({
+          url: "https://example.test/first",
+          expiresAt: "2030-01-31T00:00:00.000Z",
+        }),
+      },
+    });
+
+    try {
+      await application[operation](source);
+      const configSource = fs.readFileSync(path.join(home, "config.json"), "utf8");
+      assert.equal(configSource, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("application publish samples the injected clock once and shares that instant", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-clock-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "clock.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Clock\n");
+  const instants = [
+    new Date("2036-01-02T03:04:05.000Z"),
+    new Date("2040-09-08T07:06:05.000Z"),
+  ];
+  let clockCalls = 0;
+  let publicationNow: Date | undefined;
+  const manifest: Manifest = { version: 1, deploys: [] };
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    clock: () => instants[clockCalls++]!,
+    id: () => "clock-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async (input) => {
+        publicationNow = input.now;
+        updatePublicationManifest(manifest, input, input.id);
+        return {
+          url: "https://example.test/clock",
+          expiresAt: "2036-02-01T03:04:05.000Z",
+        };
+      },
+    },
+  });
+
+  try {
+    const result = await application.publish(source);
+    assert.equal(clockCalls, 1);
+    assert.equal(result.document.updatedAt, instants[0]!.toISOString());
+    assert.equal(publicationNow, instants[0]);
+    assert.equal(manifest.deploys[0]?.createdAt, instants[0]!.toISOString());
+    assert.equal(manifest.deploys[0]?.expiresAt, "2036-02-01T03:04:05.000Z");
+    assert.equal(result.deployment.expiresAt, "2036-02-01T03:04:05.000Z");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -168,6 +250,173 @@ test("application uses stable not-found and conflict error categories before cop
   }
 });
 
+test("deploy reports a missing indexed source as a local publication effect", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-deploy-local-effect-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "missing-after-index.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Missing after index\n");
+  let hostCalls = 0;
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "missing-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        hostCalls += 1;
+        return { url: "https://example.test/unreachable", expiresAt: "never" };
+      },
+    },
+  });
+
+  try {
+    const hoisted = await application.hoist(source);
+    fs.rmSync(hoisted.document.file);
+    await assert.rejects(application.deploy("missing-after-index"), (error: unknown) => {
+      assertApplicationError(error, "local_effect", "PLANLOFT_APPLICATION_LOCAL_EFFECT");
+      assert.equal(error.operation, "deploy");
+      assert.match(error.message, /ENOENT/);
+      return true;
+    });
+    assert.equal(hostCalls, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deploy reports an adapter failure as an external publication effect", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-deploy-external-effect-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "host-failure.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Host failure\n");
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "host-failure-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        throw new Error("simulated host mutation failure");
+      },
+    },
+  });
+
+  try {
+    await application.hoist(source);
+    await assert.rejects(application.deploy("host-failure"), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.operation, "deploy");
+      assert.match(error.message, /simulated host mutation failure/);
+      return true;
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("publish reports a base-path provider failure before config, store, render, or host effects", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-base-path-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const artifacts = path.join(root, "artifacts");
+  const source = path.join(cwd, "base-path-failure.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.mkdirSync(artifacts);
+  fs.writeFileSync(source, "# Base path failure\n");
+  const previousTmpdir = process.env.TMPDIR;
+  process.env.TMPDIR = artifacts;
+  let basePathCalls = 0;
+  let hostCalls = 0;
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "base-path-id",
+    publicationAdapter: {
+      basePath: () => {
+        basePathCalls += 1;
+        throw new Error("simulated base-path provider failure");
+      },
+      deploy: async () => {
+        hostCalls += 1;
+        return { url: "https://example.test/unreachable", expiresAt: "never" };
+      },
+    },
+  });
+
+  try {
+    await assert.rejects(application.publish(source), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.operation, "publish");
+      assert.match(error.message, /simulated base-path provider failure/);
+      assertPublicationEffect(error.cause, "external_effect", "host");
+      return true;
+    });
+    assert.equal(basePathCalls, 1);
+    assert.equal(hostCalls, 0);
+    assert.equal(fs.existsSync(home), false);
+    assert.deepEqual(fs.readdirSync(artifacts), []);
+    assert.equal(fs.readFileSync(source, "utf8"), "# Base path failure\n");
+  } finally {
+    if (previousTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpdir;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deploy reports a base-path provider failure without mutating the store or leaking an artifact", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-deploy-base-path-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const artifacts = path.join(root, "artifacts");
+  const source = path.join(cwd, "indexed-base-path-failure.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.mkdirSync(artifacts);
+  fs.writeFileSync(source, "# Indexed base path failure\n");
+  const previousTmpdir = process.env.TMPDIR;
+  process.env.TMPDIR = artifacts;
+  let basePathCalls = 0;
+  let hostCalls = 0;
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "indexed-base-path-id",
+    publicationAdapter: {
+      basePath: () => {
+        basePathCalls += 1;
+        throw new Error("simulated indexed base-path provider failure");
+      },
+      deploy: async () => {
+        hostCalls += 1;
+        return { url: "https://example.test/unreachable", expiresAt: "never" };
+      },
+    },
+  });
+
+  try {
+    await application.hoist(source);
+    const storeBefore = snapshotDirectory(home);
+    await assert.rejects(application.deploy("indexed-base-path-failure"), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.operation, "deploy");
+      assert.match(error.message, /simulated indexed base-path provider failure/);
+      assertPublicationEffect(error.cause, "external_effect", "host");
+      return true;
+    });
+    assert.equal(basePathCalls, 1);
+    assert.equal(hostCalls, 0);
+    assert.deepEqual(snapshotDirectory(home), storeBefore);
+    assert.deepEqual(fs.readdirSync(artifacts), []);
+  } finally {
+    if (previousTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpdir;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("hoist validates theme before creating default configuration or store state", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-hoist-validation-test-"));
   const home = path.join(root, "home");
@@ -176,6 +425,32 @@ test("hoist validates theme before creating default configuration or store state
   const application = createPlanloftApplication({ cwd: root, planloftHome: home });
   try {
     await assert.rejects(application.hoist(source, { theme: "missing-theme" }), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.category, "validation");
+      assert.match(error.message, /PLANLOFT_THEME_MISSING/);
+      return true;
+    });
+    assert.equal(fs.existsSync(home), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("publish validates theme before creating default configuration or store state", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-publish-validation-test-"));
+  const home = path.join(root, "home");
+  const source = path.join(root, "invalid-theme.md");
+  fs.writeFileSync(source, "# Invalid theme\n");
+  const application = createPlanloftApplication({
+    cwd: root,
+    planloftHome: home,
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => ({ url: "https://example.test/unreachable", expiresAt: "never" }),
+    },
+  });
+  try {
+    await assert.rejects(application.publish(source, { theme: "missing-theme" }), (error: unknown) => {
       assert.ok(error instanceof PlanloftApplicationError);
       assert.equal(error.category, "validation");
       assert.match(error.message, /PLANLOFT_THEME_MISSING/);
@@ -207,6 +482,36 @@ function assertApplicationError(
   assert.ok(error instanceof PlanloftApplicationError);
   assert.equal(error.category, category);
   assert.equal(error.code, code);
+}
+
+function assertPublicationEffect(
+  error: unknown,
+  category: PublicationEffectError["category"],
+  stage: PublicationEffectError["stage"],
+): asserts error is PublicationEffectError {
+  assert.ok(error instanceof PublicationEffectError);
+  assert.equal(error.category, category);
+  assert.equal(error.stage, stage);
+}
+
+function snapshotDirectory(root: string): Record<string, string> {
+  const snapshot: Record<string, string> = {};
+  const visit = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const absolute = path.join(directory, entry.name);
+      const relative = path.relative(root, absolute);
+      if (entry.isDirectory()) {
+        snapshot[`${relative}/`] = "directory";
+        visit(absolute);
+      } else {
+        snapshot[relative] = fs.readFileSync(absolute).toString("base64");
+      }
+    }
+  };
+  visit(root);
+  return snapshot;
 }
 
 function escapeRegExp(value: string): string {

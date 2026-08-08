@@ -51,6 +51,7 @@ const declarations = fs.readFileSync(path.join(root, "dist", "index.d.ts"), "utf
 for (const required of [
   "interface PlanloftApplication",
   "interface ApplicationPublicationAdapter",
+  "interface RedactedConfiguration",
   "class PlanloftApplicationError",
   "declare function ingestDocument",
   "declare function hoistDocument",
@@ -68,6 +69,13 @@ for (const privateType of [
   "__hook",
   '"hook"',
   "Commander",
+  "PlanloftConfiguration",
+  "DocumentPersistence",
+  "PublicationModule",
+  "GithubCredential",
+  "HostAdapter",
+  "HostAuthentication",
+  "interface Manifest",
 ]) {
   assert.doesNotMatch(declarations, new RegExp(privateType));
 }

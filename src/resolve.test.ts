@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createPlanloftApplication, PlanloftApplicationError } from "./application.js";
-import { DEFAULT_CONFIG, saveConfig } from "./core/config.js";
+import { DEFAULT_CONFIG, saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
