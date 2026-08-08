@@ -358,7 +358,7 @@ export function createPlanloftApplication(
         };
         // Publication preparation validates configuration, theme, TTL, expiry, and comments
         // before persistence performs the first mutation.
-        const prepared = publication.prepare(draftMeta, options);
+        const prepared = publication.prepare(draftMeta, options, now);
         const meta = persistence.hoist(doc, now);
         const deployment = await deployMeta(meta, options, prepared);
         return { operation: "publish", document: publicDocument(meta, true), deployment };

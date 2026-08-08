@@ -374,6 +374,9 @@ test("the publication interface owns auth, manifest, rendering, privacy, and exa
   const source = path.join(home, "roadmap.md");
   fs.writeFileSync(source, "# Roadmap\n");
   let renderedDirectory = "";
+  let renderedHtml = "";
+  let renderCalls = 0;
+  const basePathIds: string[] = [];
   try {
     await withPlanloftHome(home, async () => {
       saveConfig({
@@ -401,12 +404,17 @@ test("the publication interface owns auth, manifest, rendering, privacy, and exa
       };
       const host: HostAdapter = {
         name: "memory-github",
-        basePath: (id, cfg) => `/${cfg.github?.repo}/p/${id}/`,
+        basePath: (id, cfg) => {
+          basePathIds.push(id);
+          return `/${cfg.github?.repo}/p/${id}/`;
+        },
         deploy: async (input) => {
           assert.deepEqual(input.authentication, { user: "owner", token: "publication-secret" });
           const expiresAt = input.updateManifest(manifest, input.id);
           assert.equal(manifest.deploys[0]?.id, "stable-id");
+          renderCalls += 1;
           renderedDirectory = input.render("stable-id");
+          renderedHtml = fs.readFileSync(path.join(renderedDirectory, "index.html"), "utf8");
           return { url: "https://example.test/stable-id/", expiresAt: "wrong-adapter-expiry" };
         },
       };
@@ -436,15 +444,67 @@ test("the publication interface owns auth, manifest, rendering, privacy, and exa
       assert.equal(manifest.deploys[0]?.expiresAt, result.expiresAt);
       assert.match(result.warnings.join("\n"), /repository is public/i);
       assert.doesNotMatch(JSON.stringify(result), /publication-secret/);
+      assert.equal(renderCalls, 1);
+      assert.deepEqual(basePathIds, ["stable-id"]);
+      assert.equal(fs.existsSync(renderedDirectory), false);
 
-      const html = fs.readFileSync(path.join(renderedDirectory, "index.html"), "utf8");
-      assert.match(html, /planloft-theme-toggle/);
-      assert.match(html, /prefers-color-scheme/);
-      assert.match(html, /giscus\.app\/client\.js/);
-      assert.match(html, /noindex, nofollow/);
+      assert.match(renderedHtml, /planloft-theme-toggle/);
+      assert.match(renderedHtml, /prefers-color-scheme/);
+      assert.match(renderedHtml, /giscus\.app\/client\.js/);
+      assert.match(renderedHtml, /noindex, nofollow/);
     });
   } finally {
     if (renderedDirectory) fs.rmSync(renderedDirectory, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("real-host publication cleans its one final-id artifact when the adapter fails", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publication-cleanup-test-"));
+  const source = path.join(home, "failure.md");
+  fs.writeFileSync(source, "# Failure\n");
+  let renderedDirectory = "";
+  let renderCalls = 0;
+  try {
+    await withPlanloftHome(home, async () => {
+      saveConfig({ ...config(), github: { token: "cleanup-secret", repo: "plans" } });
+      const host: HostAdapter = {
+        name: "failing-memory-host",
+        basePath: (id) => `/plans/p/${id}/`,
+        deploy: async (input) => {
+          renderCalls += 1;
+          renderedDirectory = input.render("stable-cleanup-id");
+          assert.equal(fs.existsSync(path.join(renderedDirectory, "index.html")), true);
+          throw new Error("simulated adapter failure");
+        },
+      };
+      const publication = createPublicationModule({
+        configuration: createPlanloftConfiguration(),
+        clock: () => new Date("2037-03-04T05:06:07.000Z"),
+        id: () => "unused-candidate-id",
+        host,
+        auth: {
+          runGh: () => { throw new Error("gh unavailable"); },
+          interactive: false,
+          request: async () => new Response(JSON.stringify({ login: "owner" }), { status: 200 }),
+        },
+      });
+      const document: DocMeta = {
+        slug: "failure",
+        title: "Failure",
+        kind: "plan",
+        project: "project",
+        format: "md",
+        file: source,
+        updatedAt: "2037-03-04T05:06:07.000Z",
+      };
+      const prepared = publication.prepare(document);
+      await assert.rejects(publication.publish(document, prepared), /simulated adapter failure/);
+    });
+    assert.equal(renderCalls, 1);
+    assert.ok(renderedDirectory);
+    assert.equal(fs.existsSync(renderedDirectory), false);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

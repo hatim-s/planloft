@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import { PUBLICATION_PRIVACY_DISCLOSURE } from "./command-knowledge.js";
 import { createPlanloftConfiguration, type PlanloftConfiguration } from "./configuration.js";
 import { resolveGiscusConfig } from "./core/giscus.js";
@@ -14,6 +15,8 @@ export interface ApplicationPublicationInput {
   now: Date;
   document: { project: string; slug: string; title: string; kind: string };
 }
+
+type PublicationManifestInput = Omit<ApplicationPublicationInput, "dist">;
 
 export interface ApplicationPublicationAdapterResult {
   url: string;
@@ -39,7 +42,8 @@ export interface PreparedPublication {
   expiresAt: string;
   theme: string;
   comments?: GiscusConfig;
-  basePath: string;
+  /** Candidate base path is needed only by the injected application adapter. */
+  basePath?: string;
   /** Internal validated configuration; never returned from the application interface. */
   config: Config;
 }
@@ -62,7 +66,7 @@ export interface PublicationModuleOptions {
 }
 
 export interface PublicationModule {
-  prepare(document: DocMeta, options?: PublicationOptions): PreparedPublication;
+  prepare(document: DocMeta, options?: PublicationOptions, now?: Date): PreparedPublication;
   publish(document: DocMeta, prepared: PreparedPublication): Promise<PublicationResult>;
 }
 
@@ -79,10 +83,10 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
   const host = options.host;
 
   return {
-    prepare(document, publicationOptions = {}) {
+    prepare(document, publicationOptions = {}, operationNow) {
       const { config, theme } = configuration.resolveProject(document.project, document.theme);
       const ttlDays = resolveTtlDays(publicationOptions.ttl, config.defaultTtlDays);
-      const now = clock();
+      const now = operationNow ?? clock();
       const expiresAt = calculateExpiry(
         ttlDays,
         now,
@@ -94,21 +98,13 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       const id = createId();
       const basePath = options.applicationAdapter
         ? options.applicationAdapter.basePath(id)
-        : host.basePath(id, config);
+        : undefined;
       return { id, now, ttlDays, expiresAt, theme, comments, basePath, config };
     },
 
     async publish(document, prepared) {
-      const dist = buildSite({
-        doc: document,
-        theme: prepared.theme,
-        base: prepared.basePath,
-        comments: prepared.comments,
-        noindex: true,
-      });
-      const common: ApplicationPublicationInput = {
+      const common = {
         id: prepared.id,
-        dist,
         ttlDays: prepared.ttlDays,
         now: prepared.now,
         document: {
@@ -118,33 +114,56 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
           kind: document.kind,
         },
       };
-      const result = options.applicationAdapter
-        ? await options.applicationAdapter.deploy(common)
-        : await host.deploy({
-            ...common,
-            doc: document,
-            cfg: prepared.config,
-            authentication: await acquireGithubAuthentication(prepared.config, {
-              ...options.auth,
-              env: options.auth?.env ?? options.environment,
-            }),
-            updateManifest: (manifest, candidateId) =>
-              updatePublicationManifest(manifest, common, candidateId, prepared.expiresAt),
-            render: (id) =>
-              buildSite({
-                doc: document,
-                theme: prepared.theme,
-                base: host.basePath(id, prepared.config),
-                comments: prepared.comments,
-                noindex: true,
-              }),
-          });
-      return {
-        url: result.url,
-        expiresAt: prepared.expiresAt,
-        ttlDays: prepared.ttlDays,
-        warnings: [...(result.warnings ?? []), PUBLICATION_PRIVACY_DISCLOSURE],
+      const artifacts: string[] = [];
+      const buildArtifact = (base: string): string => {
+        const dist = buildSite({
+          doc: document,
+          theme: prepared.theme,
+          base,
+          comments: prepared.comments,
+          noindex: true,
+        });
+        artifacts.push(dist);
+        return dist;
       };
+      let renderedForHost = false;
+      try {
+        const result = options.applicationAdapter
+          ? await options.applicationAdapter.deploy({
+              ...common,
+              dist: buildArtifact(
+                prepared.basePath ?? options.applicationAdapter.basePath(prepared.id),
+              ),
+            })
+          : await host.deploy({
+              ...common,
+              doc: document,
+              cfg: prepared.config,
+              authentication: await acquireGithubAuthentication(prepared.config, {
+                ...options.auth,
+                env: options.auth?.env ?? options.environment,
+              }),
+              updateManifest: (manifest, candidateId) =>
+                updatePublicationManifest(manifest, common, candidateId, prepared.expiresAt),
+              render: (id) => {
+                if (renderedForHost) {
+                  throw new Error("Host adapters may render a publication artifact only once.");
+                }
+                renderedForHost = true;
+                return buildArtifact(host.basePath(id, prepared.config));
+              },
+            });
+        return {
+          url: result.url,
+          expiresAt: prepared.expiresAt,
+          ttlDays: prepared.ttlDays,
+          warnings: [...(result.warnings ?? []), PUBLICATION_PRIVACY_DISCLOSURE],
+        };
+      } finally {
+        for (const artifact of artifacts) {
+          fs.rmSync(artifact, { recursive: true, force: true });
+        }
+      }
     },
   };
 }
@@ -265,7 +284,7 @@ export type { Manifest } from "./hosts/adapter.js";
 /** Stable URL and expiry policy shared by all manifest storage adapters. */
 export function updatePublicationManifest(
   manifest: Manifest,
-  input: ApplicationPublicationInput,
+  input: PublicationManifestInput,
   candidateId: string,
   exactExpiry = calculateExpiry(input.ttlDays, input.now, "TTL"),
 ): string {

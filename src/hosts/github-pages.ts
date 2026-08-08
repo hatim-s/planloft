@@ -204,7 +204,6 @@ export const githubPages: HostAdapter = {
   },
 
   async deploy(input: DeployInput) {
-    const now = input.now ?? new Date();
     const cfg = input.cfg;
     const repo = cfg.github?.repo ?? DEFAULT_REPO;
     const { user, token } = input.authentication;

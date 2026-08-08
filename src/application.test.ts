@@ -8,8 +8,9 @@ import {
   PlanloftApplicationError,
   createPlanloftApplication,
 } from "./application.js";
-import { saveConfig } from "./configuration.js";
+import { DEFAULT_CONFIG, saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
+import { updatePublicationManifest, type Manifest } from "./publication.js";
 import type {
   ApplicationPublicationAdapter,
   ApplicationPublicationInput,
@@ -87,7 +88,84 @@ test("application publication is host-injectable and returns a secret-free resul
     assert.equal(result.deployment.ttlDays, 7);
     assert.equal(received?.id, "fixed-id");
     assert.equal(received?.now, now);
+    assert.equal(fs.existsSync(received?.dist ?? ""), false);
     assert.doesNotMatch(JSON.stringify(result), /never-return-this-secret/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("first application hoist and publish persist exact defaults after validation", async () => {
+  for (const operation of ["hoist", "publish"] as const) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), `planloft-first-${operation}-test-`));
+    const home = path.join(root, "home");
+    const cwd = path.join(root, "project");
+    const source = path.join(cwd, `${operation}.md`);
+    fs.mkdirSync(cwd, { recursive: true });
+    fs.writeFileSync(source, `# First ${operation}\n`);
+    const application = createPlanloftApplication({
+      cwd,
+      planloftHome: home,
+      id: () => "first-id",
+      publicationAdapter: {
+        basePath: (id) => `/plans/${id}/`,
+        deploy: async () => ({
+          url: "https://example.test/first",
+          expiresAt: "2030-01-31T00:00:00.000Z",
+        }),
+      },
+    });
+
+    try {
+      await application[operation](source);
+      const configSource = fs.readFileSync(path.join(home, "config.json"), "utf8");
+      assert.equal(configSource, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("application publish samples the injected clock once and shares that instant", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-clock-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "clock.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Clock\n");
+  const instants = [
+    new Date("2036-01-02T03:04:05.000Z"),
+    new Date("2040-09-08T07:06:05.000Z"),
+  ];
+  let clockCalls = 0;
+  let publicationNow: Date | undefined;
+  const manifest: Manifest = { version: 1, deploys: [] };
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    clock: () => instants[clockCalls++]!,
+    id: () => "clock-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async (input) => {
+        publicationNow = input.now;
+        updatePublicationManifest(manifest, input, input.id);
+        return {
+          url: "https://example.test/clock",
+          expiresAt: "2036-02-01T03:04:05.000Z",
+        };
+      },
+    },
+  });
+
+  try {
+    const result = await application.publish(source);
+    assert.equal(clockCalls, 1);
+    assert.equal(result.document.updatedAt, instants[0]!.toISOString());
+    assert.equal(publicationNow, instants[0]);
+    assert.equal(manifest.deploys[0]?.createdAt, instants[0]!.toISOString());
+    assert.equal(manifest.deploys[0]?.expiresAt, "2036-02-01T03:04:05.000Z");
+    assert.equal(result.deployment.expiresAt, "2036-02-01T03:04:05.000Z");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -176,6 +254,32 @@ test("hoist validates theme before creating default configuration or store state
   const application = createPlanloftApplication({ cwd: root, planloftHome: home });
   try {
     await assert.rejects(application.hoist(source, { theme: "missing-theme" }), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.category, "validation");
+      assert.match(error.message, /PLANLOFT_THEME_MISSING/);
+      return true;
+    });
+    assert.equal(fs.existsSync(home), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("publish validates theme before creating default configuration or store state", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-publish-validation-test-"));
+  const home = path.join(root, "home");
+  const source = path.join(root, "invalid-theme.md");
+  fs.writeFileSync(source, "# Invalid theme\n");
+  const application = createPlanloftApplication({
+    cwd: root,
+    planloftHome: home,
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => ({ url: "https://example.test/unreachable", expiresAt: "never" }),
+    },
+  });
+  try {
+    await assert.rejects(application.publish(source, { theme: "missing-theme" }), (error: unknown) => {
       assert.ok(error instanceof PlanloftApplicationError);
       assert.equal(error.category, "validation");
       assert.match(error.message, /PLANLOFT_THEME_MISSING/);

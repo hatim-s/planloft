@@ -24,12 +24,11 @@ import { vercel } from "./vercel.js";
 
 export interface DeployInput {
   id: string;
-  dist: string; // built site directory
   doc: DocMeta;
   ttlDays: number;
   cfg: Config;
   /** The application clock captured before effects begin. */
-  now?: Date;
+  now: Date;
   authentication: HostAuthentication;
   updateManifest(manifest: Manifest, candidateId: string): string;
   render(id: string): string;

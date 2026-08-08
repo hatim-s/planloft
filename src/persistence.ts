@@ -130,16 +130,16 @@ export function createDocumentPersistence(
 
     hoist(document, now = clock()) {
       const project = identity();
+      // Validate configuration and the selected theme without mutating first, then
+      // persist defaults before the first document-store write.
       configuration.resolveProject(project.key, document.theme);
+      configuration.ensure();
       const file = docFile(project.label, document.slug, document.contentFormat);
       const previous = find(document.slug);
       const source = serializeCanonicalDocument(document);
 
       files.makeDirectory(docDir(project.label));
       files.writeText(file, source);
-      if (previous?.file !== file && previous?.file && files.exists(previous.file)) {
-        files.removeFile(previous.file);
-      }
 
       const meta: DocMeta = {
         slug: document.slug,
@@ -154,6 +154,7 @@ export function createDocumentPersistence(
         updatedAt: now.toISOString(),
       };
       upsert(meta);
+      removeReplacedFormat(files, previous, file);
       return meta;
     },
 
@@ -166,30 +167,34 @@ export function createDocumentPersistence(
 
       if (format === "md") {
         const { data, content } = fm.parse(files.readText(file));
-        const kind: Kind = typeof data.kind === "string" && data.kind ? data.kind : "note";
+        const kind: Kind =
+          typeof data.kind === "string" && data.kind ? data.kind : existing?.kind ?? "note";
+        const title = data.title ?? existing?.title ?? slug;
+        const status = data.status ?? existing?.status ?? "active";
         const preserved: fm.Frontmatter = {
           ...data,
-          title: data.title ?? slug,
+          title,
           slug,
           kind,
-          status: data.status ?? "active",
+          status,
         };
-        const theme = typeof data.theme === "string" ? data.theme : undefined;
+        const theme = typeof data.theme === "string" ? data.theme : existing?.theme;
         configuration.resolveProject(project.key, theme);
         files.writeText(file, fm.stringify(content, preserved));
         const meta: DocMeta = {
           slug,
-          title: String(preserved.title),
+          title: String(title),
           kind,
           project: project.key,
           theme,
-          status: String(preserved.status),
+          status: String(status),
           format,
           trustedHtml: existing?.trustedHtml,
           file: path.resolve(file),
           updatedAt: now.toISOString(),
         };
         upsert(meta);
+        removeReplacedFormat(files, existing, file);
         return meta;
       }
 
@@ -206,6 +211,7 @@ export function createDocumentPersistence(
         updatedAt: now.toISOString(),
       };
       upsert(meta);
+      removeReplacedFormat(files, existing, file);
       return meta;
     },
 
@@ -288,4 +294,18 @@ function serializeCanonicalDocument(document: CanonicalDocument): string {
   };
   if (document.theme) frontmatter.theme = document.theme;
   return fm.stringify(document.content, frontmatter);
+}
+
+function removeReplacedFormat(
+  files: PersistenceFileSystem,
+  previous: DocMeta | undefined,
+  replacementFile: string,
+): void {
+  if (
+    previous?.file !== replacementFile &&
+    previous?.file &&
+    files.exists(previous.file)
+  ) {
+    files.removeFile(previous.file);
+  }
 }
