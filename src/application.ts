@@ -24,6 +24,7 @@ import {
   type ApplicationPublicationAdapterResult,
   type ApplicationPublicationInput,
   type PreparedPublication,
+  PublicationEffectError,
   type PublicationOptions,
 } from "./publication.js";
 import { buildSite, renderDocument } from "./render/renderer.js";
@@ -297,7 +298,11 @@ export function createPlanloftApplication(
     try {
       return await publication.publish(meta, validated);
     } catch (error) {
-      throw applicationError("external_effect", "deploy", error);
+      throw applicationError(
+        error instanceof PublicationEffectError ? error.category : "local_effect",
+        "deploy",
+        error,
+      );
     }
   };
 

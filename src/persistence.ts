@@ -3,6 +3,7 @@ import path from "node:path";
 import { createPlanloftConfiguration, type PlanloftConfiguration } from "./configuration.js";
 import { docDir, docFile } from "./core/doc.js";
 import * as fm from "./core/frontmatter.js";
+import { normalizeDocumentMetadata } from "./core/ingest.js";
 import { indexPath } from "./core/paths.js";
 import { gitRoot, projectKey } from "./core/project.js";
 import type {
@@ -167,10 +168,12 @@ export function createDocumentPersistence(
 
       if (format === "md") {
         const { data, content } = fm.parse(files.readText(file));
-        const kind: Kind =
-          typeof data.kind === "string" && data.kind ? data.kind : existing?.kind ?? "note";
-        const title = data.title ?? existing?.title ?? slug;
-        const status = data.status ?? existing?.status ?? "active";
+        // Write-direct capture shares the same validation and trimming contract as
+        // every ingestion surface. Validate before configuration or store mutation.
+        const metadata = normalizeDocumentMetadata(data, "Markdown frontmatter");
+        const kind: Kind = metadata.kind ?? existing?.kind ?? "note";
+        const title = metadata.title ?? existing?.title ?? slug;
+        const status = metadata.status ?? existing?.status ?? "active";
         const preserved: fm.Frontmatter = {
           ...data,
           title,
@@ -178,16 +181,18 @@ export function createDocumentPersistence(
           kind,
           status,
         };
-        const theme = typeof data.theme === "string" ? data.theme : existing?.theme;
+        const theme = metadata.theme ?? existing?.theme;
+        if (theme === undefined) delete preserved.theme;
+        else preserved.theme = theme;
         configuration.resolveProject(project.key, theme);
         files.writeText(file, fm.stringify(content, preserved));
         const meta: DocMeta = {
           slug,
-          title: String(title),
+          title,
           kind,
           project: project.key,
           theme,
-          status: String(status),
+          status,
           format,
           trustedHtml: existing?.trustedHtml,
           file: path.resolve(file),

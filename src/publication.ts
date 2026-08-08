@@ -55,6 +55,22 @@ export interface PublicationResult {
   warnings: string[];
 }
 
+export type PublicationEffectCategory = "local_effect" | "external_effect";
+export type PublicationEffectStage = "render" | "authentication" | "host" | "cleanup";
+
+/** Typed boundary that preserves whether publication failed locally or at its host seam. */
+export class PublicationEffectError extends Error {
+  constructor(
+    readonly category: PublicationEffectCategory,
+    readonly stage: PublicationEffectStage,
+    error: unknown,
+  ) {
+    const message = error instanceof Error ? error.message : String(error);
+    super(message, { ...(error instanceof Error ? { cause: error } : {}) });
+    this.name = "PublicationEffectError";
+  }
+}
+
 export interface PublicationModuleOptions {
   configuration?: PlanloftConfiguration;
   clock?: () => Date;
@@ -116,56 +132,103 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       };
       const artifacts: string[] = [];
       const buildArtifact = (base: string): string => {
-        const dist = buildSite({
-          doc: document,
-          theme: prepared.theme,
-          base,
-          comments: prepared.comments,
-          noindex: true,
-        });
-        artifacts.push(dist);
-        return dist;
+        try {
+          const dist = buildSite({
+            doc: document,
+            theme: prepared.theme,
+            base,
+            comments: prepared.comments,
+            noindex: true,
+          });
+          artifacts.push(dist);
+          return dist;
+        } catch (error) {
+          throw publicationEffectError("local_effect", "render", error);
+        }
       };
       let renderedForHost = false;
+      let primaryError: unknown;
       try {
-        const result = options.applicationAdapter
-          ? await options.applicationAdapter.deploy({
-              ...common,
-              dist: buildArtifact(
-                prepared.basePath ?? options.applicationAdapter.basePath(prepared.id),
-              ),
-            })
-          : await host.deploy({
+        let result: ApplicationPublicationAdapterResult;
+        if (options.applicationAdapter) {
+          const dist = buildArtifact(
+            prepared.basePath ?? options.applicationAdapter.basePath(prepared.id),
+          );
+          result = await externalPublicationEffect("host", () =>
+            options.applicationAdapter!.deploy({ ...common, dist }),
+          );
+        } else {
+          const authentication = await externalPublicationEffect("authentication", () =>
+            acquireGithubAuthentication(prepared.config, {
+              ...options.auth,
+              env: options.auth?.env ?? options.environment,
+            }),
+          );
+          result = await externalPublicationEffect("host", () =>
+            host.deploy({
               ...common,
               doc: document,
               cfg: prepared.config,
-              authentication: await acquireGithubAuthentication(prepared.config, {
-                ...options.auth,
-                env: options.auth?.env ?? options.environment,
-              }),
+              authentication,
               updateManifest: (manifest, candidateId) =>
                 updatePublicationManifest(manifest, common, candidateId, prepared.expiresAt),
               render: (id) => {
                 if (renderedForHost) {
-                  throw new Error("Host adapters may render a publication artifact only once.");
+                  throw publicationEffectError(
+                    "local_effect",
+                    "render",
+                    "Host adapters may render a publication artifact only once.",
+                  );
                 }
                 renderedForHost = true;
                 return buildArtifact(host.basePath(id, prepared.config));
               },
-            });
+            }),
+          );
+        }
         return {
           url: result.url,
           expiresAt: prepared.expiresAt,
           ttlDays: prepared.ttlDays,
           warnings: [...(result.warnings ?? []), PUBLICATION_PRIVACY_DISCLOSURE],
         };
+      } catch (error) {
+        primaryError = error;
+        throw error;
       } finally {
         for (const artifact of artifacts) {
-          fs.rmSync(artifact, { recursive: true, force: true });
+          try {
+            fs.rmSync(artifact, { recursive: true, force: true });
+          } catch (error) {
+            if (primaryError === undefined) {
+              throw publicationEffectError("local_effect", "cleanup", error);
+            }
+          }
         }
       }
     },
   };
+}
+
+function publicationEffectError(
+  category: PublicationEffectCategory,
+  stage: PublicationEffectStage,
+  error: unknown,
+): PublicationEffectError {
+  return error instanceof PublicationEffectError
+    ? error
+    : new PublicationEffectError(category, stage, error);
+}
+
+async function externalPublicationEffect<T>(
+  stage: "authentication" | "host",
+  effect: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await effect();
+  } catch (error) {
+    throw publicationEffectError("external_effect", stage, error);
+  }
 }
 
 export type GithubCredentialSource = "gh" | "environment" | "config" | "prompt";

@@ -246,6 +246,74 @@ test("application uses stable not-found and conflict error categories before cop
   }
 });
 
+test("deploy reports a missing indexed source as a local publication effect", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-deploy-local-effect-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "missing-after-index.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Missing after index\n");
+  let hostCalls = 0;
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "missing-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        hostCalls += 1;
+        return { url: "https://example.test/unreachable", expiresAt: "never" };
+      },
+    },
+  });
+
+  try {
+    const hoisted = await application.hoist(source);
+    fs.rmSync(hoisted.document.file);
+    await assert.rejects(application.deploy("missing-after-index"), (error: unknown) => {
+      assertApplicationError(error, "local_effect", "PLANLOFT_APPLICATION_LOCAL_EFFECT");
+      assert.equal(error.operation, "deploy");
+      assert.match(error.message, /ENOENT/);
+      return true;
+    });
+    assert.equal(hostCalls, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deploy reports an adapter failure as an external publication effect", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-deploy-external-effect-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "host-failure.md");
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, "# Host failure\n");
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    id: () => "host-failure-id",
+    publicationAdapter: {
+      basePath: (id) => `/plans/${id}/`,
+      deploy: async () => {
+        throw new Error("simulated host mutation failure");
+      },
+    },
+  });
+
+  try {
+    await application.hoist(source);
+    await assert.rejects(application.deploy("host-failure"), (error: unknown) => {
+      assertApplicationError(error, "external_effect", "PLANLOFT_APPLICATION_EXTERNAL_EFFECT");
+      assert.equal(error.operation, "deploy");
+      assert.match(error.message, /simulated host mutation failure/);
+      return true;
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("hoist validates theme before creating default configuration or store state", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-application-hoist-validation-test-"));
   const home = path.join(root, "home");

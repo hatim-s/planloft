@@ -91,10 +91,22 @@ test("the persistence interface preserves capture metadata and replaces document
     });
     const capture = path.join(home, "docs", persistence.project().label, "kept.md");
     fs.mkdirSync(path.dirname(capture), { recursive: true });
-    fs.writeFileSync(capture, "---\ntitle: Kept\nowner: Hatim\n---\n# Kept\n");
+    fs.writeFileSync(
+      capture,
+      "---\ntitle: '  Kept  '\nslug: '  kept  '\nkind: '  note  '\nstatus: '  active  '\n" +
+        "theme: '  minimal  '\nowner: Hatim\nreview:\n  required: true\n---\n# Kept\n",
+    );
     const captured = persistence.capture(capture);
     assert.equal(captured?.updatedAt, "2034-05-06T07:08:09.000Z");
-    assert.match(fs.readFileSync(capture, "utf8"), /owner: Hatim/);
+    assert.equal(captured?.title, "Kept");
+    assert.equal(captured?.slug, "kept");
+    assert.equal(captured?.kind, "note");
+    assert.equal(captured?.status, "active");
+    assert.equal(captured?.theme, "minimal");
+    const normalizedSource = fs.readFileSync(capture, "utf8");
+    assert.match(normalizedSource, /owner: Hatim/);
+    assert.match(normalizedSource, /review:\n  required: true/);
+    assert.doesNotMatch(normalizedSource, /  Kept  |  kept  |  note  |  active  |  minimal  /);
 
     const replacement = persistence.hoist({
       version: 1,
@@ -119,6 +131,60 @@ test("the persistence interface preserves capture metadata and replaces document
     else process.env.PLANLOFT_HOME = previousHome;
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("write-direct capture rejects invalid shared metadata before source, index, or format mutation", () => {
+  const fields = ["title", "slug", "kind", "theme", "status"] as const;
+  const invalidValues: Array<{ label: string; yaml: string }> = [
+    { label: "whitespace", yaml: "'   '" },
+    { label: "non-string", yaml: "42" },
+  ];
+
+  for (const field of fields) {
+    for (const invalid of invalidValues) {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), `planloft-capture-invalid-${field}-${invalid.label}-`),
+      );
+      const home = path.join(root, "home");
+      const project = path.join(root, "project");
+      const previousHome = process.env.PLANLOFT_HOME;
+      process.env.PLANLOFT_HOME = home;
+      fs.mkdirSync(project, { recursive: true });
+      try {
+        const persistence = createDocumentPersistence({ cwd: project });
+        const html = persistence.hoist({
+          version: 1,
+          title: "Still valid",
+          slug: "guarded",
+          kind: "plan",
+          status: "active",
+          theme: "minimal",
+          contentFormat: "html",
+          content: "<h1>Still valid</h1>",
+          trustedHtml: true,
+        });
+        const markdown = path.join(path.dirname(html.file), "guarded.md");
+        const markdownBefore =
+          `---\n${field}: ${invalid.yaml}\nowner: Hatim\n---\n# Invalid replacement\n`;
+        fs.writeFileSync(markdown, markdownBefore);
+        const indexBefore = fs.readFileSync(indexPath(), "utf8");
+        const htmlBefore = fs.readFileSync(html.file, "utf8");
+
+        assert.throws(
+          () => persistence.capture(markdown),
+          new RegExp(`Markdown frontmatter metadata "${field}" must be a nonblank string`),
+        );
+        assert.equal(fs.readFileSync(markdown, "utf8"), markdownBefore);
+        assert.equal(fs.readFileSync(indexPath(), "utf8"), indexBefore);
+        assert.equal(fs.readFileSync(html.file, "utf8"), htmlBefore);
+        assert.equal(persistence.find("guarded")?.file, html.file);
+      } finally {
+        if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
+        else process.env.PLANLOFT_HOME = previousHome;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
   }
 });
 
