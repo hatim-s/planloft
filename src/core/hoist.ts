@@ -9,6 +9,7 @@ import type { CanonicalDocument, DocMeta } from "./types.js";
 
 export interface HoistOptions {
   cwd?: string;
+  now?: Date;
 }
 
 /** Persist a canonical document in the current project's store and index it. */
@@ -45,7 +46,7 @@ export function hoistDocument(doc: CanonicalDocument, options: HoistOptions = {}
     format,
     trustedHtml: doc.trustedHtml,
     file: path.resolve(file),
-    updatedAt: new Date().toISOString(),
+    updatedAt: (options.now ?? new Date()).toISOString(),
   };
   upsertDoc(key, label, meta);
   return meta;

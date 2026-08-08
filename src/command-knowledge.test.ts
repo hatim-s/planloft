@@ -136,8 +136,8 @@ test("distribution exposes one semantic skill and no retired wrappers", () => {
     "hooks/hooks.json",
     "skills/write-plan/SKILL.md",
     "skills/write-plan/agents/openai.yaml",
-    "src/commands/hook.ts",
-    "src/commands/resolve.ts",
+    "src/application.ts",
+    "src/program.ts",
   ];
   const shippedText = shippedFiles
     .map((file) => fs.readFileSync(path.join(ROOT, file), "utf8"))

@@ -4,8 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { redactConfig } from "./commands/config.js";
-import { publish } from "./commands/publish.js";
+import { createPlanloftApplication, redactConfig } from "./application.js";
 import { loadConfig, saveConfig } from "./core/config.js";
 import { resolveGiscusConfig } from "./core/giscus.js";
 import {
@@ -101,12 +100,16 @@ test("configuration validates defaultTtlDays and redacts configured credentials"
   const previousHome = process.env.PLANLOFT_HOME;
   process.env.PLANLOFT_HOME = home;
   try {
-    const valid = config({ github: { token: "configured-secret", repo: "plans" } });
+    const valid = config({
+      github: { token: "configured-secret", repo: "plans" },
+      vercel: { token: "vercel-secret" },
+    });
     saveConfig(valid);
     assert.equal(loadConfig().defaultTtlDays, 30);
     const printable = JSON.stringify(redactConfig(loadConfig()));
     assert.match(printable, /\[redacted\]/);
     assert.doesNotMatch(printable, /configured-secret/);
+    assert.doesNotMatch(printable, /vercel-secret/);
 
     fs.writeFileSync(
       path.join(home, "config.json"),
@@ -137,25 +140,20 @@ test("publish computes configured expiry before hoisting source or index files",
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-preflight-test-"));
   const source = path.join(home, "proposal.md");
   const previousHome = process.env.PLANLOFT_HOME;
-  const previousExitCode = process.exitCode;
   process.env.PLANLOFT_HOME = home;
   fs.writeFileSync(source, "# Proposal\n");
   fs.writeFileSync(
     path.join(home, "config.json"),
     JSON.stringify({ ...config(), defaultTtlDays: MAX_TTL_DAYS }),
   );
-  const previousConsoleError = console.error;
-  console.error = () => undefined;
   try {
-    await publish(source, {});
-    assert.equal(process.exitCode, 1);
+    const application = createPlanloftApplication({ planloftHome: home });
+    await assert.rejects(application.publish(source), /does not produce a representable expiry/);
     assert.equal(fs.existsSync(path.join(home, "index.json")), false);
     assert.equal(fs.existsSync(path.join(home, "docs")), false);
   } finally {
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
     else process.env.PLANLOFT_HOME = previousHome;
-    console.error = previousConsoleError;
-    process.exitCode = previousExitCode;
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

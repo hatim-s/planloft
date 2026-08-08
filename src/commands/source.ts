@@ -11,14 +11,24 @@ export interface SourceFlags {
   theme?: string;
   status?: string;
   trustedHtml?: boolean;
+  /** Raw stdin supplied by an adapter when input is "-". */
+  stdin?: string;
+}
+
+export interface SourceReader {
+  readText(file: string): string;
 }
 
 export async function readCanonicalDocument(
   input: string,
   flags: SourceFlags,
+  reader: SourceReader = { readText: (file) => fs.readFileSync(file, "utf8") },
 ): Promise<CanonicalDocument> {
   const format = flags.format ? parseSourceFormat(flags.format) : inferFormat(input);
-  const raw = input === "-" ? await readStdin() : fs.readFileSync(input, "utf8");
+  if (input === "-" && flags.stdin === undefined) {
+    throw new Error('Stdin input must be supplied by the calling adapter.');
+  }
+  const raw = input === "-" ? flags.stdin! : reader.readText(input);
   return ingestDocument(raw, {
     format,
     sourceName: input === "-" ? undefined : input,
@@ -46,14 +56,4 @@ function parseSourceFormat(value: string): SourceFormat {
     throw new Error("Input format must be md, json, or html.");
   }
   return normalized;
-}
-
-function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => resolve(data));
-    process.stdin.on("error", reject);
-  });
 }
