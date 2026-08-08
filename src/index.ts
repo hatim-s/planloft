@@ -12,6 +12,7 @@ export {
   commandKnowledge,
   formatCommandHelp,
   formatRootWorkflowHelp,
+  renderCommandExample,
   renderReadmeCliReference,
   renderSkillDiscoveryReference,
 } from "./command-knowledge.js";
@@ -57,6 +58,7 @@ export type {
 } from "./application.js";
 export type {
   CommandCategory,
+  CommandExample,
   CommandInput,
   CommandKnowledge,
   WriteEffect,

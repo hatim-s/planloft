@@ -9,6 +9,15 @@ export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 export type CommandInput = "source" | "stored document" | "none";
 export type WriteEffect = "never" | "optional" | "always";
 
+export interface CommandExample {
+  /** Arguments passed to the planloft executable, excluding the executable itself. */
+  argv: readonly string[];
+  /** Environment assignments required by the example before launching planloft. */
+  environment?: Readonly<Record<string, string>>;
+  /** Human-readable setup that cannot be represented as argv or environment. */
+  preconditions?: readonly string[];
+}
+
 export interface CommandKnowledge {
   name: string;
   signature: string;
@@ -20,7 +29,7 @@ export interface CommandKnowledge {
   externalWrite: WriteEffect;
   destructive: boolean;
   defaults: string[];
-  examples: string[];
+  examples: readonly CommandExample[];
   trustAndPrivacy: string[];
 }
 
@@ -50,7 +59,9 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Writes HTML to stdout unless --out is provided."],
-    examples: ["planloft render proposal.md --theme editorial --out ./proposal-site"],
+    examples: [
+      { argv: ["render", "proposal.md", "--theme", "editorial", "--out", "./proposal-site"] },
+    ],
     trustAndPrivacy: [
       "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
     ],
@@ -66,7 +77,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Uses document metadata and the current project identity to choose the store entry."],
-    examples: ["planloft hoist proposal.json"],
+    examples: [{ argv: ["hoist", "proposal.json"] }],
     trustAndPrivacy: [
       "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
     ],
@@ -82,7 +93,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "always",
     destructive: false,
     defaults: ["Uses the configured default TTL when --ttl is omitted.", "Comments are off."],
-    examples: ["planloft publish proposal.md --ttl 30"],
+    examples: [{ argv: ["publish", "proposal.md", "--ttl", "30"] }],
     trustAndPrivacy: [
       "Publishes to GitHub only when invoked explicitly.",
       PUBLICATION_PRIVACY_DISCLOSURE,
@@ -103,7 +114,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Lists every kind unless --kind is provided."],
-    examples: ["planloft list --kind plan"],
+    examples: [{ argv: ["list", "--kind", "plan"] }],
     trustAndPrivacy: [],
   },
   {
@@ -117,7 +128,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Uses the latest document for the current project when slug is omitted."],
-    examples: ["planloft preview architecture-roadmap"],
+    examples: [{ argv: ["preview", "architecture-roadmap"] }],
     trustAndPrivacy: ["Opens a local file and does not publish it."],
   },
   {
@@ -135,7 +146,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
       "Writes to <git-root>/.planloft/plans/; outside Git, uses the current directory and prints a notice.",
       "Refuses to replace an existing copy unless --force is provided.",
     ],
-    examples: ["planloft copy architecture-roadmap"],
+    examples: [{ argv: ["copy", "architecture-roadmap"] }],
     trustAndPrivacy: [],
   },
   {
@@ -153,7 +164,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
       "Uses the configured default TTL when --ttl is omitted.",
       "Comments are off.",
     ],
-    examples: ["planloft deploy architecture-roadmap --ttl 30"],
+    examples: [{ argv: ["deploy", "architecture-roadmap", "--ttl", "30"] }],
     trustAndPrivacy: [
       "Publishes to GitHub only when invoked explicitly.",
       PUBLICATION_PRIVACY_DISCLOSURE,
@@ -173,7 +184,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: true,
     defaults: [],
-    examples: ["planloft rm obsolete-roadmap"],
+    examples: [{ argv: ["rm", "obsolete-roadmap"] }],
     trustAndPrivacy: ["Deletes stored source; this operation is destructive."],
   },
   {
@@ -188,7 +199,17 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     destructive: false,
     defaults: ["Kind defaults to plan; title and slug are derived when omitted."],
     examples: [
-      'planloft resolve --kind plan --slug "auth-refactor" --title "Authentication Refactor"',
+      {
+        argv: [
+          "resolve",
+          "--kind",
+          "plan",
+          "--slug",
+          "auth-refactor",
+          "--title",
+          "Authentication Refactor",
+        ],
+      },
     ],
     trustAndPrivacy: ["Used by write-plan; never guess a store path instead."],
   },
@@ -203,7 +224,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Creates defaults only when config.json does not exist; other failures are explicit."],
-    examples: ["EDITOR=nano planloft config"],
+    examples: [{ argv: ["config"], environment: { EDITOR: "nano" } }],
     trustAndPrivacy: ["The printed configuration can contain local publishing settings."],
   },
   {
@@ -217,7 +238,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     externalWrite: "never",
     destructive: false,
     defaults: ["Keeps an existing config unchanged."],
-    examples: ["planloft init"],
+    examples: [{ argv: ["init"] }],
     trustAndPrivacy: ["Does not publish a document."],
   },
 ];
@@ -278,7 +299,15 @@ export function formatCommandHelp(name: string): string {
   if (command.defaults.length) {
     lines.push("", "Defaults:", ...command.defaults.map((item) => `  - ${item}`));
   }
-  lines.push("", "Examples:", ...command.examples.map((example) => `  $ ${example}`));
+  lines.push(
+    "",
+    "Examples:",
+    ...command.examples.map((example) => `  $ ${renderCommandExample(example)}`),
+  );
+  const preconditions = command.examples.flatMap((example) => example.preconditions ?? []);
+  if (preconditions.length) {
+    lines.push("", "Example preconditions:", ...preconditions.map((item) => `  - ${item}`));
+  }
   if (command.trustAndPrivacy.length) {
     lines.push(
       "",
@@ -295,15 +324,41 @@ export function renderReadmeCliReference(): string {
   ).join("\n");
 }
 
-export function renderSkillDiscoveryReference(): string {
+export function renderReadmeCliExamples(): string {
+  return ["render", "hoist", "publish"]
+    .flatMap((name) => commandKnowledge(name).examples)
+    .map((example) => renderCommandExample(example))
+    .join("\n");
+}
+
+export function renderCommandExample(
+  example: CommandExample,
+  executable = "planloft",
+): string {
+  const environment = Object.entries(example.environment ?? {}).map(
+    ([name, value]) => `${name}=${shellToken(value)}`,
+  );
   return [
-    "Run `planloft help` to discover all operations.",
+    ...environment,
+    shellToken(executable),
+    ...example.argv.map((argument) => shellToken(argument)),
+  ].join(" ");
+}
+
+function shellToken(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `"${value.replace(/[\\"$`]/g, "\\$&")}"`;
+}
+
+export function renderSkillDiscoveryReference(command = "planloft"): string {
+  return [
+    `Run \`${command} help\` to discover all operations.`,
     "",
     "Common next actions:",
-    "- `planloft render <input>` produces HTML without storing or publishing.",
-    "- `planloft preview [slug]` opens a stored plan locally.",
-    "- `planloft copy [slug]` copies raw source into the repository.",
-    "- `planloft deploy [slug]` explicitly publishes a stored plan.",
-    "- `planloft hoist <input>` stores another Markdown, JSON, or trusted HTML document.",
+    `- \`${command} render <input>\` produces HTML without storing or publishing.`,
+    `- \`${command} preview [slug]\` opens a stored plan locally.`,
+    `- \`${command} copy [slug]\` copies raw source into the repository.`,
+    `- \`${command} deploy [slug]\` explicitly publishes a stored plan.`,
+    `- \`${command} hoist <input>\` stores another Markdown, JSON, or trusted HTML document.`,
   ].join("\n");
 }
