@@ -11,10 +11,10 @@
       "source": {
         "source": "npm",
         "package": "planloft",
-        "version": "0.0.1"
+        "version": "0.1.0"
       },
       "description": "Author substantial plans with one semantic skill and operate themed documents through the Planloft CLI.",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "author": { "name": "Planloft" }
     }
   ]

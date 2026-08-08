@@ -48,14 +48,14 @@ pnpm add -g planloft
 bun add -g planloft
 ```
 
-Pin a released runtime as `planloft@0.0.1`. An npm version pin applies to the CLI and
+Pin the runtime as `planloft@0.1.0`. An npm version pin applies to the CLI and
 full-plugin artifact only; it does not pin a skill fetched from GitHub.
 
-The `planloft` package is not currently published to npm, and this repository has no
-release tag. Until both release gates are complete, the global CLI commands and
-version-pinned full-plugin/tagged-skill recipes below document the shipped contract but
-will not resolve from the public registries. Development skill installs from
-`hatim-s/planloft` continue to follow the default branch.
+The version-pinned full-plugin and tagged-skill recipes require both npm
+`planloft@0.1.0` and repository tag `v0.1.0` to exist. Until both release gates are
+complete, they document the shipped contract but will not resolve from the public
+registries. Development skill installs from `hatim-s/planloft` continue to follow the
+default branch.
 
 ### CLI plus `write-plan`
 
@@ -85,7 +85,7 @@ for latest development. Reproducible released skill installation uses the releas
 in the GitHub tree URL, independently of the npm package version:
 
 ```bash
-npx skills add https://github.com/hatim-s/planloft/tree/v0.0.1/skills/write-plan \
+npx skills add https://github.com/hatim-s/planloft/tree/v0.1.0/skills/write-plan \
   --skill write-plan -g -a codex
 ```
 
@@ -102,7 +102,7 @@ recipes can succeed.
 Codex personal installation:
 
 ```bash
-codex plugin marketplace add hatim-s/planloft --ref v0.0.1
+codex plugin marketplace add hatim-s/planloft --ref v0.1.0
 codex plugin add planloft@planloft
 ```
 
@@ -121,7 +121,7 @@ Start a new session and review/trust the bundled hook before enabling it.
 Claude Code supports explicit user, project, and local scope:
 
 ```bash
-claude plugin marketplace add https://github.com/hatim-s/planloft.git#v0.0.1 --scope user
+claude plugin marketplace add https://github.com/hatim-s/planloft.git#v0.1.0 --scope user
 claude plugin install planloft@planloft --scope user
 
 # Replace both occurrences of "user" with "project" or "local" for that scope.

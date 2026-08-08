@@ -25,6 +25,7 @@ import {
   formatCommandHelp,
   formatRootWorkflowHelp,
 } from "./command-knowledge.js";
+import packageJson from "../package.json" with { type: "json" };
 
 export interface CliAdapterOptions {
   application?: PlanloftApplication;
@@ -73,7 +74,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
   program
     .name("planloft")
     .description("Render, store, and explicitly publish light/dark themed documents.")
-    .version("0.0.1")
+    .version(packageJson.version)
     .addHelpText("after", `\n${formatRootWorkflowHelp()}\n`);
 
   withKnowledge(program.command("render <input>"), "render")
