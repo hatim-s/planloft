@@ -152,7 +152,7 @@ created on first use; publishing remains an explicit action.
 - `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages.
 - `planloft rm <slug>` — Delete a stored document's source and index entry.
 - `planloft resolve` — Resolve the exact plan path, kind, theme, and authoring template.
-- `planloft config` — Open the global configuration in $EDITOR or print it.
+- `planloft config` — Open the versioned global configuration in $EDITOR, validate it, or print it.
 - `planloft init` — Create default configuration and report GitHub readiness.
 <!-- planloft:command-knowledge:end -->
 

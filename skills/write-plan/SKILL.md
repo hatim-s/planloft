@@ -85,8 +85,7 @@ Common next actions:
 - `"$PLANLOFT_COMMAND" preview [slug]` opens a stored plan locally.
 - `"$PLANLOFT_COMMAND" copy [slug]` copies raw source into the repository.
 - `"$PLANLOFT_COMMAND" deploy [slug]` explicitly publishes a stored plan.
-- `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, JSON, or trusted HTML
-  document.
+- `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, JSON, or trusted HTML document.
 <!-- planloft:command-knowledge:end -->
 
 Never deploy unless the user explicitly requests publication. GitHub Pages publication
