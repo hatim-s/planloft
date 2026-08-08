@@ -35,7 +35,7 @@ export interface CliAdapterOptions {
 }
 
 export function createProgram(options: CliAdapterOptions = {}): Command {
-  const application = options.application ?? createPlanloftApplication();
+  const application = options.application ?? createPlanloftApplication({ promptGithubToken });
   const writeOut = options.writeOut ?? ((value: string) => process.stdout.write(value));
   const writeErr = options.writeErr ?? ((value: string) => process.stderr.write(value));
   const setExitCode = options.setExitCode ?? ((code: number) => (process.exitCode = code));
@@ -299,5 +299,42 @@ function readStdin(): Promise<string> {
     process.stdin.on("data", (chunk) => (data += chunk));
     process.stdin.on("end", () => resolve(data));
     process.stdin.on("error", reject);
+  });
+}
+
+function promptGithubToken(): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode) {
+    return Promise.resolve("");
+  }
+  process.stdout.write("GitHub personal access token (input hidden): ");
+  const wasRaw = process.stdin.isRaw;
+  const wasPaused = process.stdin.isPaused();
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  return new Promise<string>((resolve, reject) => {
+    let token = "";
+    const finish = (error?: Error) => {
+      process.stdin.off("data", onData);
+      process.stdin.setRawMode?.(wasRaw);
+      if (wasPaused) process.stdin.pause();
+      process.stdout.write("\n");
+      if (error) reject(error);
+      else resolve(token);
+    };
+    const onData = (chunk: Buffer | string) => {
+      for (const character of chunk.toString()) {
+        if (character === "\u0003") {
+          finish(new Error("GitHub authentication was cancelled."));
+          return;
+        }
+        if (character === "\r" || character === "\n") {
+          finish();
+          return;
+        }
+        if (character === "\u007f" || character === "\b") token = token.slice(0, -1);
+        else token += character;
+      }
+    };
+    process.stdin.on("data", onData);
   });
 }

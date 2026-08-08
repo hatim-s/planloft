@@ -4,8 +4,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createPlanloftApplication, redactConfig } from "./application.js";
-import { loadConfig, saveConfig } from "./core/config.js";
+import { createPlanloftApplication } from "./application.js";
+import {
+  createPlanloftConfiguration,
+  loadConfig,
+  redactConfig,
+  saveConfig,
+} from "./configuration.js";
+import { withPlanloftHome } from "./core/paths.js";
 import { resolveGiscusConfig } from "./core/giscus.js";
 import {
   calculateExpiry,
@@ -14,19 +20,21 @@ import {
   resolveTtlDays,
 } from "./core/ttl.js";
 import type { Config, DocMeta } from "./core/types.js";
-import type { DeployInput } from "./hosts/adapter.js";
+import type { HostAdapter } from "./hosts/adapter.js";
 import {
-  discoverGithubCredential,
   authenticatedGit,
   configureCleanRemote,
+} from "./hosts/github-pages.js";
+import {
+  createPublicationModule,
+  discoverGithubCredential,
   GITHUB_AUTH_INVALID,
   GITHUB_AUTH_MISSING,
   GITHUB_AUTH_UNREACHABLE,
-  githubPages,
-  updateManifestDeployment,
+  updatePublicationManifest,
   validateGithubCredential,
   type Manifest,
-} from "./hosts/github-pages.js";
+} from "./publication.js";
 
 test("giscus configuration resolves project values over global values", () => {
   const cfg = config({
@@ -342,37 +350,103 @@ test("publication clones persist and repair only clean credential-free remotes",
 
 test("redeploy keeps the stable URL id and moves expiry from the injected clock", () => {
   const manifest: Manifest = { version: 1, deploys: [] };
-  const input = deployInput(30);
-  const firstExpiry = updateManifestDeployment(
+  const input = publicationInput(30, new Date("2026-08-01T00:00:00.000Z"));
+  const firstExpiry = updatePublicationManifest(
     manifest,
     input,
     "first-id",
-    new Date("2026-08-01T00:00:00.000Z"),
   );
   assert.equal(firstExpiry, "2026-08-31T00:00:00.000Z");
   assert.equal(manifest.deploys[0]?.id, "first-id");
 
-  const secondExpiry = updateManifestDeployment(
+  const secondExpiry = updatePublicationManifest(
     manifest,
-    input,
+    publicationInput(30, new Date("2026-08-08T00:00:00.000Z")),
     "ignored-new-id",
-    new Date("2026-08-08T00:00:00.000Z"),
   );
   assert.equal(secondExpiry, "2026-09-07T00:00:00.000Z");
   assert.equal(manifest.deploys[0]?.id, "first-id");
   assert.equal(manifest.deploys[0]?.createdAt, "2026-08-01T00:00:00.000Z");
 });
 
-test("the GitHub adapter rejects invalid TTL before attempting authentication", async () => {
-  await assert.rejects(githubPages.deploy(deployInput(0)), /TTL must be a finite positive integer/);
-  await assert.rejects(
-    githubPages.deploy(deployInput(Number.MAX_SAFE_INTEGER)),
-    /TTL must be a finite positive integer/,
-  );
-  await assert.rejects(
-    githubPages.deploy(deployInput(MAX_TTL_DAYS)),
-    /does not produce a representable expiry/,
-  );
+test("the publication interface owns auth, manifest, rendering, privacy, and exact expiry without live GitHub", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publication-interface-test-"));
+  const source = path.join(home, "roadmap.md");
+  fs.writeFileSync(source, "# Roadmap\n");
+  let renderedDirectory = "";
+  try {
+    await withPlanloftHome(home, async () => {
+      saveConfig({
+        ...config(),
+        defaultTtlDays: 7,
+        github: { repo: "plans", token: "publication-secret" },
+        giscus: {
+          repo: "owner/plans",
+          repoId: "repo-id",
+          category: "Reviews",
+          categoryId: "category-id",
+        },
+      });
+      const manifest: Manifest = {
+        version: 1,
+        deploys: [{
+          id: "stable-id",
+          project: "project",
+          slug: "roadmap",
+          title: "Old title",
+          kind: "plan",
+          createdAt: "2035-01-01T00:00:00.000Z",
+          expiresAt: "2035-01-08T00:00:00.000Z",
+        }],
+      };
+      const host: HostAdapter = {
+        name: "memory-github",
+        basePath: (id, cfg) => `/${cfg.github?.repo}/p/${id}/`,
+        deploy: async (input) => {
+          assert.deepEqual(input.authentication, { user: "owner", token: "publication-secret" });
+          const expiresAt = input.updateManifest(manifest, input.id);
+          assert.equal(manifest.deploys[0]?.id, "stable-id");
+          renderedDirectory = input.render("stable-id");
+          return { url: "https://example.test/stable-id/", expiresAt: "wrong-adapter-expiry" };
+        },
+      };
+      const publication = createPublicationModule({
+        configuration: createPlanloftConfiguration(),
+        clock: () => new Date("2035-02-03T04:05:06.000Z"),
+        id: () => "candidate-id",
+        host,
+        auth: {
+          runGh: () => { throw new Error("gh unavailable"); },
+          interactive: false,
+          request: async () => new Response(JSON.stringify({ login: "owner" }), { status: 200 }),
+        },
+      });
+      const document: DocMeta = {
+        slug: "roadmap",
+        title: "Roadmap",
+        kind: "plan",
+        project: "project",
+        format: "md",
+        file: source,
+        updatedAt: "2035-02-03T04:05:06.000Z",
+      };
+      const prepared = publication.prepare(document, { comments: true });
+      const result = await publication.publish(document, prepared);
+      assert.equal(result.expiresAt, "2035-02-10T04:05:06.000Z");
+      assert.equal(manifest.deploys[0]?.expiresAt, result.expiresAt);
+      assert.match(result.warnings.join("\n"), /repository is public/i);
+      assert.doesNotMatch(JSON.stringify(result), /publication-secret/);
+
+      const html = fs.readFileSync(path.join(renderedDirectory, "index.html"), "utf8");
+      assert.match(html, /planloft-theme-toggle/);
+      assert.match(html, /prefers-color-scheme/);
+      assert.match(html, /giscus\.app\/client\.js/);
+      assert.match(html, /noindex, nofollow/);
+    });
+  } finally {
+    if (renderedDirectory) fs.rmSync(renderedDirectory, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 function config(overrides: Partial<Config> = {}): Config {
@@ -385,15 +459,12 @@ function config(overrides: Partial<Config> = {}): Config {
   };
 }
 
-function deployInput(ttlDays: number): DeployInput {
-  const doc: DocMeta = {
-    slug: "roadmap",
-    title: "Roadmap",
-    kind: "plan",
-    project: "project",
-    format: "md",
-    file: "/tmp/roadmap.md",
-    updatedAt: "2026-08-01T00:00:00.000Z",
+function publicationInput(ttlDays: number, now: Date) {
+  return {
+    id: "candidate",
+    dist: "/tmp/dist",
+    ttlDays,
+    now,
+    document: { project: "project", slug: "roadmap", title: "Roadmap", kind: "plan" },
   };
-  return { id: "candidate", dist: "/tmp/dist", doc, ttlDays, cfg: config() };
 }

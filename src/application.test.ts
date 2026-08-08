@@ -8,7 +8,7 @@ import {
   PlanloftApplicationError,
   createPlanloftApplication,
 } from "./application.js";
-import { saveConfig } from "./core/config.js";
+import { saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
 import type {
   ApplicationPublicationAdapter,

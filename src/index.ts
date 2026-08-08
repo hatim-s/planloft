@@ -1,5 +1,5 @@
 export { ingestDocument, sourceFormatFromPath } from "./core/ingest.js";
-export { hoistDocument } from "./core/hoist.js";
+export { hoistDocument } from "./persistence.js";
 export { renderDocument } from "./render/renderer.js";
 export {
   APPLICATION_ERROR_CATEGORIES,
@@ -24,7 +24,7 @@ export type {
   SourceFormat,
 } from "./core/types.js";
 export type { DocumentOverrides, IngestOptions } from "./core/ingest.js";
-export type { HoistOptions } from "./core/hoist.js";
+export type { HoistOptions } from "./persistence.js";
 export type { RenderOptions } from "./render/renderer.js";
 export type {
   ApplicationDependencies,

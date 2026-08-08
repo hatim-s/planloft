@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { normalizeDocFile } from "./core/doc.js";
 import { docsDir } from "./core/paths.js";
-import { projectKey } from "./core/project.js";
+import { createDocumentPersistence } from "./persistence.js";
 
 export interface HookEvent {
   hook_event_name?: string;
@@ -30,9 +29,8 @@ export function executeHook(event: HookEvent, clock: () => Date = () => new Date
     const file = extractFilePath(event.tool_input);
     const storedFile = file === undefined ? undefined : path.resolve(event.cwd ?? process.cwd(), file);
     if (storedFile && isInsideDirectory(storedFile, docsDir())) {
-      const { key, label } = projectKey(event.cwd);
       try {
-        normalizeDocFile(storedFile, key, label);
+        createDocumentPersistence({ cwd: event.cwd, clock }).capture(storedFile);
       } catch {
         // A hook normalization failure must never break the user's write.
       }
