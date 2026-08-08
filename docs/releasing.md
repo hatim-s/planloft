@@ -90,6 +90,7 @@ A silent `test` followed by a non-zero shell status is a failure, not an empty r
 Verify the runtime and install dependencies in the pinned checkout:
 
 ```bash
+set -eu
 node --version
 pnpm --version
 npm --version
@@ -110,6 +111,7 @@ inside the release checkout.
 Confirm npm identity, access, and exact-version availability:
 
 ```bash
+set -eu
 NPM_IDENTITY="$(npm whoami)"
 printf 'npm identity: %s\n' "$NPM_IDENTITY"
 NPM_REGISTRY="$(npm config get registry)"
@@ -150,6 +152,7 @@ marketplace npm pins, README recipes, and this runbook consistently say `0.1.0` 
 Run the complete local suite from the pinned checkout:
 
 ```bash
+set -eu
 pnpm test
 pnpm typecheck
 pnpm build
@@ -180,6 +183,7 @@ archive boundary and the executable packed plugin. Keep this tarball unchanged t
 post-release verification; do not run `npm pack` again for the release.
 
 ```bash
+set -eu
 PACK_JSON="$(npm pack --json --ignore-scripts --pack-destination "$RELEASE_ARTIFACTS")"
 CANDIDATE_FILENAME="$(node -e 'const p=JSON.parse(process.argv[1])[0]; process.stdout.write(p.filename)' "$PACK_JSON")"
 CANDIDATE_SHASUM="$(node -e 'const p=JSON.parse(process.argv[1])[0]; process.stdout.write(p.shasum)' "$PACK_JSON")"
@@ -214,6 +218,7 @@ Fetch again and prove that the candidate, checkout, version, and remote branch s
 describe the same release:
 
 ```bash
+set -eu
 git fetch origin main
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
@@ -232,6 +237,41 @@ digests exactly equal the values emitted by the original `npm pack`.
 candidate disappeared, or either digest differs. If main advanced, discard this
 candidate and restart from step 1; never publish bytes built from a stale main ref.
 
+### Final external availability checks
+
+Immediately before asking for publication authorization, query both external systems
+again. An exact-version `E404` is the only npm result that proves the version remains
+available. The remote tag query must succeed and return no matching ref:
+
+```bash
+set -eu
+if FINAL_NPM_VERSION_LOOKUP="$(npm view planloft@0.1.0 version 2>&1)"; then
+  case "$FINAL_NPM_VERSION_LOOKUP" in
+    0.1.0) printf '%s\n' "STOP: planloft@0.1.0 already exists" >&2; exit 1 ;;
+    *) printf 'STOP: unexpected npm version result: %s\n' "$FINAL_NPM_VERSION_LOOKUP" >&2; exit 1 ;;
+  esac
+else
+  case "$FINAL_NPM_VERSION_LOOKUP" in
+    *E404*) printf '%s\n' "Expected: planloft@0.1.0 remains unpublished" ;;
+    *E401*|*ENEEDAUTH*) printf '%s\n' "STOP: npm authentication failed" >&2; exit 1 ;;
+    *E403*|*EOTP*) printf '%s\n' "STOP: npm authorization or 2FA failed" >&2; exit 1 ;;
+    *ENETWORK*|*EAI_AGAIN*|*ECONNRESET*|*ETIMEDOUT*|*E500*|*E502*|*E503*|*E504*) printf '%s\n' "STOP: npm network or registry lookup failed" >&2; exit 1 ;;
+    *) printf 'STOP: unexpected npm lookup failure: %s\n' "$FINAL_NPM_VERSION_LOOKUP" >&2; exit 1 ;;
+  esac
+fi
+FINAL_REMOTE_TAG_PRECHECK="$(git ls-remote --tags origin "refs/tags/v0.1.0" "refs/tags/v0.1.0^{}")"
+test -z "$FINAL_REMOTE_TAG_PRECHECK"
+```
+
+**Expected:** npm prints `Expected: planloft@0.1.0 remains unpublished`, the remote
+tag lookup succeeds, and the final tag assertion is silent.
+
+**Stop if:** npm returns the existing version, `E401`/`ENEEDAUTH`, `E403`/`EOTP`, a
+network/registry failure, or any unexpected result; or if the remote lookup fails or
+finds either tag ref. These checks are a single-use snapshot: after any delay, failed
+authorization attempt, or concurrent release signal, rerun this entire block and
+return to the decision checkpoint only after it produces the expected result.
+
 ### Decision checkpoint: publish to npm
 
 Before continuing, a release-authorized operator must affirm all of the following:
@@ -245,6 +285,7 @@ Before continuing, a release-authorized operator must affirm all of the followin
 The only publication command is:
 
 ```bash
+set -eu
 npm publish --access public "$CANDIDATE_PATH"
 ```
 
@@ -258,6 +299,7 @@ success: stop and use the recovery table before doing anything with a tag.
 Read the published registry metadata and compare both digests with the candidate:
 
 ```bash
+set -eu
 PUBLISHED_METADATA="$(npm view planloft@0.1.0 dist.shasum dist.integrity --json)"
 PUBLISHED_SHASUM="$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p["dist.shasum"])' "$PUBLISHED_METADATA")"
 PUBLISHED_INTEGRITY="$(node -e 'const p=JSON.parse(process.argv[1]); process.stdout.write(p["dist.integrity"])' "$PUBLISHED_METADATA")"
@@ -280,6 +322,7 @@ The tag **must not be created or pushed before both registry digests equal the r
 candidate**, and a public tag must never be force-moved.
 
 ```bash
+set -eu
 REMOTE_TAG_PRECHECK="$(git ls-remote --tags origin "refs/tags/v0.1.0" "refs/tags/v0.1.0^{}")"
 test -z "$REMOTE_TAG_PRECHECK"
 git tag -a v0.1.0 "$RELEASE_COMMIT" -m "planloft v0.1.0"
@@ -305,6 +348,7 @@ the existing local tag is verified correct and the remote tag is still absent.
 After npm and GitHub both expose the release, exercise all source variants:
 
 ```bash
+set -eu
 PLANLOFT_RELEASE_TAG=v0.1.0 pnpm test:installer:release
 ```
 
@@ -356,6 +400,7 @@ are complete. Then return to the original checkout and remove only the validated
 disposable release directory:
 
 ```bash
+set -eu
 cd "$RELEASE_SOURCE_ROOT"
 test -n "$RELEASE_ROOT"
 test -n "$RELEASE_CHECKOUT"
@@ -383,6 +428,7 @@ unresolved variable as a deletion target, or force-remove a worktree containing 
 | `planloft@0.1.0` already exists | Stop. Inspect provenance and digests. If this is the same interrupted release and both digests equal the retained candidate, resume registry/tag verification; otherwise never overwrite it and prepare a new reviewed version. | Step 6 only for a proven matching interrupted release; otherwise a new candidate at step 1. |
 | `v0.1.0` already exists | Stop and inspect its annotated object and dereferenced commit. Never delete, overwrite, or force-move a public tag. If it is the already completed matching release, verify step 7 rather than publishing again. | Step 7 only for a proven matching completed release; otherwise incident response. |
 | `origin/main` advances before publication | Stop and retain evidence only for diagnosis. Discard the stale candidate after safely removing its disposable worktree; never publish it. | Step 1 at the new main commit. |
+| A concurrent release appears during the final external checks | Stop. Do not publish or create a tag. Inspect the exact npm version and both remote tag refs. If the registry bytes and tag prove this same release completed elsewhere, continue at step 7; otherwise treat the collision as an incident and prepare a new reviewed version. | Step 7 only for a proven matching completed release; otherwise incident response or a new candidate at step 1. |
 | Test count, typecheck, build, package entry, or dry-run mismatch | Stop and fix through the normal reviewed development flow. Do not patch files in the detached release checkout. | Step 1 after the fix is merged. |
 | Publish result is ambiguous because the connection failed | Do not blindly retry. Query the exact version and its registry digests. If present, follow step 6; if absent, reconfirm with npm before returning to the publish checkpoint. | Step 6 when present, or the publish checkpoint only after absence is certain. |
 | Publish reports success but registry metadata is delayed | Do not publish again. Wait for propagation, then repeat the read-only `npm view` and digest comparisons. | Step 6. |
