@@ -29,7 +29,10 @@ export type { HoistOptions } from "./persistence.js";
 export type { RenderOptions } from "./render/renderer.js";
 export type {
   ApplicationDependencies,
+  ApplicationDiagnosticCode,
+  ApplicationDiagnosticField,
   ApplicationErrorCategory,
+  ApplicationErrorStage,
   ApplicationFileSystem,
   ApplicationOperation,
   ApplicationPublicationAdapter,
@@ -48,6 +51,7 @@ export type {
   ListProjectResult,
   ListResult,
   PlanloftApplication,
+  PlanloftApplicationErrorDetails,
   PreviewResult,
   PublishOptions,
   PublishResult,

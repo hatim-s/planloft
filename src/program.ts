@@ -52,7 +52,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       const failure =
         error instanceof PlanloftApplicationError
           ? error
-          : new PlanloftApplicationError("internal", operationName, errorMessage(error), { cause: error });
+          : new PlanloftApplicationError("internal", operationName);
       writeErr(`${pc.red(operationLabel(failure.operation) + " failed: ")}${failure.message}\n`);
       setExitCode(1);
     }
@@ -61,8 +61,8 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     try {
       const output = presentHook(executeHook(event));
       if (output) writeOut(output);
-    } catch (error) {
-      writeErr(`${pc.red("Hook failed: ")}${errorMessage(error)}\n`);
+    } catch {
+      writeErr(`${pc.red("Hook failed: ")}Hook processing failed.\n`);
       setExitCode(1);
     }
   };
@@ -286,10 +286,6 @@ function operationLabel(operation: string): string {
   return operation === "remove"
     ? "Remove"
     : operation.charAt(0).toUpperCase() + operation.slice(1);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function readStdin(): Promise<string> {

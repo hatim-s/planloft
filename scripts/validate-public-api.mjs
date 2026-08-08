@@ -53,6 +53,7 @@ for (const compatibilityExport of ["ingestDocument", "hoistDocument", "renderDoc
 const declarations = fs.readFileSync(path.join(root, "dist", "index.d.ts"), "utf8");
 for (const required of [
   "interface PlanloftApplication",
+  "interface PlanloftApplicationErrorDetails",
   "interface ApplicationPublicationAdapter",
   "interface RedactedConfiguration",
   "interface CommandExample",

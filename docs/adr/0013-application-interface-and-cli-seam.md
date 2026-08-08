@@ -69,9 +69,15 @@ The categories are:
 - `external_effect`: the selected host or remote publication effect failed.
 - `internal`: an unexpected adapter/application invariant failed.
 
-Messages remain human-readable diagnostics, not a versioned parsing interface. The
-category and `PLANLOFT_APPLICATION_*` code are the programmatic contract. The CLI maps
-all application failures to exit code 1; Commander continues to own parser failures.
+Messages are generated only from allowlisted category, operation, stage, diagnostic
+code, and metadata-field values. They remain human-readable diagnostics, not a
+versioned parsing interface. Lower-layer messages, stacks, paths, URLs, tokens, and
+raw `cause` objects never cross the public application boundary. Known validation,
+configuration, theme, and authentication failures retain actionable, fixed wording;
+unknown local or external failures use a generic effect message. The category and
+`PLANLOFT_APPLICATION_*` code are the programmatic contract. The optional stage and
+diagnostic code are safe typed context. The CLI maps all application failures to exit
+code 1; Commander continues to own parser failures.
 
 ### H4 — Validation precedes effects
 
@@ -91,7 +97,9 @@ Results expose only data needed by callers: document summaries, paths, resolved
 authoring context, preview status, deployment URL/expiry/warnings, and redacted config.
 Credentials and authentication sources never appear in application results. Host
 adapters may receive credentials through validated configuration internally, but the
-application narrows their return value before exposing it.
+application narrows their return value before exposing it. The same rule covers
+failures: public errors expose no raw causes and their own properties are limited to
+the stable category/code/operation plus allowlisted stage and diagnostic metadata.
 
 `list` intentionally omits source paths. Hoist and publish return their affected source
 path because callers need the newly persisted target. Configuration output replaces a
