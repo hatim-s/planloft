@@ -56,9 +56,23 @@ status: active
 Name concrete files, modules, commands, dependencies, risks, and unresolved decisions.
 Let Planloft render the HTML artifact; do not manually author generated HTML.
 
-Treat light and dark presentation as mandatory. Do not embed one-theme colors or
-presentation markup in the Markdown. Planloft output must expose a theme toggle at the
-top and must initially honor `prefers-color-scheme`; follow any custom theme guidance
+## Design for both light and dark
+
+Treat dual-theme presentation as mandatory for every authored or rendered plan
+document:
+
+- Keep Markdown renderer-neutral. Do not hardcode single-theme-only colors or add
+  generated presentation markup to the source.
+- When a renderer or theme provider exists, use its light/dark toggle and system-theme
+  behavior. Planloft's renderer puts an accessible theme toggle at the very top and
+  initially honors the browser's `prefers-color-scheme` setting.
+- When producing standalone HTML outside that renderer, put an accessible theme toggle
+  at the very top and also implement a `prefers-color-scheme` system fallback.
+- When the output cannot support a toggle or theme provider, still honor the browser or
+  operating system preference with `color-scheme: light dark` and
+  `@media (prefers-color-scheme: dark)`.
+
+Never ship a plan document that works in only one theme. Follow custom theme guidance
 only when it preserves both appearances.
 
 ## Discover other operations

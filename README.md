@@ -51,6 +51,12 @@ bun add -g planloft
 Pin a released runtime as `planloft@0.0.1`. An npm version pin applies to the CLI and
 full-plugin artifact only; it does not pin a skill fetched from GitHub.
 
+The `planloft` package is not currently published to npm, and this repository has no
+release tag. Until both release gates are complete, the global CLI commands and
+version-pinned full-plugin/tagged-skill recipes below document the shipped contract but
+will not resolve from the public registries. Development skill installs from
+`hatim-s/planloft` continue to follow the default branch.
+
 ### CLI plus `write-plan`
 
 The skill requires `planloft` on `PATH`. Install the CLI above, then use the matching
@@ -157,13 +163,16 @@ Run `planloft help` for workflow groups and safety markers, or `planloft help
 stdin. Direct rendering writes HTML to stdout unless `--out <file-or-directory>` is
 provided.
 
-```bash
+```text
+<!-- planloft:command-examples:start -->
 planloft render proposal.md --theme editorial --out ./proposal-site
 planloft hoist proposal.json
-planloft publish proposal.json --ttl 30
-printf '{"title":"Launch","content":"# Goal\\n\\nShip."}' |
-  planloft render - --format json > index.html
+planloft publish proposal.md --ttl 30
+<!-- planloft:command-examples:end -->
 ```
+
+This block is generated from the same command knowledge used by `planloft help
+<command>` and is checked for exact drift in the test suite.
 
 HTML input and embedded Markdown HTML are disabled for direct callers by default. Use
 `--trusted-html` only for content you control. `publish` and `deploy` write to GitHub;
@@ -249,6 +258,23 @@ rejected. The version-1 machine-readable contract is shipped at
 
 ## Node library
 
+Use the asynchronous application interface when a Node caller needs the same complete
+operation as the CLI, with structured results and stable error categories:
+
+```ts
+import { createPlanloftApplication } from "planloft";
+
+const planloft = createPlanloftApplication({ cwd: process.cwd() });
+const result = await planloft.resolve({
+  kind: "plan",
+  slug: "launch-plan",
+  title: "Launch plan",
+});
+console.log(result.path);
+```
+
+Use the focused compiler exports when only ingestion or rendering is needed:
+
 ```ts
 import { ingestDocument, renderDocument } from "planloft";
 
@@ -261,7 +287,9 @@ const html = renderDocument(doc, "minimal");
 ```
 
 `hoistDocument(doc)` persists the same canonical document in the current project's
-global Planloft store.
+global Planloft store. These three focused compatibility exports remain public:
+`ingestDocument`, `hoistDocument`, and `renderDocument`. Internal historical
+`src/commands/*` handlers are not a public interface and have no compatibility shims.
 
 ## Custom themes
 

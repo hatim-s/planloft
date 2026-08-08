@@ -295,15 +295,21 @@ export function renderReadmeCliReference(): string {
   ).join("\n");
 }
 
-export function renderSkillDiscoveryReference(): string {
+export function renderReadmeCliExamples(): string {
+  return ["render", "hoist", "publish"]
+    .flatMap((name) => commandKnowledge(name).examples)
+    .join("\n");
+}
+
+export function renderSkillDiscoveryReference(command = "planloft"): string {
   return [
-    "Run `planloft help` to discover all operations.",
+    `Run \`${command} help\` to discover all operations.`,
     "",
     "Common next actions:",
-    "- `planloft render <input>` produces HTML without storing or publishing.",
-    "- `planloft preview [slug]` opens a stored plan locally.",
-    "- `planloft copy [slug]` copies raw source into the repository.",
-    "- `planloft deploy [slug]` explicitly publishes a stored plan.",
-    "- `planloft hoist <input>` stores another Markdown, JSON, or trusted HTML document.",
+    `- \`${command} render <input>\` produces HTML without storing or publishing.`,
+    `- \`${command} preview [slug]\` opens a stored plan locally.`,
+    `- \`${command} copy [slug]\` copies raw source into the repository.`,
+    `- \`${command} deploy [slug]\` explicitly publishes a stored plan.`,
+    `- \`${command} hoist <input>\` stores another Markdown, JSON, or trusted HTML document.`,
   ].join("\n");
 }

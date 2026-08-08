@@ -1,8 +1,9 @@
 # Planloft installation migration
 
-Planloft now has one semantic skill: `write-plan`. Preview, copy, deploy, and non-plan
-storage remain CLI operations. There are no discoverable compatibility stubs for the
-four removed skills.
+Planloft now has one semantic skill: `write-plan`. The removed skill names are
+`save-doc`, `planloft-preview`, `planloft-copy`, and `planloft-deploy`. Preview, copy,
+deploy, and non-plan storage remain CLI operations. There are no discoverable
+compatibility stubs or deprecated aliases for the removed surface.
 
 ## Remove stale standalone skills
 
@@ -68,12 +69,60 @@ the agent. Do not delete a shared plugin cache or marketplace catalog wholesale.
 
 ## Behavior migrations
 
-- Replace retired preview/copy/deploy skills or slash aliases with `planloft preview`,
-  `planloft copy`, and `planloft deploy`.
-- Replace `save-doc` with explicit `planloft hoist <input>`.
-- Agent-authored plans are Markdown. Remove the retired `planFormat` config property.
-- Malformed or invalid configuration now fails instead of silently using defaults.
-- TTL is a finite positive integer; zero is not permanent.
-- GitHub Pages output is public and enumerable even when its path is hard to guess and
-  marked `noindex`.
-- Comments require complete giscus repository/category configuration.
+### Skills, slash aliases, and CLI replacements
+
+- Remove the skills `save-doc`, `planloft-preview`, `planloft-copy`, and
+  `planloft-deploy`; do not recreate them as wrappers or compatibility shims.
+- Remove the Claude slash aliases `/planloft-preview`, `/planloft-copy`, and
+  `/planloft-deploy`.
+- Use `write-plan` for substantial agent-authored plans. Use explicit
+  `planloft hoist <input>` for other existing Markdown, JSON, or trusted HTML sources.
+- Replace the removed preview/copy/deploy skills and slash aliases with
+  `planloft preview [slug]`, `planloft copy [slug]`, and `planloft deploy [slug]`.
+- Install the CLI separately before a skill-only install. Installing `write-plan` alone
+  does not install an executable, hook, theme, schema, or runtime asset.
+
+### Markdown-only plan authoring
+
+Agent write-direct plan capture is Markdown-only. Remove `planFormat` from
+`~/.planloft/config.json`; `planFormat: "html"` now produces a migration diagnostic
+rather than an HTML compatibility path. Keep authored Markdown presentation-neutral
+and let the renderer supply the top theme toggle plus browser/system light-dark
+preference. Existing explicitly trusted HTML input and already indexed legacy HTML can
+still be rendered or deployed; this is not permission for agents to author new HTML
+plans.
+
+### Strict configuration and TTL
+
+Configuration is a strict version-1 document. Malformed JSON, inaccessible files,
+unsupported versions, unknown properties, invalid theme names or directories, and
+invalid nested values fail with stable diagnostics instead of silently using defaults.
+Defaults apply only when `config.json` is absent. `planloft config` validates the file
+again after the editor closes.
+
+TTL values from `--ttl` and `config.defaultTtlDays` must be finite positive integers no
+greater than the schema/runtime maximum. Zero no longer means permanent, and the
+configured default is used only when `--ttl` is omitted.
+
+### Publication privacy and comments
+
+Do not describe a Planloft deployment as private or secret. The URL path is hard to
+guess and marked `noindex`, but the backing GitHub repository is public. Repository
+visitors can enumerate document folders and manifest metadata. Keep sensitive plans
+local.
+
+Comments remain off by default. Before `--comments`, enable GitHub Discussions, install
+or enable the giscus GitHub App for the selected public repository, select a supported
+Discussion category, and configure all four effective fields: `giscus.repo`,
+`giscus.repoId`, `giscus.category`, and `giscus.categoryId`. Planloft validates them
+before rendering or Git operations.
+
+### Public Node interface
+
+Node callers that need complete CLI-equivalent operations should move to the async
+`createPlanloftApplication()` interface and consume its structured results and
+`PlanloftApplicationError` categories/codes instead of parsing terminal output.
+`ingestDocument`, `hoistDocument`, and `renderDocument` remain supported focused
+package-root exports. Historical `src/commands/*` modules were never public exports and
+were removed without wrappers; update direct internal imports rather than adding
+backward-compatibility shims.

@@ -8,6 +8,7 @@ import {
   COMMAND_KNOWLEDGE,
   PLUGIN_DEFAULT_PROMPTS,
   PUBLICATION_PRIVACY_DISCLOSURE,
+  renderReadmeCliExamples,
   renderReadmeCliReference,
   renderSkillDiscoveryReference,
 } from "./command-knowledge.js";
@@ -104,10 +105,19 @@ test("publication privacy disclosure is snapshot-stable and present in both publ
 
 test("README, write-plan, and plugin metadata are projections of command knowledge", () => {
   const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
-  assert.equal(markedBlock(readme).trim(), renderReadmeCliReference());
+  assert.equal(markedBlock(readme, "command-knowledge").trim(), renderReadmeCliReference());
+  assert.equal(markedBlock(readme, "command-examples").trim(), renderReadmeCliExamples());
+  for (const example of renderReadmeCliExamples().split("\n")) {
+    const command = example.split(/\s+/)[1];
+    assert.ok(command);
+    assert.ok(COMMAND_KNOWLEDGE.find((entry) => entry.name === command)?.examples.includes(example));
+  }
 
   const skill = fs.readFileSync(path.join(ROOT, "skills", "write-plan", "SKILL.md"), "utf8");
-  assert.equal(markedBlock(skill).trim(), renderSkillDiscoveryReference());
+  assert.equal(
+    markedBlock(skill, "command-knowledge").trim(),
+    renderSkillDiscoveryReference('"$PLANLOFT_COMMAND"'),
+  );
   const skillMetadata = matter(skill).data as Record<string, unknown>;
   assert.deepEqual(Object.keys(skillMetadata).sort(), ["description", "name"]);
   assert.equal(skillMetadata.name, "write-plan");
@@ -176,9 +186,9 @@ async function captureFailure(args: string[]): Promise<string> {
   return output;
 }
 
-function markedBlock(content: string): string {
+function markedBlock(content: string, name: string): string {
   const match = content.match(
-    /<!-- planloft:command-knowledge:start -->\n([\s\S]*?)\n<!-- planloft:command-knowledge:end -->/,
+    new RegExp(`<!-- planloft:${name}:start -->\\n([\\s\\S]*?)\\n<!-- planloft:${name}:end -->`),
   );
   assert.ok(match?.[1]);
   return match[1];
