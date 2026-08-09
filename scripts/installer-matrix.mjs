@@ -435,7 +435,10 @@ export async function main(argv = process.argv.slice(2)) {
   const options = parseOptions(argv);
   const contract = validateRepositoryContract();
   if (options.mode === "contract") {
-    console.log(`installer contract: ${contract.cases} cases; skill=${contract.skills[0]}; skills-cli=${contract.skillsCliVersion}`);
+    console.log(
+      `installer contract: ${contract.cases} cases; skills=${contract.skills.join(",")}; ` +
+      `skills-cli=${contract.skillsCliVersion}`,
+    );
     return;
   }
 
