@@ -1,7 +1,7 @@
 {
   "name": "planloft",
   "displayName": "planloft",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Author substantial Markdown plans, understand Planloft, and customize themes with focused skills and the Planloft CLI.",
   "author": {
     "name": "planloft"

@@ -40,14 +40,14 @@ Do not delete the parent skills directory or `write-plan`.
 Choose the package manager you use:
 
 ```bash
-npm install -g planloft@0.1.0
-# or: pnpm add -g planloft@0.1.0
-# or: bun add -g planloft@0.1.0
+npm install -g planloft@0.2.0
+# or: pnpm add -g planloft@0.2.0
+# or: bun add -g planloft@0.2.0
 
 planloft --version
 ```
 
-Expected: `planloft --version` prints `0.1.0`.
+Expected: `planloft --version` prints `0.2.0`.
 
 ## 3. Install the focused skills
 
@@ -156,6 +156,6 @@ planloft init
 planloft list
 ```
 
-Expected: the version is `0.1.0`, configuration validation succeeds, and existing
+Expected: the version is `0.2.0`, configuration validation succeeds, and existing
 documents are listed. Finally, create a small test plan with `write-plan` and preview it
 with `planloft preview [slug]`.
