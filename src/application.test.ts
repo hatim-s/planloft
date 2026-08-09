@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { stripVTControlCharacters } from "node:util";
 import {
   APPLICATION_ERROR_CATEGORIES,
   PlanloftApplicationError,
@@ -520,7 +521,7 @@ test("public application and CLI error boundaries never expose adapter secrets o
     });
     await program.parseAsync(["node", "planloft", "deploy", "secret-boundary"]);
     assert.equal(exitCode, 1);
-    assert.match(stderr, /Deploy failed: Deploy failed during the host stage of an external effect\./);
+    assert.match(stripVTControlCharacters(stderr), /Deploy failed: Deploy failed during the host stage of an external effect\./);
     assert.doesNotMatch(stderr, new RegExp(escapeRegExp(sentinel)));
 
     stderr = "";
@@ -538,7 +539,7 @@ test("public application and CLI error boundaries never expose adapter secrets o
     });
     await unexpectedProgram.parseAsync(["node", "planloft", "deploy", "secret-boundary"]);
     assert.equal(exitCode, 1);
-    assert.match(stderr, /Deploy failed: Deploy failed because of an internal application error\./);
+    assert.match(stripVTControlCharacters(stderr), /Deploy failed: Deploy failed because of an internal application error\./);
     assert.doesNotMatch(stderr, new RegExp(escapeRegExp(sentinel)));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
