@@ -10,7 +10,8 @@ before them is preparation or verification.
 
 You need:
 
-- Node.js 18 or newer and the pnpm version declared in `package.json`.
+- Node.js 18 or newer, the pnpm version declared in `package.json`, and Bun with
+  `bunx` available for the mandatory cross-runner installer matrix.
 - An npm account allowed to publish the `planloft` package.
 - Permission to push tags to the GitHub repository.
 - A clean `main` branch with all release changes already merged.
@@ -18,6 +19,10 @@ You need:
 Log in and check the two release destinations:
 
 ```bash
+node --version
+pnpm --version
+bun --version
+bunx --version
 npm login
 npm whoami
 npm view planloft@0.2.2 version
@@ -26,6 +31,7 @@ git ls-remote --tags origin v0.2.2
 
 Expected:
 
+- Each runtime/version command succeeds; Node reports 18 or newer.
 - `npm whoami` prints your npm username.
 - `npm view` returns `E404` because `0.2.2` has not been published yet.
 - `git ls-remote` prints nothing because `v0.2.2` does not exist yet.
@@ -139,8 +145,8 @@ in a new version.
 PLANLOFT_RELEASE_TAG=v0.2.2 pnpm test:installer:release
 ```
 
-What this does: installs from the real npm package and Git tag instead of the local
-checkout.
+What this does: verifies that both skills exist at the tag, then installs from the real
+npm package and direct tagged authoring-skill source instead of the local checkout.
 
 Expected: the full release installation matrix passes. Then start fresh sessions and
 confirm Codex shows `planloft:write-doc` and `planloft:customise`, Claude Code shows

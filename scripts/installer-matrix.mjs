@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
 export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the planloft-write-doc skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
+export const SHIPPED_SKILLS = Object.freeze(["planloft-customise", "planloft-write-doc"]);
 export const DIMENSIONS = Object.freeze({
   runner: ["npx", "pnpm", "bunx"],
   agent: ["codex", "claude-code", "pi"],
@@ -16,6 +17,7 @@ export const DIMENSIONS = Object.freeze({
   method: ["default", "copy"],
   cli: ["absent", "installed"],
   source: ["latest", "tagged"],
+  skill: SHIPPED_SKILLS,
 });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -40,7 +42,7 @@ export function buildMatrix(dimensions = DIMENSIONS) {
 }
 
 export function caseId(entry) {
-  return [entry.runner, entry.agent, entry.scope, entry.method, entry.cli, entry.source].join("/");
+  return [entry.runner, entry.agent, entry.scope, entry.method, entry.cli, entry.source, entry.skill].join("/");
 }
 
 export function runnerInvocation(runner, args) {
@@ -50,58 +52,70 @@ export function runnerInvocation(runner, args) {
   throw new Error(`Unknown runner: ${runner}`);
 }
 
-export function taggedSkillSource(tag) {
+export function taggedSkillSource(tag, skill) {
   if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(tag ?? "")) {
     throw new Error("A release source requires PLANLOFT_RELEASE_TAG=v<semver> or --tag v<semver>.");
   }
-  return `https://github.com/hatim-s/planloft/tree/${tag}/skills/planloft-write-doc`;
+  if (!SHIPPED_SKILLS.includes(skill)) throw new Error(`Unknown shipped skill: ${skill}`);
+  return `https://github.com/hatim-s/planloft/tree/${tag}/skills/${skill}`;
 }
 
-export function sourceValue(source, tag) {
-  if (source === "local") return ROOT;
-  if (source === "latest") return "hatim-s/planloft";
-  if (source === "tagged") return taggedSkillSource(tag);
+export function taggedSkillRawUrl(tag, skill) {
+  taggedSkillSource(tag, skill);
+  return `https://raw.githubusercontent.com/hatim-s/planloft/${tag}/skills/${skill}/SKILL.md`;
+}
+
+export function expectedSourceSkillCount(source) {
+  if (source === "tagged") return 1;
+  if (source === "local" || source === "latest") return SHIPPED_SKILLS.length;
   throw new Error(`Unknown source: ${source}`);
 }
 
-export function canonicalSkillPath({ scope, project, home }) {
-  return path.join(scope === "global" ? home : project, ".agents", "skills", "planloft-write-doc");
+export function sourceValue(source, tag, skill) {
+  if (source === "local") return ROOT;
+  if (source === "latest") return "hatim-s/planloft";
+  if (source === "tagged") return taggedSkillSource(tag, skill);
+  throw new Error(`Unknown source: ${source}`);
 }
 
-export function agentSkillPath({ agent, scope, project, home }) {
+export function canonicalSkillPath({ scope, project, home, skill }) {
+  return path.join(scope === "global" ? home : project, ".agents", "skills", skill);
+}
+
+export function agentSkillPath({ agent, scope, project, home, skill }) {
   const base = scope === "global" ? home : project;
-  if (agent === "claude-code") return path.join(base, ".claude", "skills", "planloft-write-doc");
+  if (agent === "claude-code") return path.join(base, ".claude", "skills", skill);
   if (agent === "pi") {
-    return path.join(base, scope === "global" ? ".pi/agent/skills" : ".pi/skills", "planloft-write-doc");
+    return path.join(base, scope === "global" ? ".pi/agent/skills" : ".pi/skills", skill);
   }
-  return path.join(base, ".agents", "skills", "planloft-write-doc");
+  return path.join(base, ".agents", "skills", skill);
 }
 
 export function quickMatrix(source = "local") {
   const rows = [
     ["npx", "codex", "project", "default", "absent"],
     ["pnpm", "claude-code", "global", "copy", "installed"],
-    ["bunx", "pi", "global", "copy", "absent"],
+    ["bunx", "pi", "project", "copy", "absent"],
     ["npx", "claude-code", "project", "default", "installed"],
-    ["pnpm", "codex", "project", "copy", "absent"],
+    ["pnpm", "codex", "global", "copy", "absent"],
     ["bunx", "pi", "global", "default", "installed"],
   ];
-  return rows.map(([runner, agent, scope, method, cli]) => {
-    const entry = { runner, agent, scope, method, cli, source };
+  return rows.flatMap(([runner, agent, scope, method, cli]) => SHIPPED_SKILLS.map((skill) => {
+    const entry = { runner, agent, scope, method, cli, source, skill };
     return { ...entry, id: caseId(entry) };
-  });
+  }));
 }
 
 export function validateRepositoryContract() {
   const matrix = buildMatrix();
-  assert.equal(matrix.length, 144, "full installer contract must contain 144 cases");
+  assert.equal(matrix.length, 288, "full installer contract must contain 288 cases");
   assert.equal(new Set(matrix.map(({ id }) => id)).size, matrix.length, "case ids must be unique");
 
   const skillRoot = path.join(ROOT, "skills");
   const discovered = fs.readdirSync(skillRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(skillRoot, entry.name, "SKILL.md")))
     .map((entry) => entry.name);
-  assert.deepEqual(discovered.sort(), ["planloft-customise", "planloft-write-doc"]);
+  assert.deepEqual(discovered.sort(), [...SHIPPED_SKILLS]);
 
   const customizationSkill = fs.readFileSync(path.join(skillRoot, "planloft-customise", "SKILL.md"), "utf8");
   const customizationUi = fs.readFileSync(path.join(skillRoot, "planloft-customise", "agents", "openai.yaml"), "utf8");
@@ -173,12 +187,20 @@ export function validateRepositoryContract() {
   return { cases: matrix.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
 }
 
-async function expectedSkillContent(source, tag) {
-  if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", "planloft-write-doc", "SKILL.md"), "utf8");
+async function expectedSkillContent(source, tag, skill) {
+  if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", skill, "SKILL.md"), "utf8");
   const ref = source === "latest" ? "main" : tag;
-  const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/planloft-write-doc/SKILL.md`);
-  if (!response.ok) throw new Error(`Unable to fetch expected ${source} skill at ${ref}: HTTP ${response.status}`);
+  const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/${skill}/SKILL.md`);
+  if (!response.ok) throw new Error(`Unable to fetch expected ${source} skill ${skill} at ${ref}: HTTP ${response.status}`);
   return response.text();
+}
+
+async function validateTaggedSkillInventory(tag) {
+  for (const skill of SHIPPED_SKILLS) {
+    const response = await fetch(taggedSkillRawUrl(tag, skill));
+    if (!response.ok) throw new Error(`Unable to fetch tagged skill ${skill} at ${tag}: HTTP ${response.status}`);
+    assert.match(await response.text(), new RegExp(`^name:\\s*${skill}$`, "m"));
+  }
 }
 
 function readJson(relative) {
@@ -280,7 +302,7 @@ function executeSkills(entry, args, context) {
 
 function addArgs(entry, source) {
   return [
-    "add", source, "--skill", "planloft-write-doc",
+    "add", source, "--skill", entry.skill,
     "--agent", entry.agent,
     ...(entry.scope === "global" ? ["--global"] : []),
     ...(entry.method === "copy" ? ["--copy"] : []),
@@ -305,6 +327,7 @@ function installationPaths(entry, context) {
 }
 
 function assertSkillCliBehavior(entry, context) {
+  if (entry.skill !== "planloft-write-doc") return;
   const target = agentSkillPath({ ...entry, ...context });
   const resolverPath = path.join(target, "scripts", "resolve-planloft-command.sh");
   const resolver = spawnSync(resolverPath, [], {
@@ -342,11 +365,16 @@ function assertInstalled(entry, context, expected) {
   for (const forbidden of ["hooks", "themes", ".agents", ".codex-plugin", ".claude-plugin"]) {
     assert.ok(!fs.existsSync(path.join(target, forbidden)), `${entry.id}: skill-only leaked ${forbidden}`);
   }
-  assert.match(expected, /scripts\/resolve-planloft-command\.sh/);
+  if (entry.skill === "planloft-write-doc") {
+    assert.match(expected, /scripts\/resolve-planloft-command\.sh/);
+  } else {
+    assert.match(expected, /references\/how-planloft-works\.md/);
+    assert.match(expected, /assets\/theme-starter/);
+  }
   assertSkillCliBehavior(entry, context);
 
   const listed = listInstalled(entry, context);
-  assert.deepEqual([...new Set(listed.map(({ name }) => name))], ["planloft-write-doc"], `${entry.id}: discovery list mismatch`);
+  assert.deepEqual([...new Set(listed.map(({ name }) => name))], [entry.skill], `${entry.id}: discovery list mismatch`);
   assert.equal(listed.length, 1, `${entry.id}: expected exactly one discovered skill`);
 }
 
@@ -354,14 +382,14 @@ function assertRemoved(entry, context) {
   for (const installPath of installationPaths(entry, context)) {
     assert.ok(!fs.existsSync(installPath), `${entry.id}: remove left installer path ${installPath}`);
   }
-  assert.equal(listInstalled(entry, context).filter(({ name }) => name === "planloft-write-doc").length, 0, `${entry.id}: remove left the skill discoverable`);
+  assert.equal(listInstalled(entry, context).filter(({ name }) => name === entry.skill).length, 0, `${entry.id}: remove left the skill discoverable`);
 }
 
 async function runLiveCase(entry, tag, keep) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-installer-matrix-"));
   const context = controlledEnvironment(root, entry.cli);
-  const source = sourceValue(entry.source, tag);
-  const expected = await expectedSkillContent(entry.source, tag);
+  const source = sourceValue(entry.source, tag, entry.skill);
+  const expected = await expectedSkillContent(entry.source, tag, entry.skill);
   try {
     const probe = spawnSync("planloft", ["resolve", "--kind", "plan", "--slug", "matrix", "--title", "Matrix"], {
       cwd: context.project, env: context.env, encoding: "utf8",
@@ -373,15 +401,20 @@ async function runLiveCase(entry, tag, keep) {
     }
 
     const addOutput = executeSkills(entry, addArgs(entry, source), context);
-    assert.match(addOutput, /Found 2 skills/, `${entry.id}: source did not discover both shipped skills`);
-    assert.match(addOutput, /planloft-write-doc \(copied\)/, `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
+    const discoveredCount = expectedSourceSkillCount(entry.source);
+    assert.match(
+      addOutput,
+      new RegExp(`Found ${discoveredCount} skill(?:s)?`),
+      `${entry.id}: source discovery count drift`,
+    );
+    assert.match(addOutput, new RegExp(`${entry.skill} \\(copied\\)`), `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
     assertInstalled(entry, context, expected);
 
-    executeSkills(entry, ["update", "planloft-write-doc", entry.scope === "global" ? "--global" : "--project", "--yes"], context);
+    executeSkills(entry, ["update", entry.skill, entry.scope === "global" ? "--global" : "--project", "--yes"], context);
     assertInstalled(entry, context, expected);
 
     executeSkills(entry, [
-      "remove", "planloft-write-doc", "--agent", entry.agent,
+      "remove", entry.skill, "--agent", entry.agent,
       ...(entry.scope === "global" ? ["--global"] : []), "--yes",
     ], context);
     assertRemoved(entry, context);
@@ -421,7 +454,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const sources = options.source === "all" ? ["latest", "tagged"] : [options.source];
-  if (sources.includes("tagged")) taggedSkillSource(options.tag);
+  if (sources.includes("tagged")) await validateTaggedSkillInventory(options.tag);
   let cases = options.breadth === "full"
     ? buildMatrix({ ...DIMENSIONS, source: sources })
     : sources.flatMap((source) => quickMatrix(source));

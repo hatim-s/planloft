@@ -36,9 +36,11 @@ plugin solely to obtain Claude plugin namespacing.
 
 ### I3 — Add Pi to installer conformance
 
-Add Pi as an explicit installer target. The contract matrix grows from 96 to 144 cases
-across the existing runners, scopes, copy modes, CLI states, and sources. The quick live
-matrix must cover Pi along with Codex and Claude Code.
+Add Pi as an explicit installer target and add the selected skill as a matrix dimension.
+Pi grows the old 96-case contract to 144 host cases; exercising both shipped skills
+grows the complete contract to 288 cases across the existing runners, scopes, copy
+modes, CLI states, and sources. The 12-case quick live matrix must cover every
+agent-and-scope pair and run the full lifecycle for both skills.
 
 ## Consequences
 

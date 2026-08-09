@@ -4,20 +4,23 @@ import path from "node:path";
 import {
   DIMENSIONS,
   SKILLS_CLI_VERSION,
+  SHIPPED_SKILLS,
   agentSkillPath,
   buildMatrix,
   canonicalSkillPath,
+  expectedSourceSkillCount,
   quickMatrix,
   runnerInvocation,
   sourceValue,
   taggedSkillSource,
+  taggedSkillRawUrl,
   validateRepositoryContract,
 } from "./installer-matrix.mjs";
 
 test("full contract enumerates every installer dimension exactly once", () => {
   const matrix = buildMatrix();
-  assert.equal(matrix.length, 144);
-  assert.equal(new Set(matrix.map(({ id }) => id)).size, 144);
+  assert.equal(matrix.length, 288);
+  assert.equal(new Set(matrix.map(({ id }) => id)).size, 288);
   assert.deepEqual(DIMENSIONS.method, ["default", "copy"]);
   for (const [dimension, values] of Object.entries(DIMENSIONS)) {
     assert.deepEqual([...new Set(matrix.map((entry) => entry[dimension]))].sort(), [...values].sort());
@@ -26,13 +29,17 @@ test("full contract enumerates every installer dimension exactly once", () => {
 
 test("quick live matrix covers every non-source dimension value", () => {
   const matrix = quickMatrix();
-  assert.equal(matrix.length, 6);
-  for (const dimension of ["runner", "agent", "scope", "method", "cli"]) {
+  assert.equal(matrix.length, 12);
+  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"]) {
     assert.deepEqual(
       [...new Set(matrix.map((entry) => entry[dimension]))].sort(),
       [...DIMENSIONS[dimension]].sort(),
     );
   }
+  assert.deepEqual(
+    [...new Set(matrix.map(({ agent, scope }) => `${agent}/${scope}`))].sort(),
+    ["claude-code/global", "claude-code/project", "codex/global", "codex/project", "pi/global", "pi/project"],
+  );
 });
 
 test("runner commands use the real package-runner forms and a tested skills version", () => {
@@ -45,26 +52,40 @@ test("runner commands use the real package-runner forms and a tested skills vers
 test("latest and tagged GitHub skill sources are independent from npm versions", () => {
   assert.equal(sourceValue("latest"), "hatim-s/planloft");
   assert.equal(
-    taggedSkillSource("v1.2.3"),
+    taggedSkillSource("v1.2.3", "planloft-write-doc"),
     "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/planloft-write-doc",
   );
-  assert.throws(() => taggedSkillSource("latest"), /PLANLOFT_RELEASE_TAG/);
+  assert.throws(() => taggedSkillSource("latest", "planloft-write-doc"), /PLANLOFT_RELEASE_TAG/);
+  assert.equal(
+    taggedSkillRawUrl("v1.2.3", "planloft-customise"),
+    "https://raw.githubusercontent.com/hatim-s/planloft/v1.2.3/skills/planloft-customise/SKILL.md",
+  );
+  assert.throws(() => taggedSkillRawUrl("v1.2.3", "unknown"), /Unknown shipped skill/);
+});
+
+test("repository sources expose both skills while a direct tagged source exposes one", () => {
+  assert.deepEqual(SHIPPED_SKILLS, ["planloft-customise", "planloft-write-doc"]);
+  assert.equal(expectedSourceSkillCount("local"), 2);
+  assert.equal(expectedSourceSkillCount("latest"), 2);
+  assert.equal(expectedSourceSkillCount("tagged"), 1);
+  assert.throws(() => expectedSourceSkillCount("npm"), /Unknown source/);
 });
 
 test("discovery paths stay inside the disposable project or home", () => {
   const project = "/tmp/project";
   const home = "/tmp/home";
-  assert.equal(canonicalSkillPath({ scope: "project", project, home }), path.join(project, ".agents/skills/planloft-write-doc"));
-  assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/planloft-write-doc"));
-  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/planloft-write-doc"));
-  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/planloft-write-doc"));
-  assert.equal(agentSkillPath({ agent: "pi", scope: "project", project, home }), path.join(project, ".pi/skills/planloft-write-doc"));
-  assert.equal(agentSkillPath({ agent: "pi", scope: "global", project, home }), path.join(home, ".pi/agent/skills/planloft-write-doc"));
+  const skill = "planloft-customise";
+  assert.equal(canonicalSkillPath({ scope: "project", project, home, skill }), path.join(project, ".agents/skills/planloft-customise"));
+  assert.equal(canonicalSkillPath({ scope: "global", project, home, skill }), path.join(home, ".agents/skills/planloft-customise"));
+  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home, skill }), path.join(project, ".agents/skills/planloft-customise"));
+  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home, skill }), path.join(home, ".claude/skills/planloft-customise"));
+  assert.equal(agentSkillPath({ agent: "pi", scope: "project", project, home, skill }), path.join(project, ".pi/skills/planloft-customise"));
+  assert.equal(agentSkillPath({ agent: "pi", scope: "global", project, home, skill }), path.join(home, ".pi/agent/skills/planloft-customise"));
 });
 
 test("repository satisfies the portable installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
-    cases: 144,
+    cases: 288,
     skills: ["planloft-customise", "planloft-write-doc"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });
