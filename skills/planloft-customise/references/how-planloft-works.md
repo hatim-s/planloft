@@ -28,7 +28,7 @@ Markdown or trusted HTML, not a proprietary content tree.
 - `copy` copies stored source into the current repository.
 - `deploy` publishes an already stored document.
 - `resolve` returns the exact Markdown path and theme authoring guidance used by
-  `write-doc`.
+  `planloft-write-doc`.
 - `init` creates defaults when absent and reports readiness; it does not publish.
 
 Use `planloft help <command>` for current inputs, defaults, examples, and effect
@@ -62,13 +62,14 @@ comments. A rendered artifact is self-contained.
 
 ## Agent boundary
 
-`write-doc` is the semantic authoring skill. It resolves the target, writes durable
-Markdown, and never publishes unless separately asked. `customize` explains
-the system and works on themes. All other behavior remains discoverable through the
-CLI.
+`planloft-write-doc` is the semantic authoring skill. It resolves the target, writes
+durable Markdown, and never publishes unless separately asked. `planloft-customise`
+explains the system and works on themes. All other behavior remains discoverable
+through the CLI.
 
-Installing a skill does not install the CLI or runtime assets. OpenAI UI metadata labels
-the portable skills as `planloft:write-doc` and `planloft:customize`.
+Installing a skill does not install the CLI or runtime assets. Codex UI metadata labels
+the skills `planloft:write-doc` and `planloft:customise`; other Agent Skills hosts use
+the portable `planloft-write-doc` and `planloft-customise` names.
 
 ## Trust and publication
 

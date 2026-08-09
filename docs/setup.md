@@ -30,13 +30,14 @@ previewing.
 
 ## Agents
 
-The optional `write-doc` skill teaches Codex or Claude Code when and how to persist a
+The optional `planloft-write-doc` skill teaches coding agents when and how to persist a
 substantial document. Install it after the CLI, targeting exactly one agent:
 
 | Target | Project install | Global install |
 |---|---|---|
-| Codex | `npx skills add hatim-s/planloft --skill write-doc -a codex` | `npx skills add hatim-s/planloft --skill write-doc -g -a codex` |
-| Claude Code | `npx skills add hatim-s/planloft --skill write-doc -a claude-code` | `npx skills add hatim-s/planloft --skill write-doc -g -a claude-code` |
+| Codex | `npx skills add hatim-s/planloft --skill planloft-write-doc -a codex` | `npx skills add hatim-s/planloft --skill planloft-write-doc -g -a codex` |
+| Claude Code | `npx skills add hatim-s/planloft --skill planloft-write-doc -a claude-code` | `npx skills add hatim-s/planloft --skill planloft-write-doc -g -a claude-code` |
+| Pi | `npx skills add hatim-s/planloft --skill planloft-write-doc -a pi` | `npx skills add hatim-s/planloft --skill planloft-write-doc -g -a pi` |
 
 Use project scope by default so the repository declares its agent behavior. Use global
 scope only when every project for that agent should discover the skill.
@@ -45,10 +46,20 @@ With pnpm, replace `npx skills` with `pnpm dlx skills`. With Bun, replace it wit
 `bunx skills`. Restart the target agent after installation so it reloads skill
 discovery.
 
-Planloft also ships `customize` for questions about the document pipeline and custom
-theme work. Install it independently by replacing `write-doc` with `customize` in the
-matching command above. OpenAI UI metadata labels these portable skills
-`planloft:write-doc` and `planloft:customize`; other hosts show their portable names.
+Planloft also ships `planloft-customise` for questions about the document pipeline and
+custom theme work. Install it independently by replacing `planloft-write-doc` with
+`planloft-customise` in the matching command above.
+
+| Host | Authoring skill | Customisation skill |
+|---|---|---|
+| Codex | `planloft:write-doc` | `planloft:customise` |
+| Claude Code | `/planloft-write-doc` | `/planloft-customise` |
+| Pi | `/skill:planloft-write-doc` | `/skill:planloft-customise` |
+| Other Agent Skills hosts | `planloft-write-doc` | `planloft-customise` |
+
+Codex can preserve colon-qualified product labels through `agents/openai.yaml`. Claude,
+Pi, and most other hosts derive identity from the portable folder and frontmatter name,
+which allows lowercase letters, digits, and hyphens only.
 
 An agent setting up an already installed environment only needs to run:
 
@@ -72,7 +83,7 @@ Install the skill noninteractively only when CI needs to inspect or package agen
 discovery files:
 
 ```bash
-npx --yes skills add hatim-s/planloft --skill write-doc -a codex -y
+npx --yes skills add hatim-s/planloft --skill planloft-write-doc -a codex -y
 ```
 
 Ordinary render and validation jobs need only the CLI. Publication jobs must provide a

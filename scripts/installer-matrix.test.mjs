@@ -16,8 +16,8 @@ import {
 
 test("full contract enumerates every installer dimension exactly once", () => {
   const matrix = buildMatrix();
-  assert.equal(matrix.length, 96);
-  assert.equal(new Set(matrix.map(({ id }) => id)).size, 96);
+  assert.equal(matrix.length, 144);
+  assert.equal(new Set(matrix.map(({ id }) => id)).size, 144);
   assert.deepEqual(DIMENSIONS.method, ["default", "copy"]);
   for (const [dimension, values] of Object.entries(DIMENSIONS)) {
     assert.deepEqual([...new Set(matrix.map((entry) => entry[dimension]))].sort(), [...values].sort());
@@ -46,7 +46,7 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
   assert.equal(sourceValue("latest"), "hatim-s/planloft");
   assert.equal(
     taggedSkillSource("v1.2.3"),
-    "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/write-doc",
+    "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/planloft-write-doc",
   );
   assert.throws(() => taggedSkillSource("latest"), /PLANLOFT_RELEASE_TAG/);
 });
@@ -54,16 +54,18 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
 test("discovery paths stay inside the disposable project or home", () => {
   const project = "/tmp/project";
   const home = "/tmp/home";
-  assert.equal(canonicalSkillPath({ scope: "project", project, home }), path.join(project, ".agents/skills/write-doc"));
-  assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/write-doc"));
-  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/write-doc"));
-  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/write-doc"));
+  assert.equal(canonicalSkillPath({ scope: "project", project, home }), path.join(project, ".agents/skills/planloft-write-doc"));
+  assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/planloft-write-doc"));
+  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/planloft-write-doc"));
+  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/planloft-write-doc"));
+  assert.equal(agentSkillPath({ agent: "pi", scope: "project", project, home }), path.join(project, ".pi/skills/planloft-write-doc"));
+  assert.equal(agentSkillPath({ agent: "pi", scope: "global", project, home }), path.join(home, ".pi/agent/skills/planloft-write-doc"));
 });
 
 test("repository satisfies the portable installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
-    cases: 96,
-    skills: ["customize", "write-doc"],
+    cases: 144,
+    skills: ["planloft-customise", "planloft-write-doc"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });
 });

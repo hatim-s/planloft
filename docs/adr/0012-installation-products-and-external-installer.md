@@ -2,7 +2,7 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-08
-- **Amended by**: ADR-0015 installation inventory and Planloft 0.2.1 distribution cleanup
+- **Amended by**: ADR-0015 installation inventory and Planloft 0.2.1 distribution cleanup; ADR-0016 portable skill identity and Pi coverage
 - **Amends**: ADR-0001 D1 and D23, ADR-0008 G6
 
 ## Context

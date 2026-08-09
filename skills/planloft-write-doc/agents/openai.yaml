@@ -1,4 +1,4 @@
 interface:
   display_name: "planloft:write-doc"
   short_description: "Author and save substantial Planloft documents"
-  default_prompt: "Use $write-doc to author and save this substantial document with Planloft."
+  default_prompt: "Use $planloft-write-doc to author and save this substantial document with Planloft."

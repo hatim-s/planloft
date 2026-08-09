@@ -8,10 +8,10 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
-export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the write-doc skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
+export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the planloft-write-doc skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
 export const DIMENSIONS = Object.freeze({
   runner: ["npx", "pnpm", "bunx"],
-  agent: ["codex", "claude-code"],
+  agent: ["codex", "claude-code", "pi"],
   scope: ["project", "global"],
   method: ["default", "copy"],
   cli: ["absent", "installed"],
@@ -19,7 +19,17 @@ export const DIMENSIONS = Object.freeze({
 });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const RETIRED_SKILLS = ["write-plan", "customize-planloft", "save-doc", "planloft-preview", "planloft-copy", "planloft-deploy"];
+const RETIRED_SKILLS = [
+  "write-doc",
+  "customize",
+  "customise",
+  "write-plan",
+  "customize-planloft",
+  "save-doc",
+  "planloft-preview",
+  "planloft-copy",
+  "planloft-deploy",
+];
 
 export function buildMatrix(dimensions = DIMENSIONS) {
   let cases = [{}];
@@ -44,7 +54,7 @@ export function taggedSkillSource(tag) {
   if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(tag ?? "")) {
     throw new Error("A release source requires PLANLOFT_RELEASE_TAG=v<semver> or --tag v<semver>.");
   }
-  return `https://github.com/hatim-s/planloft/tree/${tag}/skills/write-doc`;
+  return `https://github.com/hatim-s/planloft/tree/${tag}/skills/planloft-write-doc`;
 }
 
 export function sourceValue(source, tag) {
@@ -55,24 +65,26 @@ export function sourceValue(source, tag) {
 }
 
 export function canonicalSkillPath({ scope, project, home }) {
-  return path.join(scope === "global" ? home : project, ".agents", "skills", "write-doc");
+  return path.join(scope === "global" ? home : project, ".agents", "skills", "planloft-write-doc");
 }
 
 export function agentSkillPath({ agent, scope, project, home }) {
   const base = scope === "global" ? home : project;
-  return agent === "claude-code"
-    ? path.join(base, ".claude", "skills", "write-doc")
-    : path.join(base, ".agents", "skills", "write-doc");
+  if (agent === "claude-code") return path.join(base, ".claude", "skills", "planloft-write-doc");
+  if (agent === "pi") {
+    return path.join(base, scope === "global" ? ".pi/agent/skills" : ".pi/skills", "planloft-write-doc");
+  }
+  return path.join(base, ".agents", "skills", "planloft-write-doc");
 }
 
 export function quickMatrix(source = "local") {
   const rows = [
     ["npx", "codex", "project", "default", "absent"],
     ["pnpm", "claude-code", "global", "copy", "installed"],
-    ["bunx", "codex", "global", "copy", "absent"],
+    ["bunx", "pi", "global", "copy", "absent"],
     ["npx", "claude-code", "project", "default", "installed"],
     ["pnpm", "codex", "project", "copy", "absent"],
-    ["bunx", "claude-code", "global", "default", "installed"],
+    ["bunx", "pi", "global", "default", "installed"],
   ];
   return rows.map(([runner, agent, scope, method, cli]) => {
     const entry = { runner, agent, scope, method, cli, source };
@@ -82,28 +94,28 @@ export function quickMatrix(source = "local") {
 
 export function validateRepositoryContract() {
   const matrix = buildMatrix();
-  assert.equal(matrix.length, 96, "full installer contract must contain 96 cases");
+  assert.equal(matrix.length, 144, "full installer contract must contain 144 cases");
   assert.equal(new Set(matrix.map(({ id }) => id)).size, matrix.length, "case ids must be unique");
 
   const skillRoot = path.join(ROOT, "skills");
   const discovered = fs.readdirSync(skillRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(skillRoot, entry.name, "SKILL.md")))
     .map((entry) => entry.name);
-  assert.deepEqual(discovered.sort(), ["customize", "write-doc"]);
+  assert.deepEqual(discovered.sort(), ["planloft-customise", "planloft-write-doc"]);
 
-  const customizationSkill = fs.readFileSync(path.join(skillRoot, "customize", "SKILL.md"), "utf8");
-  const customizationUi = fs.readFileSync(path.join(skillRoot, "customize", "agents", "openai.yaml"), "utf8");
-  assert.match(customizationSkill, /^name:\s*customize$/m);
-  assert.match(customizationUi, /display_name:\s*"planloft:customize"/);
+  const customizationSkill = fs.readFileSync(path.join(skillRoot, "planloft-customise", "SKILL.md"), "utf8");
+  const customizationUi = fs.readFileSync(path.join(skillRoot, "planloft-customise", "agents", "openai.yaml"), "utf8");
+  assert.match(customizationSkill, /^name:\s*planloft-customise$/m);
+  assert.match(customizationUi, /display_name:\s*"planloft:customise"/);
   assert.match(customizationSkill, /references\/how-planloft-works\.md/);
   assert.match(customizationSkill, /references\/themes\.md/);
   assert.match(customizationSkill, /assets\/theme-starter/);
 
-  const skillPath = path.join(skillRoot, "write-doc");
+  const skillPath = path.join(skillRoot, "planloft-write-doc");
   const skill = fs.readFileSync(path.join(skillPath, "SKILL.md"), "utf8");
   const skillUi = fs.readFileSync(path.join(skillPath, "agents", "openai.yaml"), "utf8");
   const resolverPath = path.join(skillPath, "scripts", "resolve-planloft-command.sh");
-  assert.match(skill, /^name:\s*write-doc$/m);
+  assert.match(skill, /^name:\s*planloft-write-doc$/m);
   assert.match(skillUi, /display_name:\s*"planloft:write-doc"/);
   assert.match(skill, /scripts\/resolve-planloft-command\.sh/);
   assert.match(skill, /separately installed Planloft CLI/);
@@ -111,7 +123,7 @@ export function validateRepositoryContract() {
 
   const resolverRoot = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolver-contract-"));
   try {
-    const installedSkill = path.join(resolverRoot, ".agents", "skills", "write-doc");
+    const installedSkill = path.join(resolverRoot, ".agents", "skills", "planloft-write-doc");
     fs.cpSync(skillPath, installedSkill, { recursive: true });
     const resolver = spawnSync(path.join(installedSkill, "scripts", "resolve-planloft-command.sh"), [], {
       cwd: resolverRoot,
@@ -137,14 +149,14 @@ export function validateRepositoryContract() {
     "npm install -g planloft",
     "pnpm add -g planloft",
     "bun add -g planloft",
-    "npx skills add hatim-s/planloft --skill write-doc",
+    "npx skills add hatim-s/planloft --skill planloft-write-doc",
   ]) assert.ok(readme.includes(command), `README is missing ${command}`);
   assert.doesNotMatch(readme, /plugin/i);
 
   const setup = fs.readFileSync(path.join(ROOT, "docs", "setup.md"), "utf8");
-  for (const agent of ["codex", "claude-code"]) {
-    const projectRecipe = `npx skills add hatim-s/planloft --skill write-doc -a ${agent}`;
-    const globalRecipe = `npx skills add hatim-s/planloft --skill write-doc -g -a ${agent}`;
+  for (const agent of ["codex", "claude-code", "pi"]) {
+    const projectRecipe = `npx skills add hatim-s/planloft --skill planloft-write-doc -a ${agent}`;
+    const globalRecipe = `npx skills add hatim-s/planloft --skill planloft-write-doc -g -a ${agent}`;
     assert.ok(setup.includes(projectRecipe), `setup is missing ${agent} project recipe`);
     assert.ok(setup.includes(globalRecipe), `setup is missing ${agent} global recipe`);
   }
@@ -162,9 +174,9 @@ export function validateRepositoryContract() {
 }
 
 async function expectedSkillContent(source, tag) {
-  if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", "write-doc", "SKILL.md"), "utf8");
+  if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", "planloft-write-doc", "SKILL.md"), "utf8");
   const ref = source === "latest" ? "main" : tag;
-  const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/write-doc/SKILL.md`);
+  const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/planloft-write-doc/SKILL.md`);
   if (!response.ok) throw new Error(`Unable to fetch expected ${source} skill at ${ref}: HTTP ${response.status}`);
   return response.text();
 }
@@ -268,7 +280,7 @@ function executeSkills(entry, args, context) {
 
 function addArgs(entry, source) {
   return [
-    "add", source, "--skill", "write-doc",
+    "add", source, "--skill", "planloft-write-doc",
     "--agent", entry.agent,
     ...(entry.scope === "global" ? ["--global"] : []),
     ...(entry.method === "copy" ? ["--copy"] : []),
@@ -334,7 +346,7 @@ function assertInstalled(entry, context, expected) {
   assertSkillCliBehavior(entry, context);
 
   const listed = listInstalled(entry, context);
-  assert.deepEqual([...new Set(listed.map(({ name }) => name))], ["write-doc"], `${entry.id}: discovery list mismatch`);
+  assert.deepEqual([...new Set(listed.map(({ name }) => name))], ["planloft-write-doc"], `${entry.id}: discovery list mismatch`);
   assert.equal(listed.length, 1, `${entry.id}: expected exactly one discovered skill`);
 }
 
@@ -342,7 +354,7 @@ function assertRemoved(entry, context) {
   for (const installPath of installationPaths(entry, context)) {
     assert.ok(!fs.existsSync(installPath), `${entry.id}: remove left installer path ${installPath}`);
   }
-  assert.equal(listInstalled(entry, context).filter(({ name }) => name === "write-doc").length, 0, `${entry.id}: remove left the skill discoverable`);
+  assert.equal(listInstalled(entry, context).filter(({ name }) => name === "planloft-write-doc").length, 0, `${entry.id}: remove left the skill discoverable`);
 }
 
 async function runLiveCase(entry, tag, keep) {
@@ -362,14 +374,14 @@ async function runLiveCase(entry, tag, keep) {
 
     const addOutput = executeSkills(entry, addArgs(entry, source), context);
     assert.match(addOutput, /Found 2 skills/, `${entry.id}: source did not discover both shipped skills`);
-    assert.match(addOutput, /write-doc \(copied\)/, `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
+    assert.match(addOutput, /planloft-write-doc \(copied\)/, `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
     assertInstalled(entry, context, expected);
 
-    executeSkills(entry, ["update", "write-doc", entry.scope === "global" ? "--global" : "--project", "--yes"], context);
+    executeSkills(entry, ["update", "planloft-write-doc", entry.scope === "global" ? "--global" : "--project", "--yes"], context);
     assertInstalled(entry, context, expected);
 
     executeSkills(entry, [
-      "remove", "write-doc", "--agent", entry.agent,
+      "remove", "planloft-write-doc", "--agent", entry.agent,
       ...(entry.scope === "global" ? ["--global"] : []), "--yes",
     ], context);
     assertRemoved(entry, context);

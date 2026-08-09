@@ -1,5 +1,5 @@
 ---
-name: write-doc
+name: planloft-write-doc
 description: >-
   Author and persist substantial Planloft documents, then route follow-up rendering,
   storage, preview, copying, or explicit publication through the Planloft CLI. Use when
@@ -10,8 +10,8 @@ description: >-
 # Write a Planloft document
 
 Persist substantial authored documents directly and keep them reviewable without
-conversation history. OpenAI UI metadata labels this skill `planloft:write-doc`; its
-portable skill name and installation selector are `write-doc`.
+conversation history. Codex UI metadata labels this skill `planloft:write-doc`; Claude
+Code and other Agent Skills hosts use the portable name `planloft-write-doc`.
 
 ## Check the prerequisite
 
