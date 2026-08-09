@@ -245,6 +245,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
 
 export const PLUGIN_DEFAULT_PROMPTS = [
   "Save this substantial implementation plan with planloft.",
+  "Use customize-planloft to explain the document pipeline or build a custom theme.",
   "Run planloft help and show me the right operation for this document.",
 ];
 

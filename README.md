@@ -4,8 +4,7 @@
 > shareable documents.
 
 Planloft is a CLI for writing, storing, previewing, and explicitly publishing documents.
-It includes one optional agent skill, `write-plan`, for saving substantial plans from
-Codex or Claude Code.
+It includes optional agent skills for saving substantial plans and customizing Planloft.
 
 ## What it does
 
@@ -47,6 +46,10 @@ npx skills add hatim-s/planloft --skill write-plan -a claude-code
 
 Restart the agent after installation, then run `planloft init`. The skill requires the
 CLI on `PATH`; it does not install the CLI or publish documents.
+
+Planloft also ships `customize-planloft` for explaining the document pipeline and
+building custom themes. Install it with the same command by changing the `--skill`
+value.
 
 For pnpm, Bun, project/global scope, CI, and agent-oriented verification, see
 [Setup](./docs/setup.md). Full Codex or Claude plugin installation is not currently a

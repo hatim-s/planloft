@@ -1,7 +1,8 @@
 # Migrate an existing Planloft installation
 
-Planloft now ships one agent skill, `write-plan`. Follow these steps once for every
-machine or project that used an older Planloft installation.
+Planloft retains `write-plan` for plan authoring and now also ships
+`customize-planloft` for system explanations and theme work. Follow these steps once
+for every machine or project that used an older Planloft installation.
 
 ## 1. Remove the retired skills
 
@@ -48,7 +49,7 @@ planloft --version
 
 Expected: `planloft --version` prints `0.1.0`.
 
-## 3. Install the one remaining skill
+## 3. Install the focused skills
 
 Choose your agent and scope. These examples use npm/npx:
 
@@ -65,7 +66,9 @@ npx skills add hatim-s/planloft --skill write-plan -a claude-code
 What this does: installs the `write-plan` instructions only. A skill-only installation
 does not install the CLI, hooks, themes, schemas, or other plugin assets.
 
-Restart the agent and confirm that `write-plan` is discoverable.
+Install `customize-planloft` independently when the agent should explain Planloft or
+work on themes by replacing `write-plan` in the matching command. Restart the agent and
+confirm that the selected skills are discoverable.
 
 ## 4. Upgrade or remove a full plugin
 
@@ -87,7 +90,7 @@ claude plugin marketplace update planloft
 claude plugin install planloft@planloft --scope user
 ```
 
-Expected: the host lists one Planloft plugin and one `write-plan` skill after restart.
+Expected: the host lists one Planloft plugin and both focused skills after restart.
 
 ## 5. Replace removed commands
 

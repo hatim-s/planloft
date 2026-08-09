@@ -1,0 +1,64 @@
+/* planloft theme starter */
+/* planloft-color-schemes: light dark */
+:root {
+  color-scheme: light dark;
+  --pl-ink: #1c2024;
+  --pl-muted: #606974;
+  --pl-paper: #ffffff;
+  --pl-surface: #f4f6f8;
+  --pl-rule: #d9dee4;
+  --pl-accent: #235ea7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --pl-ink: #edf0f3;
+    --pl-muted: #abb4bf;
+    --pl-paper: #121519;
+    --pl-surface: #1d2228;
+    --pl-rule: #39414a;
+    --pl-accent: #8ec5ff;
+  }
+}
+
+:root[data-planloft-color-scheme="light"] {
+  --pl-ink: #1c2024;
+  --pl-muted: #606974;
+  --pl-paper: #ffffff;
+  --pl-surface: #f4f6f8;
+  --pl-rule: #d9dee4;
+  --pl-accent: #235ea7;
+}
+
+:root[data-planloft-color-scheme="dark"] {
+  --pl-ink: #edf0f3;
+  --pl-muted: #abb4bf;
+  --pl-paper: #121519;
+  --pl-surface: #1d2228;
+  --pl-rule: #39414a;
+  --pl-accent: #8ec5ff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--pl-paper);
+  color: var(--pl-ink);
+  font: 16px/1.65 system-ui, sans-serif;
+}
+.planloft-plan {
+  width: min(100% - 2rem, 52rem);
+  margin-inline: auto;
+  padding-block: 4rem 6rem;
+}
+h1, h2, h3 { line-height: 1.2; }
+h2 { margin-top: 2.25rem; padding-top: 1rem; border-top: 1px solid var(--pl-rule); }
+a { color: var(--pl-accent); text-underline-offset: 0.15em; }
+a:focus-visible { outline: 2px solid var(--pl-accent); outline-offset: 3px; }
+code { padding: 0.1em 0.3em; border-radius: 0.25rem; background: var(--pl-surface); }
+pre { overflow-x: auto; padding: 1rem; border-radius: 0.5rem; background: var(--pl-surface); }
+pre code { padding: 0; background: transparent; }
+blockquote { margin-inline: 0; padding-left: 1rem; border-left: 3px solid var(--pl-accent); color: var(--pl-muted); }
+table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--pl-rule); text-align: left; }
+hr { border: 0; border-top: 1px solid var(--pl-rule); }

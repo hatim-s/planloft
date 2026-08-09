@@ -1,8 +1,8 @@
 # Set up Planloft
 
-Planloft setup has one command: `planloft init`. Installation puts the CLI and,
-optionally, the `write-plan` skill in place; initialization creates or validates local
-configuration and reports whether GitHub publication is ready.
+Planloft setup has one command: `planloft init`. Installation puts the CLI and any
+selected agent skills in place; initialization creates or validates local configuration
+and reports whether GitHub publication is ready.
 
 ## Humans
 
@@ -44,6 +44,10 @@ scope only when every project for that agent should discover the skill.
 With pnpm, replace `npx skills` with `pnpm dlx skills`. With Bun, replace it with
 `bunx skills`. Restart the target agent after installation so it reloads skill
 discovery.
+
+Planloft also ships `customize-planloft` for questions about the document pipeline and
+for custom-theme work. Install it independently by replacing `write-plan` with
+`customize-planloft` in the matching command above.
 
 An agent setting up an already installed environment only needs to run:
 

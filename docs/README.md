@@ -94,5 +94,6 @@ node scripts/validate-packed-plugin.mjs /path/to/planloft-0.1.0.tgz
 The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It compares the
 installed tagged skill byte-for-byte with the tag's raw `SKILL.md`; it does not infer a
 skill pin from the npm version. After the suite passes, start fresh Codex and Claude
-sessions and confirm `write-plan` is visible. Agent discovery has no stable noninteractive
-cross-host command, so that reload check remains a manual release assertion.
+sessions and confirm `write-plan` and `customize-planloft` are visible. Agent discovery
+has no stable noninteractive cross-host command, so that reload check remains a manual
+release assertion.

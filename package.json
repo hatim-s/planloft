@@ -1,7 +1,7 @@
 {
   "name": "planloft",
   "version": "0.1.0",
-  "description": "Agent-native document compiler with one plan-writing skill, deep CLI help, and light/dark themed output.",
+  "description": "Agent-native document compiler with focused authoring and customization skills, deep CLI help, and light/dark themed output.",
   "packageManager": "pnpm@10.8.1",
   "type": "module",
   "license": "MIT",

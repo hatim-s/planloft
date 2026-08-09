@@ -27,7 +27,7 @@ const EXPECTED_CONTRACT_CASES = [
   "TTL help contract is enforced by the CLI parser",
   "publication privacy disclosure is snapshot-stable and present in both publishing commands",
   "README, write-plan, and plugin metadata are projections of command knowledge",
-  "distribution exposes one semantic skill and no retired wrappers",
+  "distribution exposes focused semantic skills and no retired wrappers",
 ] as const;
 const registeredContractCases: string[] = [];
 
@@ -237,12 +237,12 @@ contractTest("README, write-plan, and plugin metadata are projections of command
   assert.deepEqual(plugin.interface.defaultPrompt, PLUGIN_DEFAULT_PROMPTS);
 });
 
-contractTest("distribution exposes one semantic skill and no retired wrappers", () => {
+contractTest("distribution exposes focused semantic skills and no retired wrappers", () => {
   const skills = fs
     .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  assert.deepEqual(skills, ["write-plan"]);
+  assert.deepEqual(skills.sort(), ["customize-planloft", "write-plan"]);
   const commandsDir = path.join(ROOT, "commands");
   if (fs.existsSync(commandsDir)) assert.deepEqual(fs.readdirSync(commandsDir), []);
 
@@ -254,6 +254,8 @@ contractTest("distribution exposes one semantic skill and no retired wrappers", 
     "hooks/hooks.json",
     "skills/write-plan/SKILL.md",
     "skills/write-plan/agents/openai.yaml",
+    "skills/customize-planloft/SKILL.md",
+    "skills/customize-planloft/agents/openai.yaml",
     "src/application.ts",
     "src/program.ts",
   ];
@@ -264,6 +266,7 @@ contractTest("distribution exposes one semantic skill and no retired wrappers", 
     assert.doesNotMatch(shippedText, new RegExp(retired));
   }
   assert.match(shippedText, /write-plan/);
+  assert.match(shippedText, /customize-planloft/);
 });
 
 test("command knowledge meta-guard registers every expected named case", () => {

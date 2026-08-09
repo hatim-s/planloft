@@ -27,6 +27,9 @@ try {
     path.join(pluginRoot, "hooks", "hooks.json"),
     path.join(pluginRoot, ".codex-plugin", "plugin.json"),
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    path.join(pluginRoot, "skills", "customize-planloft", "SKILL.md"),
+    path.join(pluginRoot, "skills", "customize-planloft", "references", "themes.md"),
+    path.join(pluginRoot, "skills", "customize-planloft", "assets", "theme-starter", "style.css"),
   ]) assert.ok(fs.existsSync(required), `packed plugin is missing ${path.relative(pluginRoot, required)}`);
   assert.ok(fs.statSync(bridge).mode & 0o111, "packed bin/planloft is not executable");
   assert.ok(fs.statSync(resolver).mode & 0o111, "packed skill resolver is not executable");
@@ -74,7 +77,7 @@ try {
   assert.equal(command.status, 0, command.stderr);
   assert.ok(command.stdout.includes(planloftHome), "packed bridge resolve did not use the disposable Planloft home");
 
-  console.log("packed plugin: bridge, skill resolver, hooks, and both manifests PASS");
+  console.log("packed plugin: bridge, focused skills, hooks, and both manifests PASS");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

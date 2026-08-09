@@ -2,6 +2,7 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-08
+- **Amended by**: ADR-0015 installation inventory
 - **Amends**: ADR-0001 D1 and D23, ADR-0008 G6
 
 ## Context

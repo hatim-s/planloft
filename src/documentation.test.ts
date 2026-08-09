@@ -49,17 +49,18 @@ test("write-plan permanently requires two-theme documents with top-toggle and sy
   assert.match(skill, /Never deploy unless the user explicitly requests publication/);
 });
 
-test("consumer surfaces expose exactly one skill and no retired aliases", () => {
+test("consumer surfaces expose the focused skills and no retired aliases", () => {
   const skillDirectories = fs
     .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  assert.deepEqual(skillDirectories, ["write-plan"]);
+  assert.deepEqual(skillDirectories.sort(), ["customize-planloft", "write-plan"]);
 
   const commands = path.join(ROOT, "commands");
   assert.ok(!fs.existsSync(commands) || fs.readdirSync(commands).length === 0);
   const consumerText = [
     "README.md",
+    "skills/customize-planloft/SKILL.md",
     "skills/write-plan/SKILL.md",
     ".codex-plugin/plugin.json",
     ".claude-plugin/plugin.json",

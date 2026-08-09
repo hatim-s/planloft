@@ -89,7 +89,13 @@ export function validateRepositoryContract() {
   const discovered = fs.readdirSync(skillRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(skillRoot, entry.name, "SKILL.md")))
     .map((entry) => entry.name);
-  assert.deepEqual(discovered, ["write-plan"]);
+  assert.deepEqual(discovered.sort(), ["customize-planloft", "write-plan"]);
+
+  const customizationSkill = fs.readFileSync(path.join(skillRoot, "customize-planloft", "SKILL.md"), "utf8");
+  assert.match(customizationSkill, /^name:\s*customize-planloft$/m);
+  assert.match(customizationSkill, /references\/how-planloft-works\.md/);
+  assert.match(customizationSkill, /references\/themes\.md/);
+  assert.match(customizationSkill, /assets\/theme-starter/);
 
   const skillPath = path.join(skillRoot, "write-plan");
   const skill = fs.readFileSync(path.join(skillPath, "SKILL.md"), "utf8");
@@ -389,7 +395,7 @@ async function runLiveCase(entry, tag, keep) {
     }
 
     const addOutput = executeSkills(entry, addArgs(entry, source), context);
-    assert.match(addOutput, /Found 1 skill/, `${entry.id}: source did not discover exactly one skill`);
+    assert.match(addOutput, /Found 2 skills/, `${entry.id}: source did not discover both shipped skills`);
     assert.match(addOutput, /write-plan \(copied\)/, `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
     assertInstalled(entry, context, expected);
 

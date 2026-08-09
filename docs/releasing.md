@@ -80,7 +80,8 @@ validates the packed plugin, and asks npm to simulate publication.
 Expected:
 
 - npm creates `planloft-0.1.0.tgz`.
-- The package contains 29 entries and only one skill: `skills/write-plan`.
+- The package contains 36 entries, including the focused `skills/write-plan` and
+  `skills/customize-planloft` directories.
 - The packed-plugin validator passes.
 - The dry run ends with `+ planloft@0.1.0` without publishing anything.
 
@@ -142,7 +143,8 @@ What this does: installs from the real npm package and Git tag instead of the lo
 checkout.
 
 Expected: the full release installation matrix passes. Then start fresh Codex and
-Claude sessions and confirm that `write-plan` is visible in each host you support.
+Claude sessions and confirm that `write-plan` and `customize-planloft` are visible in
+each host you support.
 
 ## 7. Clean up
 

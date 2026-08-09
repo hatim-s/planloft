@@ -2,6 +2,7 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-08
+- **Amended by**: ADR-0015 G1 and G6
 - **Supersedes**: ADR-0002 §E4 and ADR-0004's five-skill surface
 - **Amends**: ADR-0001 §D1, §D9, §D16, and §D23
 

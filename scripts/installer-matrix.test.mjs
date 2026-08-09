@@ -71,7 +71,7 @@ test("agent hook and plugin configuration probes stay inside disposable roots", 
 test("repository satisfies the Phase 3 installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
     cases: 96,
-    skills: ["write-plan"],
+    skills: ["customize-planloft", "write-plan"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });
 });
