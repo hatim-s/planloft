@@ -1,50 +1,75 @@
-# Planloft installation migration
+# Migrate an existing Planloft installation
 
-Planloft now has one semantic skill: `write-plan`. The removed skill names are
-`save-doc`, `planloft-preview`, `planloft-copy`, and `planloft-deploy`. Preview, copy,
-deploy, and non-plan storage remain CLI operations. There are no discoverable
-compatibility stubs or deprecated aliases for the removed surface.
+Planloft now ships one agent skill, `write-plan`. Follow these steps once for every
+machine or project that used an older Planloft installation.
 
-## Remove stale standalone skills
+## 1. Remove the retired skills
 
-Run these commands from the project whose installation you are cleaning. Project scope
-is the default; add `-g` for global scope. Pick the target explicitly with `-a codex` or
-`-a claude-code`. The same removal commands handle installer-managed symlinks and
-`--copy` installs.
+The retired skill names are `save-doc`, `planloft-preview`, `planloft-copy`, and
+`planloft-deploy`.
+
+For project-scoped installs:
 
 ```bash
 npx skills remove save-doc planloft-preview planloft-copy planloft-deploy -a codex -y
 npx skills remove save-doc planloft-preview planloft-copy planloft-deploy -a claude-code -y
+```
 
-# Repeat for user-global copies when applicable:
+For global installs, add `-g`:
+
+```bash
 npx skills remove save-doc planloft-preview planloft-copy planloft-deploy -g -a codex -y
 npx skills remove save-doc planloft-preview planloft-copy planloft-deploy -g -a claude-code -y
 ```
 
-Then install the CLI and the remaining skill using one paired recipe from the README.
-Use `pnpm dlx skills` or `bunx skills` in place of `npx skills` if that is how the old
-installation was managed.
+What this does: removes installer-managed symlinks and `--copy` installs. If you used
+pnpm or Bun originally, substitute `pnpm dlx skills` or `bunx skills` for `npx skills`.
 
-## Manual standalone cleanup
-
-Only use manual cleanup after `skills remove` cannot locate a stale installation. Remove
-the four retired directory names, never the parent skills directory and never
-`write-plan`:
+If the installer cannot find an old copy, remove only the retired-name directories:
 
 | Scope | Codex/universal paths | Claude Code path |
 |---|---|---|
-| Project | `.agents/skills/<retired-name>` and legacy `.codex/skills/<retired-name>` | `.claude/skills/<retired-name>` |
-| Global | `~/.agents/skills/<retired-name>` and legacy `~/.codex/skills/<retired-name>` | `~/.claude/skills/<retired-name>` |
+| Project | `.agents/skills/<retired-name>` or `.codex/skills/<retired-name>` | `.claude/skills/<retired-name>` |
+| Global | `~/.agents/skills/<retired-name>` or `~/.codex/skills/<retired-name>` | `~/.claude/skills/<retired-name>` |
 
-Inspect `skills-lock.json` in the project and any installer lockfile beside a global
-canonical skill directory. Prefer a fresh `skills add` after cleanup so the external
-installer rewrites its own metadata; do not hand-edit lockfiles unless the installer is
-already unable to repair them.
+Do not delete the parent skills directory or `write-plan`.
 
-## Upgrade or remove a full plugin
+## 2. Upgrade the CLI
 
-Standalone skill cleanup does not uninstall a plugin. A full plugin has its own cache,
-enabled state, hooks, metadata, and npm runtime.
+Choose the package manager you use:
+
+```bash
+npm install -g planloft@0.1.0
+# or: pnpm add -g planloft@0.1.0
+# or: bun add -g planloft@0.1.0
+
+planloft --version
+```
+
+Expected: `planloft --version` prints `0.1.0`.
+
+## 3. Install the one remaining skill
+
+Choose your agent and scope. These examples use npm/npx:
+
+```bash
+# Codex, current project
+npx skills add hatim-s/planloft --skill write-plan -a codex
+
+# Claude Code, current project
+npx skills add hatim-s/planloft --skill write-plan -a claude-code
+
+# Add -g for a global installation.
+```
+
+What this does: installs the `write-plan` instructions only. A skill-only installation
+does not install the CLI, hooks, themes, schemas, or other plugin assets.
+
+Restart the agent and confirm that `write-plan` is discoverable.
+
+## 4. Upgrade or remove a full plugin
+
+Skip this step if you only installed the CLI and skill.
 
 For Codex:
 
@@ -62,67 +87,72 @@ claude plugin marketplace update planloft
 claude plugin install planloft@planloft --scope user
 ```
 
-Use `--scope project` or `--scope local` for the matching Claude installation. If an
-old manually loaded plugin is not registered, remove only its Planloft plugin directory
-and Planloft marketplace entry from the relevant repo/user configuration, then restart
-the agent. Do not delete a shared plugin cache or marketplace catalog wholesale.
+Expected: the host lists one Planloft plugin and one `write-plan` skill after restart.
 
-## Behavior migrations
+## 5. Replace removed commands
 
-### Skills, slash aliases, and CLI replacements
+Remove the old Claude aliases `/planloft-preview`, `/planloft-copy`, and
+`/planloft-deploy`. Use the CLI directly:
 
-- Remove the skills `save-doc`, `planloft-preview`, `planloft-copy`, and
-  `planloft-deploy`; do not recreate them as wrappers or compatibility shims.
-- Remove the Claude slash aliases `/planloft-preview`, `/planloft-copy`, and
-  `/planloft-deploy`.
-- Use `write-plan` for substantial agent-authored plans. Use explicit
-  `planloft hoist <input>` for other existing Markdown, JSON, or trusted HTML sources.
-- Replace the removed preview/copy/deploy skills and slash aliases with
-  `planloft preview [slug]`, `planloft copy [slug]`, and `planloft deploy [slug]`.
-- Install the CLI separately before a skill-only install. Installing `write-plan` alone
-  does not install an executable, hook, theme, schema, or runtime asset.
+| Old behavior | Replacement |
+|---|---|
+| Save an agent-authored plan | `write-plan` |
+| Store another existing file | `planloft hoist <input>` |
+| Preview | `planloft preview [slug]` |
+| Copy | `planloft copy [slug]` |
+| Deploy | `planloft deploy [slug]` |
 
-### Markdown-only plan authoring
+The retired skills and aliases were removed without wrappers. Update scripts and agent
+instructions to use these commands instead of recreating compatibility shims.
 
-Agent write-direct plan capture is Markdown-only. Remove `planFormat` from
-`~/.planloft/config.json`; `planFormat: "html"` now produces a migration diagnostic
-rather than an HTML compatibility path. Keep authored Markdown presentation-neutral
-and let the renderer supply the top theme toggle plus browser/system light-dark
-preference. Existing explicitly trusted HTML input and already indexed legacy HTML can
-still be rendered or deployed; this is not permission for agents to author new HTML
-plans.
+## 6. Update the configuration
 
-### Strict configuration and TTL
+Open `~/.planloft/config.json` and remove `planFormat`. New agent-authored plans are
+Markdown-only; `planFormat: "html"` is rejected. Explicitly trusted HTML and already
+indexed legacy HTML can still be rendered or deployed.
 
-Configuration is a strict version-1 document. Malformed JSON, inaccessible files,
-unsupported versions, unknown properties, invalid theme names or directories, and
-invalid nested values fail with stable diagnostics instead of silently using defaults.
-Defaults apply only when `config.json` is absent. `planloft config` validates the file
-again after the editor closes.
+Then validate the strict version-1 configuration:
 
-TTL values from `--ttl` and `config.defaultTtlDays` must be finite positive integers no
-greater than the schema/runtime maximum. Zero no longer means permanent, and the
-configured default is used only when `--ttl` is omitted.
+```bash
+EDITOR="${EDITOR:-nano}" planloft config
+```
 
-### Publication privacy and comments
+Fix any reported unknown fields, invalid theme paths, or invalid values. Defaults are
+used only when the configuration file is absent.
 
-Do not describe a Planloft deployment as private or secret. The URL path is hard to
-guess and marked `noindex`, but the backing GitHub repository is public. Repository
-visitors can enumerate document folders and manifest metadata. Keep sensitive plans
-local.
+TTL values in `--ttl` and `defaultTtlDays` must be finite positive integers. Zero is no
+longer a permanent-deployment value.
 
-Comments remain off by default. Before `--comments`, enable GitHub Discussions, install
-or enable the giscus GitHub App for the selected public repository, select a supported
-Discussion category, and configure all four effective fields: `giscus.repo`,
-`giscus.repoId`, `giscus.category`, and `giscus.categoryId`. Planloft validates them
-before rendering or Git operations.
+## 7. Review publication settings
 
-### Public Node interface
+Planloft deployments use a public GitHub repository. `noindex` discourages search
+indexing, but it does not make a plan private. Keep sensitive plans local.
 
-Node callers that need complete CLI-equivalent operations should move to the async
-`createPlanloftApplication()` interface and consume its structured results and
-`PlanloftApplicationError` categories/codes instead of parsing terminal output.
-`ingestDocument`, `hoistDocument`, and `renderDocument` remain supported focused
-package-root exports. Historical `src/commands/*` modules were never public exports and
-were removed without wrappers; update direct internal imports rather than adding
-backward-compatibility shims.
+Comments are off by default. To use them, enable GitHub Discussions and giscus for the
+public repository, then configure all four values:
+
+- `giscus.repo`
+- `giscus.repoId`
+- `giscus.category`
+- `giscus.categoryId`
+
+## 8. Update Node callers, if any
+
+Applications that need the complete CLI-equivalent interface should use the async
+`createPlanloftApplication()` API and handle `PlanloftApplicationError` codes.
+
+The focused package-root exports `ingestDocument`, `hoistDocument`, and
+`renderDocument` remain available. Direct imports from the old `src/commands/*`
+implementation must be replaced rather than adding backward-compatibility shims.
+
+## 9. Verify the migration
+
+```bash
+planloft --version
+planloft init
+planloft list
+```
+
+Expected: the version is `0.1.0`, configuration validation succeeds, and existing
+documents are listed. Finally, create a small test plan with `write-plan` and preview it
+with `planloft preview [slug]`.
