@@ -36,7 +36,24 @@ If the installer cannot find an old copy, remove only the retired-name directori
 
 Do not delete the parent skills directory or the new `write-doc` and `customize` skills.
 
-## 2. Upgrade the CLI
+## 2. Remove a retired host installation
+
+Older Planloft releases could be installed as a Codex or Claude host bundle. Planloft
+0.2.1 no longer ships that product. If you used it, remove it before restarting the
+host so the retired skills and automatic lifecycle behavior do not remain active:
+
+```bash
+# Codex
+codex plugin remove planloft
+
+# Claude Code
+claude plugin uninstall planloft@planloft
+```
+
+Expected: the host no longer lists a Planloft plugin. There is no replacement host
+bundle in 0.2.1; install the CLI and focused portable skills in the next steps.
+
+## 3. Upgrade the CLI
 
 Choose the package manager you use:
 
@@ -50,7 +67,7 @@ planloft --version
 
 Expected: `planloft --version` prints `0.2.1`.
 
-## 3. Install the focused skills
+## 4. Install the focused skills
 
 Choose your agent and scope. These examples use npm/npx:
 
@@ -71,7 +88,7 @@ Install `customize` independently when the agent should explain Planloft or work
 themes by replacing `write-doc` in the matching command. Restart the agent and
 confirm that the selected skills are discoverable.
 
-## 4. Replace removed commands
+## 5. Replace removed commands
 
 Remove the old Claude aliases `/planloft-preview`, `/planloft-copy`, and
 `/planloft-deploy`. Use the CLI directly:
@@ -87,7 +104,7 @@ Remove the old Claude aliases `/planloft-preview`, `/planloft-copy`, and
 The retired skills and aliases were removed without wrappers. Update scripts and agent
 instructions to use these commands instead of recreating compatibility shims.
 
-## 5. Update the configuration
+## 6. Update the configuration
 
 Open `~/.planloft/config.json` and remove `planFormat`. New agent-authored plans are
 Markdown-only; `planFormat: "html"` is rejected. Explicitly trusted HTML and already
@@ -105,7 +122,7 @@ used only when the configuration file is absent.
 TTL values in `--ttl` and `defaultTtlDays` must be finite positive integers. Zero is no
 longer a permanent-deployment value.
 
-## 6. Review publication settings
+## 7. Review publication settings
 
 Planloft deployments use a public GitHub repository. `noindex` discourages search
 indexing, but it does not make a plan private. Keep sensitive plans local.
@@ -118,7 +135,7 @@ public repository, then configure all four values:
 - `giscus.category`
 - `giscus.categoryId`
 
-## 7. Update Node callers, if any
+## 8. Update Node callers, if any
 
 Applications that need the complete CLI-equivalent interface should use the async
 `createPlanloftApplication()` API and handle `PlanloftApplicationError` codes.
@@ -127,7 +144,7 @@ The focused package-root exports `ingestDocument`, `hoistDocument`, and
 `renderDocument` remain available. Direct imports from the old `src/commands/*`
 implementation must be replaced rather than adding backward-compatibility shims.
 
-## 8. Verify the migration
+## 9. Verify the migration
 
 ```bash
 planloft --version

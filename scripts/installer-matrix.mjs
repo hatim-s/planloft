@@ -153,6 +153,9 @@ export function validateRepositoryContract() {
   for (const retired of RETIRED_SKILLS) assert.ok(migration.includes(retired));
   for (const scope of ["Project", "Global"]) assert.ok(migration.includes(`| ${scope} |`));
   assert.match(migration, /installer-managed symlinks and\s+`--copy` installs/);
+  assert.match(migration, /codex plugin remove planloft/);
+  assert.match(migration, /claude plugin uninstall planloft@planloft/);
+  assert.doesNotMatch(migration, /plugin (?:marketplace|add|install) planloft/);
 
   return { cases: matrix.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
 }

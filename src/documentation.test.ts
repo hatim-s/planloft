@@ -72,6 +72,9 @@ test("consumer surfaces expose the focused skills and no retired aliases", () =>
 
 test("migration guide names every breaking installation and runtime contract", () => {
   const migration = read("docs/installation-migration.md");
+  assert.match(migration, /codex plugin remove planloft/);
+  assert.match(migration, /claude plugin uninstall planloft@planloft/);
+  assert.doesNotMatch(migration, /plugin (?:marketplace|add|install) planloft/);
   for (const retired of ["write-plan", "customize-planloft", "save-doc", "planloft-preview", "planloft-copy", "planloft-deploy"]) {
     assert.match(migration, new RegExp(`(?:skill|skills|names).*${retired}`, "s"));
   }
