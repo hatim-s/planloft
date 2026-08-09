@@ -1,4 +1,4 @@
-# Authoring guidance
+# Planloft authoring guidance
 
 Author clear, renderer-neutral Markdown. Never hand-author generated HTML or
 presentation markup.

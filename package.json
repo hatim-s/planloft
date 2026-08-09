@@ -1,6 +1,6 @@
 {
   "name": "planloft",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agent-native document compiler with focused authoring and customization skills, deep CLI help, and light/dark themed output.",
   "packageManager": "pnpm@10.8.1",
   "type": "module",
@@ -27,15 +27,10 @@
   },
   "files": [
     "dist",
-    "bin",
     "skills",
-    "hooks",
     "themes",
     "schemas",
-    "templates",
-    ".agents",
-    ".codex-plugin",
-    ".claude-plugin"
+    "templates"
   ],
   "scripts": {
     "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",

@@ -10,32 +10,28 @@
 
 ## Summary
 
-planloft is a Claude Code **plugin + bundled CLI** that hoists agent-written plans into
-a global, per-project store (`~/.planloft/`), applies a configurable theme (look *and*
-feel), and publishes single plans as shareable, auto-expiring review links. The default
-host is **GitHub Pages** (free, TTL'd); **Vercel** is an opt-in permanent host.
+planloft is a **CLI with portable agent skills** that hoists agent-written plans into a
+global, per-project store (`~/.planloft/`), applies a configurable theme (look *and*
+feel), and publishes single plans as shareable, auto-expiring review links. The active
+host is GitHub Pages.
 
 ---
 
 ## Decision log
 
-### D1 — Form factor: plugin + bundled CLI
-**Decision.** Ship as a Claude Code plugin (marketplace) that auto-wires the skill,
-hook, and slash commands, AND bundles a Node CLI (`planloft`) for hoist/copy/render/
-deploy. Distribute via both the plugin marketplace and npm.
-**Consequences.** One install wires everything; the same logic is callable from the
-terminal. Two distribution channels to maintain.
-**Rejected.** Pure npm CLI (manual skill install); plugin-only (no reusable CLI).
+### D1 — Form factor: CLI plus portable skills
+> **Superseded by [ADR-0012](./0012-installation-products-and-external-installer.md).**
 
-### D2 — Capture model: write-direct + hook normalize
+**Decision.** Distribute the Node CLI through npm and focused skills through the
+external skills installer. Skills require the CLI separately when they execute Planloft.
+
+### D2 — Capture model: resolved write-direct
 **Decision.** The skill gives the agent the resolved global path; the agent writes the
-plan straight into `~/.planloft/plans/<project>/`. A `PostToolUse` hook then normalizes
-it (injects frontmatter, updates the index). The global store is canonical; the repo
-stays clean.
+plan straight into `~/.planloft/plans/<project>/` with complete frontmatter. The global
+store is canonical; the repo stays clean.
 **Consequences.** Repo is untouched by default; copy-to-repo is a separate explicit
 action. Requires reliable project-key resolution at write time.
-**Rejected.** Write-local-then-hoist (makes copy-to-repo redundant); hook-captures-
-ExitPlanMode-text (harder to apply rich theming at write time).
+**Rejected.** Write-local-then-hoist (makes copy-to-repo redundant).
 
 ### D3 — Global home: `~/.planloft/`
 **Decision.** The store lives at `~/.planloft/`, **not** under `~/.claude/`.
@@ -65,14 +61,10 @@ versioning can be added later without migration.
 **Consequences.** No clutter now; revision history is lost until versioning ships.
 **Rejected.** Timestamped immutable history (deferred, not rejected); numbered sequence.
 
-### D6 — Skill trigger: auto on plan, hook backstop
+### D6 — Skill trigger: semantic authoring
 **Decision.** The skill description is tuned to fire whenever the agent produces a
-substantial plan (especially on exiting plan mode). A hook on `ExitPlanMode` backstops:
-if no plan file was written, it nudges/ensures the write.
-**Consequences.** Truly batteries-included; zero user effort. Relies partly on agent
-judgment for "substantial", backstopped deterministically.
-**Rejected.** Explicit command/phrase only (less automatic); hook-forced on every
-ExitPlanMode (saves throwaway plans, no judgment).
+substantial plan or document worth retaining. It relies on agent judgment for
+"substantial" and never writes without the skill workflow.
 
 ### D7 — Theme = authoring template + visual skin
 **Decision.** A theme bundles (a) an **authoring template** + writing guidance injected
@@ -141,12 +133,9 @@ URL: `user.github.io/planloft-plans/p/<shortid>/`.
 **Rejected.** One repo per plan (spams repo list, per-repo Action overhead);
 `user.github.io` root repo (collides with an existing personal site).
 
-### D16 — Control surface: slash commands + CLI (v1); dashboard (v2)
-**Decision.** v1 "1-click" = Claude Code slash commands with no required args
-(`/planloft-copy`, `/planloft-deploy`, `/planloft-preview`) that infer the current
-project + latest plan, backed by the CLI. A local web dashboard (`planloft ui`) is
-deferred to v2.
-**Rejected.** Dashboard in v1 (large scope up front).
+### D16 — Control surface: CLI; dashboard deferred
+**Decision.** The CLI is the operational control surface. A local web dashboard
+(`planloft ui`) is deferred.
 
 ### D17 — Copy-to-repo: raw source → `./.planloft/plans/`
 **Decision.** `/planloft-copy` copies the **raw** plan source (`.md`/`.html` per
@@ -191,17 +180,15 @@ warn-and-confirm each deploy (friction).
 **Decision.** The CLI is Node + TypeScript (mandated by the Astro renderer, npm
 distribution, and `gh`/`vercel` CLI interop). Not treated as an open question.
 
-### D23 — Onboarding: zero-config, lazy prompts
-**Decision.** The plugin works immediately on install (skill + hook active). Defaults
-(`theme=minimal`, `planFormat=md`, `defaultTtlDays=30`) are written to `config.json` on
-the first captured plan. Connect flows (`gh`/`vercel`) prompt only on the first deploy.
-`planloft init` exists but is **optional** (opens config for editing).
+### D23 — Onboarding: explicit CLI install, lazy prompts
+**Decision.** Install the CLI, optionally install focused skills, and run
+`planloft init`. Connect flows prompt only when an explicit publication needs them.
 **Rejected.** Explicit `init` required (gate before value); install-time wizard
 (interrupts install, pre-value decisions).
 
 ### D24 — Local CLI verb set
 **Decision.** v1 ships `list`, `preview <slug>` (local Astro build + open in browser),
-`copy`, `deploy`, `rm <slug>`, `config`, `init`. Slash commands wrap copy/deploy/preview.
+`copy`, `deploy`, `rm <slug>`, `config`, `init`.
 **Rejected.** Minimal list+deploy only (no local theme preview); filesystem+editor only
 (poor discoverability).
 
@@ -236,7 +223,7 @@ consideration for portability (harder retrofit).
    lazy-install per platform.
 2. **Public GitHub repo (D21).** Unguessable *page* ids do not hide the fact that the
    `planloft-plans` repo is public and browsable on github.com. Privacy is obscurity.
-3. **Auto-capture noise (D6).** Throwaway plans may be persisted. Mitigated by the
+3. **Capture noise (D6).** Throwaway plans may be persisted. Mitigated by the
    "substantial plan" judgment and slug overwrite (D5).
 4. **`gh`/`vercel` CLI dependency (D12/D13).** The smooth path needs these CLIs; the
    PAT/token fallback covers users without them.
@@ -244,7 +231,7 @@ consideration for portability (harder retrofit).
 ## Deferred (non-blocking, implementation-time)
 
 - Exact `index.json` and frontmatter schemas.
-- Exact `SKILL.md` wording and hook matcher details.
+- Exact `SKILL.md` wording.
 - Astro per-deploy `base` path handling and `noindex` injection.
 - giscus category/repo wiring specifics.
 - The pruning GitHub Action YAML.

@@ -1,17 +1,19 @@
 ---
-name: customize-planloft
+name: customize
 description: >-
   Explain Planloft's document pipeline, storage, theme resolution, and publication
   boundaries, or create, modify, validate, and troubleshoot a Planloft custom theme.
   Use when the user asks how Planloft works, wants a new visual or authoring theme,
   needs theme configuration help, or reports a theme asset or layout error. Do not use
-  for ordinary plan authoring; use write-plan for that.
+  for ordinary document authoring; use write-doc for that.
 ---
 
 # Customize Planloft
 
-Ground explanations and theme changes in Planloft's actual contracts. Keep plan
-authoring in `write-plan` and one-step document operations in the CLI.
+Ground explanations and theme changes in Planloft's actual contracts. OpenAI UI metadata
+labels this skill `planloft:customize`; its portable skill name and installation
+selector are `customize`. Keep document authoring in `write-doc` and one-step document
+operations in the CLI.
 
 ## Choose the workflow
 
@@ -35,7 +37,7 @@ planloft init
 ```
 
 `planloft init` is local and idempotent. If the executable is missing, stop with the
-CLI installation requirement. Do not substitute plugin installation.
+CLI installation requirement.
 
 ## Create or change a theme
 

@@ -31,29 +31,29 @@ planloft init
 `planloft init` creates the default configuration if needed, keeps an existing valid
 configuration unchanged, and reports GitHub readiness. It does not publish anything.
 
-### CLI plus `write-plan`
+### CLI plus `write-doc`
 
 Install the CLI above, then install the skill for the agent that should write Planloft
 plans:
 
 ```bash
 # Codex
-npx skills add hatim-s/planloft --skill write-plan -a codex
+npx skills add hatim-s/planloft --skill write-doc -a codex
 
 # Claude Code
-npx skills add hatim-s/planloft --skill write-plan -a claude-code
+npx skills add hatim-s/planloft --skill write-doc -a claude-code
 ```
 
 Restart the agent after installation, then run `planloft init`. The skill requires the
 CLI on `PATH`; it does not install the CLI or publish documents.
 
-Planloft also ships `customize-planloft` for explaining the document pipeline and
-building custom themes. Install it with the same command by changing the `--skill`
-value.
+Planloft also ships `customize` for explaining the document pipeline and building
+custom themes. OpenAI UI metadata labels the two skills `planloft:write-doc` and
+`planloft:customize`; installation and other hosts use the portable `write-doc` and
+`customize` names shown by the installer.
 
 For pnpm, Bun, project/global scope, CI, and agent-oriented verification, see
-[Setup](./docs/setup.md). Full Codex or Claude plugin installation is not currently a
-supported setup path.
+[Setup](./docs/setup.md).
 
 ## Quick start
 

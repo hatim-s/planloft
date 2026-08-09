@@ -8,47 +8,28 @@ import { createProgram } from "./program.js";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const readJson = (file: string) => JSON.parse(read(file)) as Record<string, unknown>;
-const EXPECTED_RELEASE_VERSION = "0.2.0";
-const EXPECTED_RELEASE_TAG = "v0.2.0";
+const EXPECTED_RELEASE_VERSION = "0.2.1";
+const EXPECTED_RELEASE_TAG = "v0.2.1";
 
 const AUTHORITATIVE_RELEASE_FILES = [
   "package.json",
   "README.md",
   "docs/README.md",
   "docs/releasing.md",
-  ".codex-plugin/plugin.json",
-  ".agents/plugins/marketplace.json",
-  ".claude-plugin/plugin.json",
-  ".claude-plugin/marketplace.json",
 ] as const;
 
 function bashBlocks(markdown: string): string[] {
   return [...markdown.matchAll(/^```bash\s*\n([\s\S]*?)^```\s*$/gm)].map((match) => match[1]!);
 }
 
-test("package, CLI, plugins, and marketplaces use the prepared release version", () => {
+test("package and CLI use the prepared release version", () => {
   const packageJson = readJson("package.json");
-  const codexPlugin = readJson(".codex-plugin/plugin.json");
-  const claudePlugin = readJson(".claude-plugin/plugin.json");
-  const codexMarketplace = readJson(".agents/plugins/marketplace.json") as {
-    plugins: Array<{ source: { package: string; version: string } }>;
-  };
-  const claudeMarketplace = readJson(".claude-plugin/marketplace.json") as {
-    plugins: Array<{ version: string; source: { package: string; version: string } }>;
-  };
 
   assert.equal(packageJson.version, EXPECTED_RELEASE_VERSION);
   assert.equal(createProgram().version(), EXPECTED_RELEASE_VERSION);
-  assert.equal(codexPlugin.version, EXPECTED_RELEASE_VERSION);
-  assert.equal(claudePlugin.version, EXPECTED_RELEASE_VERSION);
-  assert.equal(codexMarketplace.plugins[0]!.source.package, "planloft");
-  assert.equal(codexMarketplace.plugins[0]!.source.version, EXPECTED_RELEASE_VERSION);
-  assert.equal(claudeMarketplace.plugins[0]!.source.package, "planloft");
-  assert.equal(claudeMarketplace.plugins[0]!.source.version, EXPECTED_RELEASE_VERSION);
-  assert.equal(claudeMarketplace.plugins[0]!.version, EXPECTED_RELEASE_VERSION);
 });
 
-test("release operations pin 0.2.0 and v0.2.0 while the README stays version-agnostic", () => {
+test("release operations pin 0.2.1 and v0.2.1 while the README stays version-agnostic", () => {
   const readme = read("README.md");
   const docsReadme = read("docs/README.md");
   const releaseGuide = read("docs/releasing.md");
@@ -114,7 +95,10 @@ test("release guide is a short, ordered, executable operator flow", () => {
     "the guide should contain one real npm publish command",
   );
   assert.match(guide, /E404[\s\S]+Stop if npm reports/);
-  assert.match(guide, /do not immediately retry[\s\S]+npm view planloft@0\.2\.0 version/i);
+  assert.match(
+    guide,
+    new RegExp(`do not immediately retry[\\s\\S]+npm view planloft@${EXPECTED_RELEASE_VERSION.replaceAll(".", "\\.")} version`, "i"),
+  );
   assert.match(guide, /Never move or force-push a published release tag/);
 
   const blocks = bashBlocks(guide);

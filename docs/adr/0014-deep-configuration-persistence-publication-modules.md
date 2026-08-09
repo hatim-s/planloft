@@ -29,7 +29,7 @@ enter application results.
 `DocumentPersistence` owns project/index lifecycle, canonical source serialization,
 direct hoisting, Markdown write-direct capture, legacy HTML indexing, metadata
 preservation, format replacement, latest/slug lookup, exact-byte Git-root copy, and
-removal. The hook and every application storage operation use this interface.
+removal. Every application storage operation uses this interface.
 
 The public `hoistDocument` compiler export remains, but delegates to this implementation.
 The former `core/store`, `core/hoist`, and behavior-bearing document normalization

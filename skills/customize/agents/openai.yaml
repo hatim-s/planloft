@@ -1,0 +1,4 @@
+interface:
+  display_name: "planloft:customize"
+  short_description: "Explain Planloft and build safe themes"
+  default_prompt: "Use $customize to explain this Planloft workflow or create a custom theme."

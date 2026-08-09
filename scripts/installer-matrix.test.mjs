@@ -4,7 +4,6 @@ import path from "node:path";
 import {
   DIMENSIONS,
   SKILLS_CLI_VERSION,
-  agentHookConfigPaths,
   agentSkillPath,
   buildMatrix,
   canonicalSkillPath,
@@ -47,7 +46,7 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
   assert.equal(sourceValue("latest"), "hatim-s/planloft");
   assert.equal(
     taggedSkillSource("v1.2.3"),
-    "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/write-plan",
+    "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/write-doc",
   );
   assert.throws(() => taggedSkillSource("latest"), /PLANLOFT_RELEASE_TAG/);
 });
@@ -55,23 +54,16 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
 test("discovery paths stay inside the disposable project or home", () => {
   const project = "/tmp/project";
   const home = "/tmp/home";
-  assert.equal(canonicalSkillPath({ scope: "project", project, home }), path.join(project, ".agents/skills/write-plan"));
-  assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/write-plan"));
-  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/write-plan"));
-  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/write-plan"));
+  assert.equal(canonicalSkillPath({ scope: "project", project, home }), path.join(project, ".agents/skills/write-doc"));
+  assert.equal(canonicalSkillPath({ scope: "global", project, home }), path.join(home, ".agents/skills/write-doc"));
+  assert.equal(agentSkillPath({ agent: "codex", scope: "project", project, home }), path.join(project, ".agents/skills/write-doc"));
+  assert.equal(agentSkillPath({ agent: "claude-code", scope: "global", project, home }), path.join(home, ".claude/skills/write-doc"));
 });
 
-test("agent hook and plugin configuration probes stay inside disposable roots", () => {
-  const paths = agentHookConfigPaths({ agent: "claude-code", project: "/tmp/project", home: "/tmp/home" });
-  assert.ok(paths.includes(path.join("/tmp/project", ".claude/settings.json")));
-  assert.ok(paths.includes(path.join("/tmp/home", ".claude/plugins")));
-  assert.ok(paths.every((entry) => entry.startsWith("/tmp/project/") || entry.startsWith("/tmp/home/")));
-});
-
-test("repository satisfies the Phase 3 installation contract", () => {
+test("repository satisfies the portable installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
     cases: 96,
-    skills: ["customize-planloft", "write-plan"],
+    skills: ["customize", "write-doc"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });
 });
