@@ -1,4 +1,4 @@
-# How Planloft works
+# How Planloft works and is customized
 
 ## Core pipeline
 
@@ -28,7 +28,7 @@ Markdown or trusted HTML, not a proprietary content tree.
 - `copy` copies stored source into the current repository.
 - `deploy` publishes an already stored document.
 - `resolve` returns the exact Markdown path and theme authoring guidance used by
-  `write-plan`.
+  `write-doc`.
 - `init` creates defaults when absent and reports readiness; it does not publish.
 
 Use `planloft help <command>` for current inputs, defaults, examples, and effect
@@ -62,13 +62,13 @@ comments. A rendered artifact is self-contained.
 
 ## Agent boundary
 
-`write-plan` is the semantic authoring skill. It resolves the target, writes durable
-Markdown, and never publishes unless separately asked. `customize-planloft` explains
+`write-doc` is the semantic authoring skill. It resolves the target, writes durable
+Markdown, and never publishes unless separately asked. `customize` explains
 the system and works on themes. All other behavior remains discoverable through the
 CLI.
 
-Installing a skill does not install the CLI or runtime assets. Full Codex or Claude
-plugin installation is not a supported setup path.
+Installing a skill does not install the CLI or runtime assets. OpenAI UI metadata labels
+the portable skills as `planloft:write-doc` and `planloft:customize`.
 
 ## Trust and publication
 

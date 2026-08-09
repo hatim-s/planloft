@@ -23,20 +23,20 @@ planloft init
 The command is safe to run again. It creates `~/.planloft/config.json` only when the
 file is absent, validates an existing file, reports the active theme and default TTL,
 and checks whether the authenticated GitHub CLI is available. It does not install an
-agent plugin, change a repository, or publish a document.
+agent skill, change a repository, or publish a document.
 
 No configuration editing is required for local writing, storage, rendering, or
 previewing.
 
 ## Agents
 
-The optional `write-plan` skill teaches Codex or Claude Code when and how to persist a
-substantial plan. Install it after the CLI, targeting exactly one agent:
+The optional `write-doc` skill teaches Codex or Claude Code when and how to persist a
+substantial document. Install it after the CLI, targeting exactly one agent:
 
 | Target | Project install | Global install |
 |---|---|---|
-| Codex | `npx skills add hatim-s/planloft --skill write-plan -a codex` | `npx skills add hatim-s/planloft --skill write-plan -g -a codex` |
-| Claude Code | `npx skills add hatim-s/planloft --skill write-plan -a claude-code` | `npx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
+| Codex | `npx skills add hatim-s/planloft --skill write-doc -a codex` | `npx skills add hatim-s/planloft --skill write-doc -g -a codex` |
+| Claude Code | `npx skills add hatim-s/planloft --skill write-doc -a claude-code` | `npx skills add hatim-s/planloft --skill write-doc -g -a claude-code` |
 
 Use project scope by default so the repository declares its agent behavior. Use global
 scope only when every project for that agent should discover the skill.
@@ -45,9 +45,10 @@ With pnpm, replace `npx skills` with `pnpm dlx skills`. With Bun, replace it wit
 `bunx skills`. Restart the target agent after installation so it reloads skill
 discovery.
 
-Planloft also ships `customize-planloft` for questions about the document pipeline and
-for custom-theme work. Install it independently by replacing `write-plan` with
-`customize-planloft` in the matching command above.
+Planloft also ships `customize` for questions about the document pipeline and custom
+theme work. Install it independently by replacing `write-doc` with `customize` in the
+matching command above. OpenAI UI metadata labels these portable skills
+`planloft:write-doc` and `planloft:customize`; other hosts show their portable names.
 
 An agent setting up an already installed environment only needs to run:
 
@@ -57,8 +58,7 @@ planloft init
 ```
 
 If `command -v` fails, install the CLI before invoking the skill. The skill-only
-installer does not install the executable, hooks, themes, or runtime assets. Full
-Codex and Claude plugin installation is not a supported setup path at this time.
+installer does not install the executable, themes, or runtime assets.
 
 ## CI
 
@@ -72,7 +72,7 @@ Install the skill noninteractively only when CI needs to inspect or package agen
 discovery files:
 
 ```bash
-npx --yes skills add hatim-s/planloft --skill write-plan -a codex -y
+npx --yes skills add hatim-s/planloft --skill write-doc -a codex -y
 ```
 
 Ordinary render and validation jobs need only the CLI. Publication jobs must provide a

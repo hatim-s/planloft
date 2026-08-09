@@ -211,7 +211,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
         ],
       },
     ],
-    trustAndPrivacy: ["Used by write-plan; never guess a store path instead."],
+    trustAndPrivacy: ["Used by planloft:write-doc; never guess a store path instead."],
   },
   {
     name: "config",
@@ -241,12 +241,6 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     examples: [{ argv: ["init"] }],
     trustAndPrivacy: ["Does not publish a document."],
   },
-];
-
-export const PLUGIN_DEFAULT_PROMPTS = [
-  "Save this substantial implementation plan with planloft.",
-  "Use customize-planloft to explain the document pipeline or build a custom theme.",
-  "Run planloft help and show me the right operation for this document.",
 ];
 
 export function commandKnowledge(name: string): CommandKnowledge {

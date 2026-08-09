@@ -1,31 +1,30 @@
 ---
-name: write-plan
+name: write-doc
 description: >-
-  Author and persist a substantial, standalone Planloft implementation, migration,
-  refactor, architecture, or design plan. Use after plan-mode completion with durable
-  content or when the user explicitly asks to save a plan with Planloft. Skip trivial
-  one-step work, conversational or throwaway output, and requests that only render,
-  hoist, preview, copy, or deploy an existing source.
+  Author and persist substantial Planloft documents, then route follow-up rendering,
+  storage, preview, copying, or explicit publication through the Planloft CLI. Use when
+  the user asks Planloft to write or save durable implementation, migration, refactor,
+  architecture, design, or other standalone document content.
 ---
 
-# Write a Planloft plan
+# Write a Planloft document
 
-Persist the substantial plan directly. Keep it reviewable without conversation history.
+Persist substantial authored documents directly and keep them reviewable without
+conversation history. OpenAI UI metadata labels this skill `planloft:write-doc`; its
+portable skill name and installation selector are `write-doc`.
 
 ## Check the prerequisite
 
 Run the bundled `scripts/resolve-planloft-command.sh` from this skill directory before
 resolving and capture the executable path it prints. A skill-only install requires a
-separately installed Planloft CLI. A full-plugin install instead resolves the packaged
-`bin/planloft` bridge without adding a global executable to `PATH`.
+separately installed Planloft CLI on `PATH`.
 
 ```sh
 PLANLOFT_COMMAND="$(./scripts/resolve-planloft-command.sh)"
 ```
 
 If the resolver exits non-zero, stop and relay its actionable installation message.
-Skill-only installation does not install the executable, hooks, themes, runtime assets,
-or plugin metadata.
+Skill installation does not install the executable, themes, or runtime assets.
 
 ## Resolve the target
 
@@ -63,11 +62,12 @@ document:
 
 - Keep Markdown renderer-neutral. Do not hardcode single-theme-only colors or add
   generated presentation markup to the source.
-- When a renderer or theme provider exists, use its light/dark toggle and system-theme
-  behavior. Planloft's renderer puts an accessible theme toggle at the very top and
-  initially honors the browser's `prefers-color-scheme` setting.
-- When producing standalone HTML outside that renderer, put an accessible theme toggle
-  at the very top and also implement a `prefers-color-scheme` system fallback.
+- When a renderer or theme provider exists, use its light/dark/system selector and
+  system-theme behavior. Planloft's renderer puts an accessible compact icon selector
+  at the very top and initially honors the browser's `prefers-color-scheme` setting.
+- When producing standalone HTML outside that renderer, put an accessible theme selector
+  with light, dark, and system options at the very top and also implement a
+  `prefers-color-scheme` system fallback.
 - When the output cannot support a toggle or theme provider, still honor the browser or
   operating system preference with `color-scheme: light dark` and
   `@media (prefers-color-scheme: dark)`.

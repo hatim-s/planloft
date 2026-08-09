@@ -1,4 +1,0 @@
-interface:
-  display_name: "Write Plan"
-  short_description: "Author and persist substantial plans"
-  default_prompt: "Use $write-plan to author and save this substantial implementation plan in Planloft."

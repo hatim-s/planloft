@@ -7,7 +7,7 @@
 ## Context
 
 ADR-0008 removed shallow preview, copy, and deploy wrapper skills and retained
-`write-plan` as the only semantic skill. That keeps document operations in the CLI,
+`write-doc` as the only semantic skill. That keeps document operations in the CLI,
 but it leaves two related jobs without durable, discoverable guidance: explaining the
 canonical document pipeline and creating a valid custom theme.
 
@@ -20,8 +20,8 @@ the README makes installation difficult to scan and does not help an agent apply
 
 ### I1 — Ship two focused skills
 
-Keep `write-plan` narrowly responsible for authoring and persisting substantial plans.
-Add `customize-planloft` for:
+Keep `write-doc` narrowly responsible for authoring and persisting substantial plans.
+Add `customize` for:
 
 - explaining ingestion, storage, rendering, and publication boundaries;
 - selecting and configuring themes;
@@ -48,7 +48,8 @@ existing theme files.
 
 ## Consequences
 
-- The npm package and repository expose `write-plan` and `customize-planloft`.
+- The npm package and repository expose `write-doc` and `customize`; OpenAI UI metadata
+  labels them `planloft:write-doc` and `planloft:customize`.
 - The README can remain installation-focused while detailed customization knowledge
   ships close to the runtime it describes.
 - The customization skill can evolve with the renderer and theme contract without

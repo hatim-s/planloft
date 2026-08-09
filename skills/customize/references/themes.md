@@ -1,4 +1,4 @@
-# Planloft theme contract
+# Planloft customization theme contract
 
 ## Directory and resolution
 

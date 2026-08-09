@@ -6,7 +6,6 @@ import matter from "gray-matter";
 import {
   COMMAND_CATEGORIES,
   COMMAND_KNOWLEDGE,
-  PLUGIN_DEFAULT_PROMPTS,
   PUBLICATION_PRIVACY_DISCLOSURE,
   renderCommandExample,
   renderReadmeCliExamples,
@@ -26,7 +25,7 @@ const EXPECTED_CONTRACT_CASES = [
   "unknown example options fail parsing before any application operation",
   "TTL help contract is enforced by the CLI parser",
   "publication privacy disclosure is snapshot-stable and present in both publishing commands",
-  "README, write-plan, and plugin metadata are projections of command knowledge",
+  "README and write-doc are projections of command knowledge",
   "distribution exposes focused semantic skills and no retired wrappers",
 ] as const;
 const registeredContractCases: string[] = [];
@@ -41,7 +40,7 @@ function contractTest(name: string, run: () => void | Promise<void>): void {
 }
 
 contractTest("command knowledge covers every public command with examples and effects", () => {
-  const commands = createProgram().commands.filter((command) => command.name() !== "__hook");
+  const commands = createProgram().commands;
   assert.deepEqual(
     new Set(commands.map((command) => command.name())),
     new Set(COMMAND_KNOWLEDGE.map((command) => command.name)),
@@ -207,7 +206,7 @@ contractTest("publication privacy disclosure is snapshot-stable and present in b
   }
 });
 
-contractTest("README, write-plan, and plugin metadata are projections of command knowledge", () => {
+contractTest("README and write-doc are projections of command knowledge", () => {
   const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
   assert.equal(markedBlock(readme, "command-knowledge").trim(), renderReadmeCliReference());
   assert.equal(markedBlock(readme, "command-examples").trim(), renderReadmeCliExamples());
@@ -221,20 +220,16 @@ contractTest("README, write-plan, and plugin metadata are projections of command
     );
   }
 
-  const skill = fs.readFileSync(path.join(ROOT, "skills", "write-plan", "SKILL.md"), "utf8");
+  const skill = fs.readFileSync(path.join(ROOT, "skills", "write-doc", "SKILL.md"), "utf8");
   assert.equal(
     normalizeMarkdownProjection(markedBlock(skill, "command-knowledge")),
     normalizeMarkdownProjection(renderSkillDiscoveryReference('"$PLANLOFT_COMMAND"')),
   );
   const skillMetadata = matter(skill).data as Record<string, unknown>;
   assert.deepEqual(Object.keys(skillMetadata).sort(), ["description", "name"]);
-  assert.equal(skillMetadata.name, "write-plan");
+  assert.equal(skillMetadata.name, "write-doc");
   assert.match(String(skillMetadata.description), /substantial/);
 
-  const plugin = JSON.parse(
-    fs.readFileSync(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8"),
-  ) as { interface: { defaultPrompt: string[] } };
-  assert.deepEqual(plugin.interface.defaultPrompt, PLUGIN_DEFAULT_PROMPTS);
 });
 
 contractTest("distribution exposes focused semantic skills and no retired wrappers", () => {
@@ -242,20 +237,17 @@ contractTest("distribution exposes focused semantic skills and no retired wrappe
     .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  assert.deepEqual(skills.sort(), ["customize-planloft", "write-plan"]);
+  assert.deepEqual(skills.sort(), ["customize", "write-doc"]);
   const commandsDir = path.join(ROOT, "commands");
   if (fs.existsSync(commandsDir)) assert.deepEqual(fs.readdirSync(commandsDir), []);
 
   const shippedFiles = [
     "README.md",
     "package.json",
-    ".codex-plugin/plugin.json",
-    ".claude-plugin/plugin.json",
-    "hooks/hooks.json",
-    "skills/write-plan/SKILL.md",
-    "skills/write-plan/agents/openai.yaml",
-    "skills/customize-planloft/SKILL.md",
-    "skills/customize-planloft/agents/openai.yaml",
+    "skills/write-doc/SKILL.md",
+    "skills/write-doc/agents/openai.yaml",
+    "skills/customize/SKILL.md",
+    "skills/customize/agents/openai.yaml",
     "src/application.ts",
     "src/program.ts",
   ];
@@ -265,8 +257,8 @@ contractTest("distribution exposes focused semantic skills and no retired wrappe
   for (const retired of ["save-doc", "planloft-preview", "planloft-copy", "planloft-deploy"]) {
     assert.doesNotMatch(shippedText, new RegExp(retired));
   }
-  assert.match(shippedText, /write-plan/);
-  assert.match(shippedText, /customize-planloft/);
+  assert.match(shippedText, /planloft/);
+  assert.match(shippedText, /customize/);
 });
 
 test("command knowledge meta-guard registers every expected named case", () => {

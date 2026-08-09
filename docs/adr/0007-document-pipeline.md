@@ -11,7 +11,7 @@
 
 Planloft's renderer and GitHub Pages host already turn stored Markdown or HTML into a
 themed site. Callers other than the capture skills cannot use that capability without
-first understanding the store layout, writing a file, and relying on a hook to index it.
+first understanding the store layout and writing a file directly.
 The renderer also accepts a file-backed `DocMeta`, so parsing, storage, rendering, and
 publishing are coupled.
 

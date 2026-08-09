@@ -147,18 +147,25 @@ test("noindex is injected when a custom constrained layout omits the robots slot
   }
 });
 
-test("rendered documents honor system theme and expose a top theme toggle", () => {
+test("rendered documents expose a compact three-option theme selector", () => {
   for (const theme of ["minimal", "detailed", "editorial"]) {
     const html = renderDocument(document({ content: "# Both themes" }), theme);
     const bodyIndex = html.indexOf("<body");
-    const buttonIndex = html.indexOf('class="planloft-theme-toggle"');
+    const selectorIndex = html.indexOf('class="planloft-theme-selector planloft-theme-toggle"');
     const mainIndex = html.indexOf('<main class="planloft-plan">');
-    assert.ok(bodyIndex >= 0 && buttonIndex > bodyIndex && buttonIndex < mainIndex);
+    assert.ok(bodyIndex >= 0 && selectorIndex > bodyIndex && selectorIndex < mainIndex);
     assert.match(html, /prefers-color-scheme: dark/);
     assert.match(html, /data-planloft-color-scheme="light"/);
     assert.match(html, /data-planloft-color-scheme="dark"/);
     assert.match(html, /localStorage\.getItem\(key\)/);
-    assert.match(html, /Theme: system/);
+    for (const option of ["light", "dark", "system"]) {
+      assert.match(html, new RegExp(`data-planloft-theme-option="${option}"`));
+    }
+    assert.equal((html.match(/class="planloft-theme-option"/g) ?? []).length, 3);
+    assert.equal((html.match(/<svg viewBox=/g) ?? []).length, 3);
+    assert.match(html, /saved === "light" \|\| saved === "dark" \? saved : "system"/);
+    assert.match(html, /selected === "system"/);
+    assert.match(html, /delete root\.dataset\.planloftColorScheme/);
   }
 });
 
@@ -181,7 +188,7 @@ test("custom light-only themes receive a system dark fallback", () => {
   }
 });
 
-test("body-only custom layouts retain theme styles, system preference, and the top toggle", () => {
+test("body-only custom layouts retain theme styles, system preference, and the top selector", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-body-only-layout-test-"));
   const previousHome = process.env.PLANLOFT_HOME;
   process.env.PLANLOFT_HOME = home;
@@ -192,13 +199,13 @@ test("body-only custom layouts retain theme styles, system preference, and the t
     fs.writeFileSync(path.join(theme, "layout.html"), "{{body}}");
 
     const html = renderDocument(document({ content: "Body content" }), "body-only");
-    const buttonIndex = html.indexOf('class="planloft-theme-toggle"');
+    const selectorIndex = html.indexOf("planloft-theme-toggle");
     const bodyIndex = html.indexOf("<p>Body content</p>");
     assert.match(html, /<style>[\s\S]*article \{ color: rebeccapurple; \}/);
     assert.match(html, /prefers-color-scheme: dark/);
     assert.match(html, /:root \{ color-scheme: light dark; \}/);
-    assert.ok(buttonIndex >= 0 && buttonIndex < bodyIndex);
-    assert.match(html, /Theme: system/);
+    assert.ok(selectorIndex >= 0 && selectorIndex < bodyIndex);
+    assert.match(html, /data-planloft-theme-option="system"/);
   } finally {
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
     else process.env.PLANLOFT_HOME = previousHome;
@@ -224,12 +231,12 @@ test("body-only custom layouts put noindex and injected styles in a real head", 
     const styleIndex = html.indexOf("<style>");
     const headEndIndex = html.indexOf("</head>");
     const bodyIndex = html.indexOf("<body>");
-    const toggleIndex = html.indexOf('class="planloft-theme-toggle"');
+    const selectorIndex = html.indexOf("planloft-theme-toggle");
 
     assert.match(html, /^<!doctype html>\s*<html>/);
     assert.ok(headIndex >= 0 && styleIndex > headIndex && robotsIndex > headIndex);
     assert.ok(styleIndex < headEndIndex && robotsIndex < headEndIndex);
-    assert.ok(bodyIndex > headEndIndex && toggleIndex > bodyIndex);
+    assert.ok(bodyIndex > headEndIndex && selectorIndex > bodyIndex);
     assert.equal(html.match(/name="robots"/g)?.length, 1);
   } finally {
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;

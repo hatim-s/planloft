@@ -176,7 +176,7 @@ test("every CLI command independently canonicalizes hostile application errors",
   }
 });
 
-test("CLI proxy traps and hidden-hook input failures fall back without leaking", async () => {
+test("CLI proxy traps and stdin failures fall back without leaking", async () => {
   for (const inspectedProperty of [
     "name",
     "category",
@@ -233,17 +233,6 @@ test("CLI proxy traps and hidden-hook input failures fall back without leaking",
     assert.match(stdinOutput, /internal application error/, command);
     assert.doesNotMatch(stdinOutput, new RegExp(SENTINEL), command);
   }
-
-  let hookOutput = "";
-  const hook = createProgram({
-    application: emptyApplication(),
-    readStdin: async () => { throw new Error(SENTINEL); },
-    writeOut: (value) => { hookOutput += value; },
-    writeErr: (value) => { hookOutput += value; },
-    setExitCode: () => undefined,
-  });
-  await hook.parseAsync(["node", "planloft", "__hook"]);
-  assert.equal(hookOutput, "");
 });
 
 function forgedPublicError(operation: ApplicationOperation): object {

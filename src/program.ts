@@ -18,7 +18,6 @@ import {
   type ApplicationOperation,
 } from "./application.js";
 import type { SourceFlags } from "./commands/source.js";
-import { executeHook, type HookEvent, type HookResult } from "./hook.js";
 import { parseTtlDays, TTL_RULE } from "./core/ttl.js";
 import {
   commandKnowledge,
@@ -55,16 +54,6 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       setExitCode(1);
     }
   };
-  const runHook = async (event: HookEvent): Promise<void> => {
-    try {
-      const output = presentHook(executeHook(event));
-      if (output) writeOut(output);
-    } catch {
-      writeErr(`${pc.red("Hook failed: ")}Hook processing failed.\n`);
-      setExitCode(1);
-    }
-  };
-
   const sourceOptions = async (input: string, parsed: SourceFlags): Promise<SourceFlags> => ({
     ...parsed,
     ...(input === "-" ? { stdin: await stdin() } : {}),
@@ -170,17 +159,6 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     run("init", () => application.init(), presentInit),
   );
 
-  // Hidden protocol adapter invoked by hooks/hooks.json.
-  program.command("__hook", { hidden: true }).action(async () => {
-    let event: HookEvent;
-    try {
-      event = JSON.parse(await stdin()) as HookEvent;
-    } catch {
-      return;
-    }
-    await runHook(event);
-  });
-
   return program;
 }
 
@@ -283,10 +261,6 @@ function presentInit(result: InitResult): string {
     `theme=${result.theme}  captureFormat=${result.captureFormat}  defaultTtlDays=${result.defaultTtlDays}\n` +
     `github (gh) : ${readiness}${pc.dim(`  repo=${result.github.repo}`)}\n`
   );
-}
-
-function presentHook(result: HookResult): string {
-  return result.output ? JSON.stringify(result.output) + "\n" : "";
 }
 
 function operationLabel(operation: string): string {

@@ -47,10 +47,11 @@ combinatorial explosion.
 > **Superseded by [ADR-0008](./0008-single-skill-command-knowledge.md).** Non-plan
 > documents now use the explicit `planloft hoist` command.
 
-The `write-plan` skill and its ExitPlanMode backstop are unchanged (§D6): plans still
-auto-capture. A single new **`save-doc`** skill handles every other kind. It triggers
-when the user asks to save/keep a doc, or when the agent finishes a substantial
-standalone document, and calls `planloft resolve --kind <kind>`. `resolve` gains a
+The original capture proposal below is superseded: `write-doc` now owns semantic
+authoring without an automatic backstop, and non-plan documents use `planloft hoist`.
+A single new **`save-doc`** skill was originally proposed for every other kind. It
+would trigger when the user asks to save/keep a doc, or when the agent finishes a
+substantial standalone document, and call `planloft resolve --kind <kind>`. `resolve` gains a
 `--kind` flag (default `plan`).
 **Rejected.** A dedicated skill per kind (N skills to maintain, trigger overlap/noise).
 

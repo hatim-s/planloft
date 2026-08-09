@@ -24,13 +24,12 @@ The intended callers are concrete and intentionally few:
 1. The CLI is the interactive human interface and the implementation used by `npx`,
    `pnpm dlx`, and `bunx`.
 2. Node scripts need typed operation inputs/results without parsing terminal text.
-3. Agents use the `write-plan` skill and `planloft resolve`; hook integrations use the
-   hidden JSON protocol. They remain CLI callers, not a separate behavioral surface.
+3. Agents use the `write-doc` skill and `planloft resolve`. They remain CLI callers,
+   not a separate behavioral surface.
 4. CI invokes the packaged CLI for installer and distribution verification, and can use
    an injected application host for mutation-free publication tests.
 
-No browser SDK, remote service API, plugin-specific application implementation, or
-general dependency-injection framework is needed.
+No browser SDK, remote service API, or general dependency-injection framework is needed.
 
 ## Decision
 
@@ -42,9 +41,6 @@ async, including operations whose current implementation is synchronous. This gi
 callers one error model and permits later adapters to become asynchronous without a
 second breaking transition.
 
-The hidden hook protocol remains a private CLI adapter concern and is not part of the
-application seam, command knowledge, or public `PlanloftApplication` vocabulary.
-
 ### H2 — The CLI is an adapter
 
 The Commander layer may parse argv and stdin, format terminal text and colors, and set
@@ -53,8 +49,7 @@ that layer must not use `console.*`, set `process.exitCode`, parse argv, or manu
 terminal-formatted output.
 
 Application operations return discriminated structured results. HTML destined for
-stdout is data in a render result. Hidden hook JSON is produced and serialized entirely
-inside the CLI adapter.
+stdout is data in a render result.
 
 ### H3 — Stable error taxonomy
 
@@ -114,7 +109,7 @@ tests:
   repository-relative source and output paths.
 - `planloftHome`, scoped with async-local state so concurrent Node operations do not
   mutate `process.env`.
-- `clock` for persistence timestamps, expiry checks, deploy manifests, and hook markers.
+- `clock` for persistence timestamps, expiry checks, and deploy manifests.
 - A minimal filesystem capability for adapter-owned reads and writes.
 - Publication, ID, browser-open, editor, environment, and GitHub-readiness functions at real
   effect boundaries.
@@ -131,7 +126,7 @@ cohesive modules; this ADR does not pre-design those implementations.
 
 The package root exports the application factory, interface, result/error/dependency
 types, and command-knowledge read interface. These are intentional versioned public
-types. Implementation helpers, hook types, CLI presenters, Commander construction, and
+types. Implementation helpers, CLI presenters, Commander construction, and
 host internals remain private.
 
 The existing public free functions `ingestDocument`, `hoistDocument`, and
@@ -144,8 +139,8 @@ require an explicit ADR rather than accidental declaration drift.
 ### H8 — Command knowledge remains authoritative
 
 The typed command-knowledge module continues to drive Commander descriptions and deep
-help, README and `write-plan` marked projections, plugin default prompts, and coverage
-tests. It is now exported read-only for Node tooling. Application method names and the
+help, README and `write-doc` marked projections, and coverage tests. It is now exported
+read-only for Node tooling. Application method names and the
 knowledge inventory are verified against the CLI command inventory.
 
 ## Consequences
