@@ -93,11 +93,11 @@ for (const privateType of [
   assert.doesNotMatch(declarations, new RegExp(privateType));
 }
 
-validatePackedReadmeNodeExample();
+validatePackedApplicationConsumer();
 
-console.log("public API import, packed declarations, and README Node example: ok");
+console.log("public API import, packed declarations, and packed application consumer: ok");
 
-function validatePackedReadmeNodeExample() {
+function validatePackedApplicationConsumer() {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-readme-api-"));
   try {
     const packOutput = execFileSync(
@@ -118,20 +118,24 @@ function validatePackedReadmeNodeExample() {
     execFileSync("tar", ["-xzf", archive, "-C", temporaryRoot]);
 
     const packageRoot = path.join(temporaryRoot, "package");
-    const readme = fs.readFileSync(path.join(packageRoot, "README.md"), "utf8");
-    const match = readme.match(
-      /<!-- planloft:node-application-example:start -->\s*```(?:js|ts)\n([\s\S]*?)\n```\s*<!-- planloft:node-application-example:end -->/,
-    );
-    assert.ok(match?.[1], "packed README is missing the executable Node application example");
-
     const callerRoot = path.join(temporaryRoot, "caller");
     const planloftHome = path.join(temporaryRoot, "home");
     const nodeModules = path.join(temporaryRoot, "node_modules");
     fs.mkdirSync(callerRoot, { recursive: true });
     fs.mkdirSync(nodeModules, { recursive: true });
     fs.symlinkSync(packageRoot, path.join(nodeModules, "planloft"), "dir");
-    const exampleFile = path.join(callerRoot, "readme-node-example.mjs");
-    fs.writeFileSync(exampleFile, match[1]);
+    const exampleFile = path.join(callerRoot, "application-consumer.mjs");
+    fs.writeFileSync(exampleFile, String.raw`
+import { createPlanloftApplication } from "planloft";
+
+const planloft = createPlanloftApplication({ cwd: process.cwd() });
+const result = await planloft.resolve({
+  kind: "plan",
+  slug: "release-consumer",
+  title: "Release consumer",
+});
+console.log(result.context.path);
+`);
 
     const output = execFileSync(process.execPath, [exampleFile], {
       cwd: callerRoot,
@@ -139,7 +143,7 @@ function validatePackedReadmeNodeExample() {
       env: { ...process.env, PLANLOFT_HOME: planloftHome },
     }).trim();
     assert.equal(typeof output, "string");
-    assert.ok(output.length > 0, "README Node example did not print a resolved path");
+    assert.ok(output.length > 0, "packed application consumer did not print a resolved path");
     assert.ok(path.isAbsolute(output), `resolved path is not absolute: ${output}`);
     assert.ok(
       output.startsWith(`${planloftHome}${path.sep}`),
