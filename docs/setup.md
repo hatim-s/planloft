@@ -1,0 +1,102 @@
+# Set up Planloft
+
+Planloft setup has one command: `planloft init`. Installation puts the CLI and,
+optionally, the `write-plan` skill in place; initialization creates or validates local
+configuration and reports whether GitHub publication is ready.
+
+## Humans
+
+Install the CLI with one package manager:
+
+```bash
+npm install -g planloft
+# or: pnpm add -g planloft
+# or: bun add -g planloft
+```
+
+Then initialize Planloft:
+
+```bash
+planloft init
+```
+
+The command is safe to run again. It creates `~/.planloft/config.json` only when the
+file is absent, validates an existing file, reports the active theme and default TTL,
+and checks whether the authenticated GitHub CLI is available. It does not install an
+agent plugin, change a repository, or publish a document.
+
+No configuration editing is required for local writing, storage, rendering, or
+previewing.
+
+## Agents
+
+The optional `write-plan` skill teaches Codex or Claude Code when and how to persist a
+substantial plan. Install it after the CLI, targeting exactly one agent:
+
+| Target | Project install | Global install |
+|---|---|---|
+| Codex | `npx skills add hatim-s/planloft --skill write-plan -a codex` | `npx skills add hatim-s/planloft --skill write-plan -g -a codex` |
+| Claude Code | `npx skills add hatim-s/planloft --skill write-plan -a claude-code` | `npx skills add hatim-s/planloft --skill write-plan -g -a claude-code` |
+
+Use project scope by default so the repository declares its agent behavior. Use global
+scope only when every project for that agent should discover the skill.
+
+With pnpm, replace `npx skills` with `pnpm dlx skills`. With Bun, replace it with
+`bunx skills`. Restart the target agent after installation so it reloads skill
+discovery.
+
+An agent setting up an already installed environment only needs to run:
+
+```bash
+command -v planloft
+planloft init
+```
+
+If `command -v` fails, install the CLI before invoking the skill. The skill-only
+installer does not install the executable, hooks, themes, or runtime assets. Full
+Codex and Claude plugin installation is not a supported setup path at this time.
+
+## CI
+
+Use the same initialization command with a temporary or persisted Planloft home:
+
+```bash
+planloft init
+```
+
+Install the skill noninteractively only when CI needs to inspect or package agent
+discovery files:
+
+```bash
+npx --yes skills add hatim-s/planloft --skill write-plan -a codex -y
+```
+
+Ordinary render and validation jobs need only the CLI. Publication jobs must provide a
+GitHub credential through an authenticated `gh` CLI or `PLANLOFT_GITHUB_TOKEN`.
+Noninteractive runs never prompt for a token.
+
+## Verify
+
+```bash
+planloft --version
+planloft init
+planloft help
+```
+
+For a local smoke test:
+
+```bash
+printf '# Setup check\n' | planloft render - --format md --out ./planloft-setup-check
+```
+
+The output is local HTML. Remove the generated directory after inspection if it is no
+longer needed.
+
+## Publishing readiness
+
+Publishing is optional. If `planloft init` reports that GitHub is not ready, local
+workflows still work. Authenticate `gh` or set `PLANLOFT_GITHUB_TOKEN` only before a
+deliberate `publish` or `deploy` operation.
+
+Published pages live in a public, enumerable GitHub repository even though their paths
+are hard to guess and marked `noindex`. Keep sensitive documents local.

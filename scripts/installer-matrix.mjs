@@ -140,28 +140,18 @@ export function validateRepositoryContract() {
     "pnpm add -g planloft",
     "bun add -g planloft",
     "npx skills add hatim-s/planloft --skill write-plan",
-    "pnpm dlx skills add hatim-s/planloft --skill write-plan",
-    "bunx skills add hatim-s/planloft --skill write-plan",
-    "codex plugin add planloft@planloft",
-    "claude plugin install planloft@planloft",
   ]) assert.ok(readme.includes(command), `README is missing ${command}`);
-  for (const [runner, prefix] of [
-    ["npm", "npx skills"],
-    ["pnpm", "pnpm dlx skills"],
-    ["bun", "bunx skills"],
-  ]) {
-    for (const agent of ["codex", "claude-code"]) {
-      const projectRecipe = `${prefix} add hatim-s/planloft --skill write-plan -a ${agent}`;
-      const globalRecipe = `${prefix} add hatim-s/planloft --skill write-plan -g -a ${agent}`;
-      assert.ok(readme.includes(projectRecipe), `README is missing ${runner}/${agent} project recipe`);
-      assert.ok(readme.includes(globalRecipe), `README is missing ${runner}/${agent} global recipe`);
-    }
+  assert.match(readme, /Full Codex or Claude plugin installation is not currently a\s+supported setup path/);
+  assert.doesNotMatch(readme, /codex plugin (?:marketplace|add)/);
+  assert.doesNotMatch(readme, /claude plugin (?:marketplace|install)/);
+
+  const setup = fs.readFileSync(path.join(ROOT, "docs", "setup.md"), "utf8");
+  for (const agent of ["codex", "claude-code"]) {
+    const projectRecipe = `npx skills add hatim-s/planloft --skill write-plan -a ${agent}`;
+    const globalRecipe = `npx skills add hatim-s/planloft --skill write-plan -g -a ${agent}`;
+    assert.ok(setup.includes(projectRecipe), `setup is missing ${agent} project recipe`);
+    assert.ok(setup.includes(globalRecipe), `setup is missing ${agent} global recipe`);
   }
-  assert.match(readme, /does not pin a skill fetched from GitHub/);
-  assert.match(readme, /Skill-only installation never installs or enables hooks/);
-  assert.match(readme, /codex plugin marketplace add "\$REPO_ROOT"[\s\S]+codex plugin add planloft@planloft/);
-  assert.match(readme, /does not add `planloft` globally to `PATH`/);
-  assert.ok(readme.includes(taggedSkillSource(`v${packageJson.version}`)));
 
   const migration = fs.readFileSync(path.join(ROOT, "docs", "installation-migration.md"), "utf8");
   for (const retired of RETIRED_SKILLS) assert.ok(migration.includes(retired));

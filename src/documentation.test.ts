@@ -6,29 +6,33 @@ import test from "node:test";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
-test("README separates all three installation products and states their executable boundary", () => {
+test("README keeps installation concise and points detailed setup to one guide", () => {
   const readme = read("README.md");
-  for (const heading of ["### CLI-only", "### CLI plus `write-plan`", "### Full plugin"]) {
+  for (const heading of ["### CLI-only", "### CLI plus `write-plan`"]) {
     assert.ok(readme.includes(heading));
   }
-  assert.match(readme, /Skill-only \| One discoverable `write-plan` instruction directory \| CLI, hooks/);
-  assert.match(readme, /Skill-only installation never installs or enables hooks/);
-  assert.match(readme, /does not add `planloft` globally to `PATH`/);
-  assert.match(readme, /require both npm\s+`planloft@0\.1\.0` and repository tag `v0\.1\.0` to exist/);
-  assert.match(readme, /Until both release gates are\s+complete/);
+  assert.doesNotMatch(readme, /^### Full plugin$/m);
+  assert.doesNotMatch(readme, /codex plugin (?:marketplace|add)/);
+  assert.doesNotMatch(readme, /claude plugin (?:marketplace|install)/);
+  assert.match(readme, /planloft init/);
+  assert.match(readme, /\[Setup\]\(\.\/docs\/setup\.md\)/);
+  assert.match(readme, /Full Codex or Claude plugin installation is not currently a\s+supported setup path/);
 });
 
-test("README contains the complete npm, pnpm, and Bun skill recipe matrix", () => {
-  const readme = read("README.md");
-  const runners = ["npx skills", "pnpm dlx skills", "bunx skills"];
-  const agents = ["codex", "claude-code"];
-  for (const runner of runners) {
-    for (const agent of agents) {
-      const base = `${runner} add hatim-s/planloft --skill write-plan`;
-      assert.ok(readme.includes(`${base} -a ${agent}`));
-      assert.ok(readme.includes(`${base} -g -a ${agent}`));
-    }
+test("setup guide covers human, agent, and CI setup without plugin recipes", () => {
+  const setup = read("docs/setup.md");
+  for (const heading of ["## Humans", "## Agents", "## CI", "## Verify"]) {
+    assert.ok(setup.includes(heading));
   }
+  for (const agent of ["codex", "claude-code"]) {
+    const base = `npx skills add hatim-s/planloft --skill write-plan`;
+    assert.ok(setup.includes(`${base} -a ${agent}`));
+    assert.ok(setup.includes(`${base} -g -a ${agent}`));
+  }
+  assert.match(setup, /planloft init/);
+  assert.match(setup, /Full\s+Codex and Claude plugin installation is not a supported setup path/);
+  assert.doesNotMatch(setup, /codex plugin (?:marketplace|add)/);
+  assert.doesNotMatch(setup, /claude plugin (?:marketplace|install)/);
 });
 
 test("write-plan permanently requires two-theme documents with top-toggle and system fallbacks", () => {

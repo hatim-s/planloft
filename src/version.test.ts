@@ -48,15 +48,13 @@ test("package, CLI, plugins, and marketplaces use the prepared release version",
   assert.equal(claudeMarketplace.plugins[0]!.version, EXPECTED_RELEASE_VERSION);
 });
 
-test("release-facing documentation pins 0.1.0 and v0.1.0", () => {
+test("release operations pin 0.1.0 and v0.1.0 while the README stays version-agnostic", () => {
   const readme = read("README.md");
   const docsReadme = read("docs/README.md");
   const releaseGuide = read("docs/releasing.md");
 
-  assert.ok(readme.includes(`planloft@${EXPECTED_RELEASE_VERSION}`));
-  assert.ok(readme.includes(`/tree/${EXPECTED_RELEASE_TAG}/skills/write-plan`));
-  assert.ok(readme.includes(`--ref ${EXPECTED_RELEASE_TAG}`));
-  assert.ok(readme.includes(`.git#${EXPECTED_RELEASE_TAG}`));
+  assert.doesNotMatch(readme, /planloft@\d+\.\d+\.\d+/);
+  assert.doesNotMatch(readme, /(?:\/tree\/|--ref\s+|\.git#)v\d+\.\d+\.\d+/);
   assert.ok(docsReadme.includes(`PLANLOFT_RELEASE_TAG=${EXPECTED_RELEASE_TAG}`));
   assert.ok(releaseGuide.includes(`npm view planloft@${EXPECTED_RELEASE_VERSION} version`));
   assert.ok(releaseGuide.includes(`git tag -a ${EXPECTED_RELEASE_TAG}`));
