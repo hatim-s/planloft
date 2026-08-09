@@ -10,13 +10,13 @@ import { renderDocument } from "./render/renderer.js";
 import { validateTheme } from "./render/themes.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const SKILL = path.join(ROOT, "skills", "customize");
+const SKILL = path.join(ROOT, "skills", "planloft-customise");
 
-test("customize has focused metadata and progressive references", () => {
+test("planloft-customise has focused metadata and progressive references", () => {
   const source = fs.readFileSync(path.join(SKILL, "SKILL.md"), "utf8");
   const parsed = matter(source);
   assert.deepEqual(Object.keys(parsed.data).sort(), ["description", "name"]);
-  assert.equal(parsed.data.name, "customize");
+  assert.equal(parsed.data.name, "planloft-customise");
   assert.match(String(parsed.data.description), /how Planloft works/i);
   assert.match(source, /references\/how-planloft-works\.md/);
   assert.match(source, /references\/themes\.md/);
@@ -24,8 +24,8 @@ test("customize has focused metadata and progressive references", () => {
   assert.match(source, /Never publish or deploy/);
 
   const metadata = fs.readFileSync(path.join(SKILL, "agents", "openai.yaml"), "utf8");
-  assert.match(metadata, /display_name: "planloft:customize"/);
-  assert.match(metadata, /\$customize/);
+  assert.match(metadata, /display_name: "planloft:customise"/);
+  assert.match(metadata, /\$planloft-customise/);
 });
 
 test("the shipped theme starter satisfies the runtime theme and renderer contracts", () => {

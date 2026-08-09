@@ -68,11 +68,11 @@ The external skill installer is pinned in the verification harness so upstream c
 are reviewed deliberately:
 
 ```bash
-pnpm test:installer       # 96-case contract enumeration, no network or global writes
-pnpm test:installer:live  # six pairwise lifecycle cases against this checkout
+pnpm test:installer       # 288-case contract enumeration, no network or global writes
+pnpm test:installer:live  # 12 pairwise lifecycle cases against this checkout
 
 # Run only after publishing the npm version and matching repository tag:
-PLANLOFT_RELEASE_TAG=v0.2.1 pnpm test:installer:release
+PLANLOFT_RELEASE_TAG=v0.2.2 pnpm test:installer:release
 ```
 
 Every live case creates and removes its own temporary project, `HOME`, Planloft home,
@@ -85,12 +85,13 @@ After building and packing, execute the extracted CLI and portable skill resolve
 than merely inspecting tar entries:
 
 ```bash
-node scripts/validate-packed-package.mjs /path/to/planloft-0.2.1.tgz
+node scripts/validate-packed-package.mjs /path/to/planloft-0.2.2.tgz
 ```
 
-The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It compares the
-installed tagged skill byte-for-byte with the tag's raw `SKILL.md`; it does not infer a
-skill pin from the npm version. After the suite passes, start fresh Codex and Claude
-sessions and confirm `planloft:write-doc` and `planloft:customize` are visible. Agent discovery
-has no stable noninteractive cross-host command, so that reload check remains a manual
-release assertion.
+The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It first verifies
+that both skill entrypoints exist at the tag, then compares the installed tagged
+authoring skill byte-for-byte with the tag's raw `SKILL.md`; it does not infer a skill
+pin from the npm version. After the suite passes, start fresh Codex, Claude Code, and Pi
+sessions and confirm the host-specific names in [setup](./setup.md) are visible. Agent
+discovery has no stable noninteractive cross-host command, so that reload check remains
+a manual release assertion.

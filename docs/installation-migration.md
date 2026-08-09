@@ -1,27 +1,31 @@
 # Migrate an existing Planloft installation
 
-Planloft 0.2.1 renames `write-plan` to `write-doc` and `customize-planloft` to
-`customize`. OpenAI UI metadata labels them `planloft:write-doc` and
-`planloft:customize`; installation and other hosts use the portable names. Follow these steps once for
-every machine or project that used an older Planloft installation.
+Planloft 0.2.2 replaces the short portable skill names with
+`planloft-write-doc` and `planloft-customise`. Codex keeps the product labels
+`planloft:write-doc` and `planloft:customise`; Claude Code and other Agent Skills hosts
+use the new hyphenated names. Follow these steps once for every machine or project that
+used an older Planloft installation.
 
 ## 1. Remove the retired skills
 
-The retired skill names are `write-plan`, `customize-planloft`, `save-doc`,
-`planloft-preview`, `planloft-copy`, and `planloft-deploy`.
+The retired skill names are `write-doc`, `customize`, `customise`, `write-plan`,
+`customize-planloft`, `save-doc`, `planloft-preview`, `planloft-copy`, and
+`planloft-deploy`.
 
 For project-scoped installs:
 
 ```bash
-npx skills remove write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -a codex -y
-npx skills remove write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -a claude-code -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -a codex -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -a claude-code -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -a pi -y
 ```
 
 For global installs, add `-g`:
 
 ```bash
-npx skills remove write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -g -a codex -y
-npx skills remove write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -g -a claude-code -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -g -a codex -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -g -a claude-code -y
+npx skills remove write-doc customize customise write-plan customize-planloft save-doc planloft-preview planloft-copy planloft-deploy -g -a pi -y
 ```
 
 What this does: removes installer-managed symlinks and `--copy` installs. If you used
@@ -29,17 +33,18 @@ pnpm or Bun originally, substitute `pnpm dlx skills` or `bunx skills` for `npx s
 
 If the installer cannot find an old copy, remove only the retired-name directories:
 
-| Scope | Codex/universal paths | Claude Code path |
-|---|---|---|
-| Project | `.agents/skills/<retired-name>` or `.codex/skills/<retired-name>` | `.claude/skills/<retired-name>` |
-| Global | `~/.agents/skills/<retired-name>` or `~/.codex/skills/<retired-name>` | `~/.claude/skills/<retired-name>` |
+| Scope | Codex/universal paths | Claude Code path | Pi path |
+|---|---|---|---|
+| Project | `.agents/skills/<retired-name>` or `.codex/skills/<retired-name>` | `.claude/skills/<retired-name>` | `.pi/skills/<retired-name>` |
+| Global | `~/.agents/skills/<retired-name>` or `~/.codex/skills/<retired-name>` | `~/.claude/skills/<retired-name>` | `~/.pi/agent/skills/<retired-name>` |
 
-Do not delete the parent skills directory or the new `write-doc` and `customize` skills.
+Do not delete the parent skills directory or the new `planloft-write-doc` and
+`planloft-customise` skills.
 
 ## 2. Remove a retired host installation
 
 Older Planloft releases could be installed as a Codex or Claude host bundle. Planloft
-0.2.1 no longer ships that product. If you used it, remove it before restarting the
+0.2.2 does not ship that product. If you used it, remove it before restarting the
 host so the retired skills and automatic lifecycle behavior do not remain active:
 
 ```bash
@@ -51,21 +56,21 @@ claude plugin uninstall planloft@planloft
 ```
 
 Expected: the host no longer lists a Planloft plugin. There is no replacement host
-bundle in 0.2.1; install the CLI and focused portable skills in the next steps.
+bundle in 0.2.2; install the CLI and focused portable skills in the next steps.
 
 ## 3. Upgrade the CLI
 
 Choose the package manager you use:
 
 ```bash
-npm install -g planloft@0.2.1
-# or: pnpm add -g planloft@0.2.1
-# or: bun add -g planloft@0.2.1
+npm install -g planloft@0.2.2
+# or: pnpm add -g planloft@0.2.2
+# or: bun add -g planloft@0.2.2
 
 planloft --version
 ```
 
-Expected: `planloft --version` prints `0.2.1`.
+Expected: `planloft --version` prints `0.2.2`.
 
 ## 4. Install the focused skills
 
@@ -73,19 +78,22 @@ Choose your agent and scope. These examples use npm/npx:
 
 ```bash
 # Codex, current project
-npx skills add hatim-s/planloft --skill write-doc -a codex
+npx skills add hatim-s/planloft --skill planloft-write-doc -a codex
 
 # Claude Code, current project
-npx skills add hatim-s/planloft --skill write-doc -a claude-code
+npx skills add hatim-s/planloft --skill planloft-write-doc -a claude-code
+
+# Pi, current project
+npx skills add hatim-s/planloft --skill planloft-write-doc -a pi
 
 # Add -g for a global installation.
 ```
 
-What this does: installs the `write-doc` instructions only. A skill-only installation
+What this does: installs the `planloft-write-doc` instructions only. A skill-only installation
 does not install the CLI, themes, schemas, or other runtime assets.
 
-Install `customize` independently when the agent should explain Planloft or work on
-themes by replacing `write-doc` in the matching command. Restart the agent and
+Install `planloft-customise` independently when the agent should explain Planloft or work on
+themes by replacing `planloft-write-doc` in the matching command. Restart the agent and
 confirm that the selected skills are discoverable.
 
 ## 5. Replace removed commands
@@ -95,7 +103,7 @@ Remove the old Claude aliases `/planloft-preview`, `/planloft-copy`, and
 
 | Old behavior | Replacement |
 |---|---|
-| Save an agent-authored document | `write-doc` |
+| Save an agent-authored document | `planloft-write-doc` |
 | Store another existing file | `planloft hoist <input>` |
 | Preview | `planloft preview [slug]` |
 | Copy | `planloft copy [slug]` |
@@ -152,6 +160,6 @@ planloft init
 planloft list
 ```
 
-Expected: the version is `0.2.1`, configuration validation succeeds, and existing
-documents are listed. Finally, create a small test plan with `write-doc` and preview it
+Expected: the version is `0.2.2`, configuration validation succeeds, and existing
+documents are listed. Finally, create a small test plan with `planloft-write-doc` and preview it
 with `planloft preview [slug]`.

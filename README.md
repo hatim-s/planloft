@@ -31,26 +31,29 @@ planloft init
 `planloft init` creates the default configuration if needed, keeps an existing valid
 configuration unchanged, and reports GitHub readiness. It does not publish anything.
 
-### CLI plus `write-doc`
+### CLI plus `planloft-write-doc`
 
 Install the CLI above, then install the skill for the agent that should write Planloft
 plans:
 
 ```bash
 # Codex
-npx skills add hatim-s/planloft --skill write-doc -a codex
+npx skills add hatim-s/planloft --skill planloft-write-doc -a codex
 
 # Claude Code
-npx skills add hatim-s/planloft --skill write-doc -a claude-code
+npx skills add hatim-s/planloft --skill planloft-write-doc -a claude-code
+
+# Pi
+npx skills add hatim-s/planloft --skill planloft-write-doc -a pi
 ```
 
 Restart the agent after installation, then run `planloft init`. The skill requires the
 CLI on `PATH`; it does not install the CLI or publish documents.
 
-Planloft also ships `customize` for explaining the document pipeline and building
-custom themes. OpenAI UI metadata labels the two skills `planloft:write-doc` and
-`planloft:customize`; installation and other hosts use the portable `write-doc` and
-`customize` names shown by the installer.
+Planloft also ships `planloft-customise` for explaining the document pipeline and
+building custom themes. Codex UI metadata labels the two skills `planloft:write-doc`
+and `planloft:customise`; Claude Code and other hosts use the portable
+`planloft-write-doc` and `planloft-customise` names shown by the installer.
 
 For pnpm, Bun, project/global scope, CI, and agent-oriented verification, see
 [Setup](./docs/setup.md).

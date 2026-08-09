@@ -19,14 +19,14 @@ try {
 
   const packageRoot = path.join(root, "package");
   const cli = path.join(packageRoot, "dist", "cli.js");
-  const resolver = path.join(packageRoot, "skills", "write-doc", "scripts", "resolve-planloft-command.sh");
+  const resolver = path.join(packageRoot, "skills", "planloft-write-doc", "scripts", "resolve-planloft-command.sh");
   for (const required of [
     cli,
     resolver,
-    path.join(packageRoot, "skills", "write-doc", "SKILL.md"),
-    path.join(packageRoot, "skills", "customize", "SKILL.md"),
-    path.join(packageRoot, "skills", "customize", "references", "themes.md"),
-    path.join(packageRoot, "skills", "customize", "assets", "theme-starter", "style.css"),
+    path.join(packageRoot, "skills", "planloft-write-doc", "SKILL.md"),
+    path.join(packageRoot, "skills", "planloft-customise", "SKILL.md"),
+    path.join(packageRoot, "skills", "planloft-customise", "references", "themes.md"),
+    path.join(packageRoot, "skills", "planloft-customise", "assets", "theme-starter", "style.css"),
     path.join(packageRoot, "themes", "editorial", "style.css"),
     path.join(packageRoot, "schemas", "config.schema.json"),
     path.join(packageRoot, "templates", "github-pages", "prune-plans.yml"),

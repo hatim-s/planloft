@@ -1,19 +1,19 @@
 ---
-name: customize
+name: planloft-customise
 description: >-
   Explain Planloft's document pipeline, storage, theme resolution, and publication
   boundaries, or create, modify, validate, and troubleshoot a Planloft custom theme.
   Use when the user asks how Planloft works, wants a new visual or authoring theme,
   needs theme configuration help, or reports a theme asset or layout error. Do not use
-  for ordinary document authoring; use write-doc for that.
+  for ordinary document authoring; use planloft-write-doc for that.
 ---
 
-# Customize Planloft
+# Customise Planloft
 
-Ground explanations and theme changes in Planloft's actual contracts. OpenAI UI metadata
-labels this skill `planloft:customize`; its portable skill name and installation
-selector are `customize`. Keep document authoring in `write-doc` and one-step document
-operations in the CLI.
+Ground explanations and theme changes in Planloft's actual contracts. Codex UI metadata
+labels this skill `planloft:customise`; Claude Code and other Agent Skills hosts use the
+portable name `planloft-customise`. Keep document authoring in `planloft-write-doc` and
+one-step document operations in the CLI.
 
 ## Choose the workflow
 
