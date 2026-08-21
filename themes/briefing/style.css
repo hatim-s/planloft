@@ -1,0 +1,82 @@
+/* planloft theme: briefing — executive, spacious, signal-first */
+/* planloft-color-schemes: light dark */
+:root {
+  color-scheme: light dark;
+  --ink: #172033;
+  --muted: #5d6678;
+  --paper: #f6f7fb;
+  --surface: #ffffff;
+  --rule: #dfe3ee;
+  --accent: #6346c7;
+  --accent-soft: #eeeafd;
+  --code-bg: #eef0f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #f2f3f8;
+    --muted: #aeb5c6;
+    --paper: #11131a;
+    --surface: #1a1d27;
+    --rule: #353a49;
+    --accent: #b4a0ff;
+    --accent-soft: #2c2742;
+    --code-bg: #262a36;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #172033;
+  --muted: #5d6678;
+  --paper: #f6f7fb;
+  --surface: #ffffff;
+  --rule: #dfe3ee;
+  --accent: #6346c7;
+  --accent-soft: #eeeafd;
+  --code-bg: #eef0f6;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #f2f3f8;
+  --muted: #aeb5c6;
+  --paper: #11131a;
+  --surface: #1a1d27;
+  --rule: #353a49;
+  --accent: #b4a0ff;
+  --accent-soft: #2c2742;
+  --code-bg: #262a36;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.6 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.planloft-plan {
+  max-width: 58rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 7rem;
+}
+.planloft-plan > article {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: clamp(1.5rem, 5vw, 3.75rem);
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+h1 { margin: 0 0 1rem; font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.05; letter-spacing: -0.045em; }
+h2 { margin: 2.5rem 0 0.7rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); font-size: 1.15rem; letter-spacing: -0.015em; }
+h3 { margin: 1.5rem 0 0.45rem; font-size: 1rem; color: var(--muted); }
+p, ul, ol { margin: 0.6rem 0 1rem; }
+li { margin: 0.35rem 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+blockquote { margin: 1.4rem 0; padding: 1rem 1.2rem; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; }
+code { background: var(--code-bg); padding: 0.12em 0.35em; border-radius: 4px; font-size: 0.9em; }
+pre { overflow: auto; padding: 1rem; background: var(--code-bg); border-radius: 10px; }
+table { display: block; overflow-x: auto; width: 100%; border-collapse: collapse; margin: 1.2rem 0; font-size: 0.94em; }
+th, td { padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--rule); text-align: left; }
+th { color: var(--muted); font-size: 0.82em; letter-spacing: 0.04em; text-transform: uppercase; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 40rem) {
+  .planloft-plan { padding: 1.5rem 0.75rem 4rem; }
+  .planloft-plan > article { border-radius: 12px; }
+}

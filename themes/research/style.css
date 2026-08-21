@@ -1,0 +1,62 @@
+/* planloft theme: research — evidence-dense, calm, citation-friendly */
+/* planloft-color-schemes: light dark */
+:root {
+  color-scheme: light dark;
+  --ink: #17231f;
+  --muted: #586a63;
+  --paper: #fbfcf9;
+  --rule: #dbe4dd;
+  --accent: #13715b;
+  --accent-soft: #e6f4ef;
+  --code-bg: #eef3ef;
+  --table-head: #edf4ef;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #edf5f1;
+    --muted: #a9bcb4;
+    --paper: #101714;
+    --rule: #32443d;
+    --accent: #75d7ba;
+    --accent-soft: #17342b;
+    --code-bg: #1d2924;
+    --table-head: #1e2e28;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #17231f;
+  --muted: #586a63;
+  --paper: #fbfcf9;
+  --rule: #dbe4dd;
+  --accent: #13715b;
+  --accent-soft: #e6f4ef;
+  --code-bg: #eef3ef;
+  --table-head: #edf4ef;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #edf5f1;
+  --muted: #a9bcb4;
+  --paper: #101714;
+  --rule: #32443d;
+  --accent: #75d7ba;
+  --accent-soft: #17342b;
+  --code-bg: #1d2924;
+  --table-head: #1e2e28;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.72 Charter, "Bitstream Charter", Georgia, serif; }
+.planloft-plan { max-width: 49rem; margin: 0 auto; padding: 4rem 1.5rem 7rem; }
+h1 { margin: 0 0 1.4rem; font: 700 2.45rem/1.08 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -0.035em; }
+h2 { margin: 2.6rem 0 0.65rem; padding-top: 1rem; border-top: 1px solid var(--rule); font: 700 1.35rem/1.25 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+h3 { margin: 1.6rem 0 0.45rem; color: var(--muted); font: 700 1.02rem/1.3 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+p, ul, ol { margin: 0.65rem 0 1.05rem; }
+li { margin: 0.32rem 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+blockquote { margin: 1.5rem 0; padding: 0.65rem 1.1rem; border-left: 3px solid var(--accent); color: var(--muted); background: var(--accent-soft); }
+code { background: var(--code-bg); padding: 0.1em 0.32em; border-radius: 3px; font-size: 0.87em; }
+pre { overflow: auto; padding: 1rem 1.1rem; background: var(--code-bg); border-radius: 6px; font-size: 0.88em; }
+table { display: block; overflow-x: auto; width: 100%; border-collapse: collapse; margin: 1.25rem 0; font: 0.9em/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+th, td { padding: 0.6rem 0.7rem; border: 1px solid var(--rule); text-align: left; vertical-align: top; }
+th { background: var(--table-head); }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }

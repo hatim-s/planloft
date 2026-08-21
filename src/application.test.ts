@@ -132,6 +132,90 @@ test("first application hoist and publish persist exact defaults after validatio
   }
 });
 
+test("init keeps valid configuration by default and force resets only config.json", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-init-force-test-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const config = path.join(home, "config.json");
+  fs.mkdirSync(path.join(home, "docs", "example"), { recursive: true });
+  fs.mkdirSync(path.join(home, "themes", "custom"), { recursive: true });
+  fs.mkdirSync(path.join(home, "hosting", "plans"), { recursive: true });
+  fs.mkdirSync(cwd, { recursive: true });
+
+  const existing = {
+    ...DEFAULT_CONFIG,
+    theme: "editorial",
+    defaultTtlDays: 14,
+    projects: { example: { theme: "detailed" } },
+    github: { repo: "existing-plans", token: "discard-on-explicit-reset" },
+  };
+  const existingSource = JSON.stringify(existing);
+  fs.writeFileSync(config, existingSource);
+  const preservedFiles = {
+    [path.join(home, "index.json")]: '{"version":1}\n',
+    [path.join(home, "docs", "example", "kept.md")]: "# Kept document\n",
+    [path.join(home, "themes", "custom", "template.md")]: "Custom guidance\n",
+    [path.join(home, "hosting", "plans", "README.md")]: "Hosting clone\n",
+    [path.join(cwd, "project-file.txt")]: "Project content\n",
+  };
+  for (const [file, contents] of Object.entries(preservedFiles)) fs.writeFileSync(file, contents);
+
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: home,
+    hasGithubCli: () => false,
+  });
+
+  try {
+    const kept = await application.init();
+    assert.equal(kept.configCreated, false);
+    assert.equal(kept.configReinitialized, false);
+    assert.equal(kept.theme, "editorial");
+    assert.equal(fs.readFileSync(config, "utf8"), existingSource);
+
+    const reset = await application.init({ force: true });
+    assert.equal(reset.configCreated, false);
+    assert.equal(reset.configReinitialized, true);
+    assert.equal(reset.theme, DEFAULT_CONFIG.theme);
+    const expected = JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n";
+    assert.equal(fs.readFileSync(config, "utf8"), expected);
+    for (const [file, contents] of Object.entries(preservedFiles)) {
+      assert.equal(fs.readFileSync(file, "utf8"), contents, `${file} must be preserved`);
+    }
+
+    await application.init({ force: true });
+    assert.equal(fs.readFileSync(config, "utf8"), expected, "forced init must be deterministic");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("init --force repairs malformed configuration that ordinary init leaves untouched", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-init-force-malformed-test-"));
+  const home = path.join(root, "home");
+  const config = path.join(home, "config.json");
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(config, "{ stale");
+  const application = createPlanloftApplication({ planloftHome: home, hasGithubCli: () => false });
+
+  try {
+    await assert.rejects(application.init(), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.operation, "init");
+      assert.equal(error.category, "configuration");
+      assert.equal(error.diagnosticCode, "PLANLOFT_CONFIG_MALFORMED");
+      return true;
+    });
+    assert.equal(fs.readFileSync(config, "utf8"), "{ stale");
+
+    const reset = await application.init({ force: true });
+    assert.equal(reset.configReinitialized, true);
+    assert.equal(fs.readFileSync(config, "utf8"), JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("application publish samples the injected clock once and shares that instant", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-clock-test-"));
   const home = path.join(root, "home");

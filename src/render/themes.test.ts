@@ -11,15 +11,26 @@ import {
   readStyle,
   readTemplate,
   resolveThemeDirectory,
+  validateTheme,
 } from "./themes.js";
 
 test("built-in themes resolve to real directories and are listed", () => {
-  for (const theme of ["minimal", "detailed", "editorial"]) {
+  const expected = ["briefing", "decision", "detailed", "editorial", "minimal", "research"];
+  for (const theme of expected) {
     assert.equal(fs.statSync(resolveThemeDirectory(theme)).isDirectory(), true);
     assert.ok(listAvailableThemes().includes(theme));
     assert.notEqual(readTemplate(theme), "");
     assert.notEqual(readStyle(theme), "");
+    assert.match(readTemplate(theme), /Author Markdown only/);
+    assert.match(readStyle(theme), /planloft-color-schemes: light dark/);
+    assert.doesNotThrow(() => validateTheme(theme));
   }
+});
+
+test("purpose-built themes provide distinct, actionable authoring structures", () => {
+  assert.match(readTemplate("briefing"), /Decisions or support needed/);
+  assert.match(readTemplate("decision"), /Options considered/);
+  assert.match(readTemplate("research"), /Gaps and limitations/);
 });
 
 test("a real user theme overrides a built-in and receives optional asset defaults", () => {
@@ -40,7 +51,7 @@ test("invalid and unknown themes are explicit and missing errors list choices", 
   assertThemeError(
     () => resolveThemeDirectory("does-not-exist"),
     "PLANLOFT_THEME_MISSING",
-    /Available themes: detailed, editorial, minimal/,
+    /Available themes: briefing, decision, detailed, editorial, minimal, research/,
   );
 });
 

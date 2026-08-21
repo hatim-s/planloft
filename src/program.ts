@@ -155,9 +155,11 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
   withKnowledge(program.command("config"), "config").action(() =>
     run("config", () => application.config(), presentConfig),
   );
-  withKnowledge(program.command("init"), "init").action(() =>
-    run("init", () => application.init(), presentInit),
-  );
+  withKnowledge(program.command("init"), "init")
+    .option("--force", "replace config.json with exact defaults")
+    .action((parsed) =>
+      run("init", () => application.init({ force: parsed.force }), presentInit),
+    );
 
   return program;
 }
@@ -248,9 +250,11 @@ function presentConfig(result: ConfigResult): string {
 }
 
 function presentInit(result: InitResult): string {
-  const configLine = result.configCreated
-    ? `${pc.green("Wrote default config: ")}${result.configPath}`
-    : `${pc.dim("Config exists: ")}${result.configPath}`;
+  const configLine = result.configReinitialized
+    ? `${pc.green("Reinitialized default config: ")}${result.configPath}`
+    : result.configCreated
+      ? `${pc.green("Wrote default config: ")}${result.configPath}`
+      : `${pc.dim("Config exists: ")}${result.configPath}`;
   const readiness = result.github.ready
     ? pc.green("ready (preferred credential)")
     : pc.yellow(

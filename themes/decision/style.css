@@ -1,0 +1,63 @@
+/* planloft theme: decision — durable, structured, audit-friendly */
+/* planloft-color-schemes: light dark */
+:root {
+  color-scheme: light dark;
+  --ink: #17212b;
+  --muted: #586573;
+  --paper: #f8fafc;
+  --rule: #cfd8e3;
+  --accent: #0b66c3;
+  --accent-soft: #e7f2ff;
+  --code-bg: #edf2f7;
+  --table-head: #e9eef5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    --ink: #eef4fa;
+    --muted: #aab7c4;
+    --paper: #111820;
+    --rule: #334252;
+    --accent: #75baff;
+    --accent-soft: #162b40;
+    --code-bg: #1d2833;
+    --table-head: #202d39;
+  }
+}
+:root[data-planloft-color-scheme="light"] {
+  --ink: #17212b;
+  --muted: #586573;
+  --paper: #f8fafc;
+  --rule: #cfd8e3;
+  --accent: #0b66c3;
+  --accent-soft: #e7f2ff;
+  --code-bg: #edf2f7;
+  --table-head: #e9eef5;
+}
+:root[data-planloft-color-scheme="dark"] {
+  --ink: #eef4fa;
+  --muted: #aab7c4;
+  --paper: #111820;
+  --rule: #334252;
+  --accent: #75baff;
+  --accent-soft: #162b40;
+  --code-bg: #1d2833;
+  --table-head: #202d39;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.65 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.planloft-plan { max-width: 54rem; margin: 0 auto; padding: 3.5rem 1.5rem 6rem; }
+h1 { margin: 0 0 1rem; padding-bottom: 1rem; border-bottom: 3px solid var(--accent); font-size: 2.35rem; line-height: 1.1; letter-spacing: -0.03em; }
+h2 { margin: 2.4rem 0 0.65rem; font-size: 1.3rem; line-height: 1.25; }
+h2::before { content: ""; display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.55rem; border: 2px solid var(--accent); border-radius: 50%; vertical-align: 0.08em; }
+h3 { margin: 1.5rem 0 0.4rem; color: var(--muted); font-size: 1.04rem; }
+p, ul, ol { margin: 0.55rem 0 1rem; }
+li { margin: 0.28rem 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+blockquote { margin: 1.3rem 0; padding: 0.8rem 1rem; border: 1px solid var(--rule); border-left: 4px solid var(--accent); background: var(--accent-soft); }
+code { background: var(--code-bg); padding: 0.12em 0.34em; border-radius: 4px; font-size: 0.9em; }
+pre { overflow: auto; padding: 1rem; background: var(--code-bg); border: 1px solid var(--rule); border-radius: 6px; }
+table { display: block; overflow-x: auto; width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; }
+th, td { min-width: 8rem; padding: 0.6rem 0.75rem; border: 1px solid var(--rule); text-align: left; vertical-align: top; }
+th { background: var(--table-head); }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.4rem 0; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }

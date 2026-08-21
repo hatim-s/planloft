@@ -30,6 +30,9 @@ planloft init
 
 `planloft init` creates the default configuration if needed, keeps an existing valid
 configuration unchanged, and reports GitHub readiness. It does not publish anything.
+Use `planloft init --force` only to replace `config.json` with exact defaults. The reset
+discards configured settings and credentials but preserves stored documents, custom
+themes, hosting clones, and project files.
 
 ### CLI plus `planloft-write-doc`
 
@@ -78,6 +81,22 @@ To publish only when you intend to create a public review link:
 planloft publish proposal.md --ttl 30
 ```
 
+## Built-in themes
+
+Planloft includes six authoring and presentation themes:
+
+| Theme | Best for |
+|---|---|
+| `minimal` | Terse checklists and execution plans |
+| `detailed` | Thorough technical implementation plans |
+| `editorial` | Narrative proposals and recommendations |
+| `decision` | ADRs and durable decision records |
+| `research` | Evidence reviews and investigations |
+| `briefing` | Status updates and leadership reviews |
+
+Select one with `--theme <name>`, document metadata, a project override, or the global
+configuration. See the [theme catalog](./themes/README.md) for authoring emphasis.
+
 ## CLI
 
 <!-- planloft:command-knowledge:start -->
@@ -91,7 +110,7 @@ planloft publish proposal.md --ttl 30
 - `planloft rm <slug>` — Delete a stored document's source and index entry.
 - `planloft resolve` — Resolve the exact plan path, kind, theme, and authoring template.
 - `planloft config` — Open the versioned global configuration in $EDITOR, validate it, or print it.
-- `planloft init` — Create default configuration and report GitHub readiness.
+- `planloft init` — Create or explicitly reset default configuration and report GitHub readiness.
 <!-- planloft:command-knowledge:end -->
 
 Run `planloft help` for workflows, defaults, examples, and write-safety markers, or

@@ -28,6 +28,10 @@ try {
     path.join(packageRoot, "skills", "planloft-customise", "references", "themes.md"),
     path.join(packageRoot, "skills", "planloft-customise", "assets", "theme-starter", "style.css"),
     path.join(packageRoot, "themes", "editorial", "style.css"),
+    path.join(packageRoot, "themes", "briefing", "template.md"),
+    path.join(packageRoot, "themes", "decision", "template.md"),
+    path.join(packageRoot, "themes", "research", "template.md"),
+    path.join(packageRoot, "themes", "README.md"),
     path.join(packageRoot, "schemas", "config.schema.json"),
     path.join(packageRoot, "templates", "github-pages", "prune-plans.yml"),
   ]) assert.ok(fs.existsSync(required), `packed package is missing ${path.relative(packageRoot, required)}`);

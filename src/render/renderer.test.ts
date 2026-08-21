@@ -148,7 +148,7 @@ test("noindex is injected when a custom constrained layout omits the robots slot
 });
 
 test("rendered documents expose a compact three-option theme selector", () => {
-  for (const theme of ["minimal", "detailed", "editorial"]) {
+  for (const theme of ["briefing", "decision", "detailed", "editorial", "minimal", "research"]) {
     const html = renderDocument(document({ content: "# Both themes" }), theme);
     const bodyIndex = html.indexOf("<body");
     const selectorIndex = html.indexOf('class="planloft-theme-selector planloft-theme-toggle"');

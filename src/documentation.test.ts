@@ -15,8 +15,12 @@ test("README keeps installation concise and points detailed setup to one guide",
   assert.doesNotMatch(readme, /codex plugin (?:marketplace|add)/);
   assert.doesNotMatch(readme, /claude plugin (?:marketplace|install)/);
   assert.match(readme, /planloft init/);
+  assert.match(readme, /planloft init --force/);
   assert.match(readme, /\[Setup\]\(\.\/docs\/setup\.md\)/);
   assert.doesNotMatch(readme, /plugin/i);
+  for (const theme of ["minimal", "detailed", "editorial", "decision", "research", "briefing"]) {
+    assert.ok(readme.includes(`| \`${theme}\` |`));
+  }
 });
 
 test("setup guide covers human, agent, and CI setup", () => {
@@ -30,6 +34,8 @@ test("setup guide covers human, agent, and CI setup", () => {
     assert.ok(setup.includes(`${base} -g -a ${agent}`));
   }
   assert.match(setup, /planloft init/);
+  assert.match(setup, /planloft init --force/);
+  assert.match(setup, /replaces only `config\.json`/);
   assert.match(setup, /\/skill:planloft-write-doc/);
   assert.match(setup, /\/planloft-write-doc/);
   assert.doesNotMatch(setup, /codex plugin (?:marketplace|add)/);
