@@ -2,7 +2,7 @@
   "name": "planloft",
   "version": "0.2.3",
   "description": "Agent-native document compiler with focused authoring and customization skills, deep CLI help, and light/dark themed output.",
-  "packageManager": "pnpm@10.8.1",
+  "packageManager": "bun@1.4.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -34,21 +34,22 @@
   ],
   "scripts": {
     "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
-    "dev": "tsx src/cli.ts",
-    "test": "tsx --test src/*.test.ts src/**/*.test.ts && node --test scripts/*.test.mjs _tests_/*.test.mjs",
+    "dev": "bun src/cli.ts",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts && bun test scripts/*.test.mjs _tests_/*.test.mjs",
     "test:installer": "node --test scripts/installer-matrix.test.mjs && node scripts/installer-matrix.mjs --contract",
-    "test:public-api": "pnpm build && node scripts/validate-public-api.mjs",
-    "test:installer:live": "pnpm build && node scripts/installer-matrix.mjs --live --quick --source local",
+    "test:public-api": "bun run build && node scripts/validate-public-api.mjs",
+    "test:installer:live": "bun run build && node scripts/installer-matrix.mjs --live --quick --source local",
     "test:installer:release": "node scripts/installer-matrix.mjs --live --full --source all",
     "release:prepare": "bash scripts/release.sh prepare",
     "release:publish": "bash scripts/release.sh publish",
-    "prepack": "npm run build && npm run typecheck",
+    "prepack": "bun run build && bun run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
+    "bun": ">=1.4",
     "node": ">=18"
   },
   "keywords": [
