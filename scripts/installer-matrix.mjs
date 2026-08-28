@@ -181,20 +181,35 @@ export function validateRepositoryContract() {
   return { cases: matrix.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
 }
 
-async function expectedSkillContent(source, tag, skill) {
+function expectedSkillContent(source, tag, skill) {
   if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", skill, "SKILL.md"), "utf8");
-  const ref = source === "latest" ? "main" : tag;
-  const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/${skill}/SKILL.md`);
-  if (!response.ok) throw new Error(`Unable to fetch expected ${source} skill ${skill} at ${ref}: HTTP ${response.status}`);
-  return response.text();
+  return skillContentAtRef(source === "latest" ? "origin/main" : tag, skill);
 }
 
-async function validateRemoteSkillInventory(ref, label) {
+function validateRefSkillInventory(ref, label) {
   for (const skill of SHIPPED_SKILLS) {
-    const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/${skill}/SKILL.md`);
-    if (!response.ok) throw new Error(`Unable to fetch ${label} skill ${skill} at ${ref}: HTTP ${response.status}`);
-    assert.match(await response.text(), new RegExp(`^name:\\s*${skill}$`, "m"));
+    const content = skillContentAtRef(ref, skill);
+    assert.match(content, new RegExp(`^name:\\s*${skill}$`, "m"));
   }
+}
+
+function skillContentAtRef(ref, skill) {
+  const result = spawnSync("git", ["show", `${ref}:skills/${skill}/SKILL.md`], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`Unable to read ${skill} from ${ref}: ${result.stderr.trim()}`);
+  }
+  return result.stdout;
+}
+
+function refreshRemoteRefs() {
+  const result = spawnSync("git", ["fetch", "origin", "main", "--tags"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) throw new Error(`Unable to refresh release refs: ${result.stderr.trim()}`);
 }
 
 function readJson(relative) {
@@ -320,6 +335,30 @@ function installationPaths(entry, context) {
   ])];
 }
 
+function isInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+function assertInstallPath(entry, context, expected, installPath) {
+  const skillFile = path.join(installPath, "SKILL.md");
+  assert.ok(fs.existsSync(skillFile), `${entry.id}: installed skill missing at ${installPath}`);
+  assert.ok(fs.statSync(installPath).isDirectory(), `${entry.id}: installed skill path is not a directory`);
+  assert.equal(fs.readFileSync(skillFile, "utf8"), expected, `${entry.id}: installed content drift at ${installPath}`);
+
+  const scopeRoot = entry.scope === "global" ? context.home : context.project;
+  const resolved = fs.realpathSync(installPath);
+  assert.ok(isInside(fs.realpathSync(scopeRoot), resolved), `${entry.id}: installed skill resolves outside its disposable scope`);
+
+  if (entry.method === "copy") {
+    assert.ok(!fs.lstatSync(installPath).isSymbolicLink(), `${entry.id}: --copy install unexpectedly became a symlink`);
+  }
+
+  for (const forbidden of ["hooks", "themes", ".agents", ".codex-plugin", ".claude-plugin"]) {
+    assert.ok(!fs.existsSync(path.join(installPath, forbidden)), `${entry.id}: skill-only leaked ${forbidden}`);
+  }
+}
+
 function assertSkillCliBehavior(entry, context) {
   if (entry.skill !== "planloft-write-doc") return;
   const target = agentSkillPath({ ...entry, ...context });
@@ -347,17 +386,10 @@ function assertSkillCliBehavior(entry, context) {
 }
 
 function assertInstalled(entry, context, expected) {
-  const canonical = canonicalSkillPath({ ...entry, ...context });
   const target = agentSkillPath({ ...entry, ...context });
   assert.ok(fs.existsSync(path.join(target, "SKILL.md")), `${entry.id}: agent skill missing`);
-  assert.equal(fs.readFileSync(path.join(target, "SKILL.md"), "utf8"), expected, `${entry.id}: installed content drift`);
-  assert.ok(fs.lstatSync(target).isDirectory(), `${entry.id}: single-agent ${entry.method} install must be a direct directory copy`);
-  assert.ok(!fs.lstatSync(target).isSymbolicLink(), `${entry.id}: exact agent path unexpectedly became a symlink`);
-  if (canonical !== target) {
-    assert.ok(!fs.existsSync(canonical), `${entry.id}: single-agent install leaked a canonical copy outside the agent path`);
-  }
-  for (const forbidden of ["hooks", "themes", ".agents", ".codex-plugin", ".claude-plugin"]) {
-    assert.ok(!fs.existsSync(path.join(target, forbidden)), `${entry.id}: skill-only leaked ${forbidden}`);
+  for (const installPath of installationPaths(entry, context)) {
+    if (fs.existsSync(installPath)) assertInstallPath(entry, context, expected, installPath);
   }
   if (entry.skill === "planloft-write-doc") {
     assert.match(expected, /scripts\/resolve-planloft-command\.sh/);
@@ -379,11 +411,10 @@ function assertRemoved(entry, context) {
   assert.equal(listInstalled(entry, context).filter(({ name }) => name === entry.skill).length, 0, `${entry.id}: remove left the skill discoverable`);
 }
 
-async function runLiveCase(entry, tag, keep) {
+async function runLiveCase(entry, tag, keep, expected) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-installer-matrix-"));
   const context = controlledEnvironment(root, entry.cli);
   const source = sourceValue(entry.source, tag, entry.skill);
-  const expected = await expectedSkillContent(entry.source, tag, entry.skill);
   try {
     const probe = spawnSync("planloft", ["resolve", "--kind", "plan", "--slug", "matrix", "--title", "Matrix"], {
       cwd: context.project, env: context.env, encoding: "utf8",
@@ -425,6 +456,7 @@ function parseOptions(argv) {
     source: get("--source", "local"),
     tag: get("--tag", process.env.PLANLOFT_RELEASE_TAG),
     caseIndex: get("--case-index", undefined),
+    fromCaseIndex: get("--from-case-index", undefined),
     keep: argv.includes("--keep"),
   };
 }
@@ -441,25 +473,48 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const sources = options.source === "all" ? ["latest", "tagged"] : [options.source];
-  if (sources.includes("latest")) await validateRemoteSkillInventory("main", "latest");
+  if (sources.some((source) => source !== "local")) refreshRemoteRefs();
+  if (sources.includes("latest")) validateRefSkillInventory("origin/main", "latest");
   if (sources.includes("tagged")) {
     taggedSkillSource(options.tag, SHIPPED_SKILLS[0]);
-    await validateRemoteSkillInventory(options.tag, "tagged");
+    validateRefSkillInventory(options.tag, "tagged");
+  }
+  const expectedContents = new Map();
+  for (const source of sources) {
+    for (const skill of SHIPPED_SKILLS) {
+      expectedContents.set(`${source}/${skill}`, expectedSkillContent(source, options.tag, skill));
+    }
   }
   let cases = options.breadth === "full"
     ? buildMatrix({ ...DIMENSIONS, source: sources })
     : sources.flatMap((source) => quickMatrix(source));
+  const totalCases = cases.length;
+  let caseOffset = 0;
+  if (options.caseIndex !== undefined && options.fromCaseIndex !== undefined) {
+    throw new Error("Use either --case-index or --from-case-index, not both.");
+  }
   if (options.caseIndex !== undefined) {
     const index = Number(options.caseIndex);
     if (!Number.isInteger(index) || index < 1 || index > cases.length) {
       throw new Error(`--case-index must be between 1 and ${cases.length}`);
     }
+    caseOffset = index - 1;
     cases = [cases[index - 1]];
+  }
+  if (options.fromCaseIndex !== undefined) {
+    const index = Number(options.fromCaseIndex);
+    if (!Number.isInteger(index) || index < 1 || index > cases.length) {
+      throw new Error(`--from-case-index must be between 1 and ${cases.length}`);
+    }
+    caseOffset = index - 1;
+    cases = cases.slice(caseOffset);
   }
   console.log(`installer live matrix: ${cases.length} disposable cases (${options.breadth}, ${sources.join("+")})`);
   for (const [index, entry] of cases.entries()) {
-    const result = await runLiveCase(entry, options.tag, options.keep);
-    console.log(`[${index + 1}/${cases.length}] PASS ${result.id}${result.root ? ` kept=${result.root}` : ""}`);
+    const expected = expectedContents.get(`${entry.source}/${entry.skill}`);
+    assert.equal(typeof expected, "string", `${entry.id}: expected skill content was not loaded`);
+    const result = await runLiveCase(entry, options.tag, options.keep, expected);
+    console.log(`[${caseOffset + index + 1}/${totalCases}] PASS ${result.id}${result.root ? ` kept=${result.root}` : ""}`);
   }
 }
 
