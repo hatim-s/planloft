@@ -8,8 +8,8 @@ import { createProgram } from "./program.js";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const readJson = (file: string) => JSON.parse(read(file)) as Record<string, unknown>;
-const EXPECTED_RELEASE_VERSION = "0.2.2";
-const EXPECTED_RELEASE_TAG = "v0.2.2";
+const EXPECTED_RELEASE_VERSION = "0.2.3";
+const EXPECTED_RELEASE_TAG = "v0.2.3";
 
 const AUTHORITATIVE_RELEASE_FILES = [
   "package.json",
@@ -29,7 +29,7 @@ test("package and CLI use the prepared release version", () => {
   assert.equal(createProgram().version(), EXPECTED_RELEASE_VERSION);
 });
 
-test("release operations pin 0.2.2 and v0.2.2 while the README stays version-agnostic", () => {
+test("release operations pin 0.2.3 and v0.2.3 while the README stays version-agnostic", () => {
   const readme = read("README.md");
   const docsReadme = read("docs/README.md");
   const releaseGuide = read("docs/releasing.md");

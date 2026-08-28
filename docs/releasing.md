@@ -1,7 +1,7 @@
-# Release Planloft 0.2.2
+# Release Planloft 0.2.3
 
-This guide publishes `planloft@0.2.2` to npm and creates the matching Git tag
-`v0.2.2`. Run every step from the repository root, in the same terminal.
+This guide publishes `planloft@0.2.3` to npm and creates the matching Git tag
+`v0.2.3`. Run every step from the repository root, in the same terminal.
 
 Publishing to npm and pushing the tag are the only irreversible steps. Everything
 before them is preparation or verification.
@@ -18,7 +18,7 @@ PLANLOFT_PUBLISH=1 pnpm release:publish
 ```
 
 `release:prepare` never publishes or creates a tag. `release:publish` publishes the
-exact prepared tarball, verifies its npm SHA-1, creates `v0.2.2` on the prepared commit,
+exact prepared tarball, verifies its npm SHA-1, creates `v0.2.3` on the prepared commit,
 pushes the tag, and runs the full released-installation matrix. If npm accepts the
 package but the command is interrupted before tagging, rerun `release:publish`. It will
 compare the registry tarball with the prepared candidate before continuing.
@@ -44,16 +44,16 @@ bun --version
 bunx --version
 npm login
 npm whoami
-npm view planloft@0.2.2 version
-git ls-remote --tags origin v0.2.2
+npm view planloft@0.2.3 version
+git ls-remote --tags origin v0.2.3
 ```
 
 Expected:
 
 - Each runtime/version command succeeds; Node reports 18 or newer.
 - `npm whoami` prints your npm username.
-- `npm view` returns `E404` because `0.2.2` has not been published yet.
-- `git ls-remote` prints nothing because `v0.2.2` does not exist yet.
+- `npm view` returns `E404` because `0.2.3` has not been published yet.
+- `git ls-remote` prints nothing because `v0.2.3` does not exist yet.
 
 Stop if npm reports an authentication/permission error, the version already exists,
 or the tag already exists.
@@ -69,7 +69,7 @@ node -p "require('./package.json').version"
 
 What this does: makes the release use the latest merged commit.
 
-Expected: `git status --short` prints nothing and the version command prints `0.2.2`.
+Expected: `git status --short` prints nothing and the version command prints `0.2.3`.
 
 ## 2. Install dependencies and run the release checks
 
@@ -92,7 +92,7 @@ Expected: every command exits successfully. Do not publish if any check fails.
 ```bash
 RELEASE_DIR="$(mktemp -d)"
 npm pack --pack-destination "$RELEASE_DIR"
-CANDIDATE="$RELEASE_DIR/planloft-0.2.2.tgz"
+CANDIDATE="$RELEASE_DIR/planloft-0.2.3.tgz"
 test -f "$CANDIDATE"
 tar -tf "$CANDIDATE" | sort
 node scripts/validate-packed-package.mjs "$CANDIDATE"
@@ -104,11 +104,11 @@ validates the packed CLI, skills, and runtime assets, and asks npm to simulate p
 
 Expected:
 
-- npm creates `planloft-0.2.2.tgz`.
+- npm creates `planloft-0.2.3.tgz`.
 - The package contains 37 files, including the focused `skills/planloft-write-doc` and
   `skills/planloft-customise` directories.
 - The packed-package validator passes.
-- The dry run ends with `+ planloft@0.2.2` without publishing anything.
+- The dry run ends with `+ planloft@0.2.3` without publishing anything.
 
 Keep this terminal open. The `CANDIDATE` variable is used in the next step.
 
@@ -120,9 +120,9 @@ First confirm that neither the checkout nor the external release state changed:
 git fetch origin main --tags
 test -z "$(git status --short)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-test "$(node -p 'require("./package.json").version')" = "0.2.2"
-npm view planloft@0.2.2 version
-git ls-remote --tags origin v0.2.2
+test "$(node -p 'require("./package.json").version')" = "0.2.3"
+npm view planloft@0.2.3 version
+git ls-remote --tags origin v0.2.3
 ```
 
 Expected: the first three `test` commands are silent, `npm view` returns `E404`, and
@@ -134,25 +134,25 @@ When those results are correct, publish the candidate:
 npm publish --access public "$CANDIDATE"
 ```
 
-Expected: npm prints `+ planloft@0.2.2`.
+Expected: npm prints `+ planloft@0.2.3`.
 
 If the command times out or the result is unclear, do not immediately retry. Run
-`npm view planloft@0.2.2 version` first to learn whether npm accepted it.
+`npm view planloft@0.2.3 version` first to learn whether npm accepted it.
 
 ## 5. Verify npm, then create the Git tag
 
 ```bash
-npm view planloft@0.2.2 version dist.shasum dist.integrity
+npm view planloft@0.2.3 version dist.shasum dist.integrity
 RELEASE_COMMIT="$(git rev-parse HEAD)"
-git tag -a v0.2.2 "$RELEASE_COMMIT" -m "planloft v0.2.2"
-git push origin v0.2.2
-git ls-remote --tags origin v0.2.2
+git tag -a v0.2.3 "$RELEASE_COMMIT" -m "planloft v0.2.3"
+git push origin v0.2.3
+git ls-remote --tags origin v0.2.3
 ```
 
 What this does: confirms npm can serve the new package, then tags the exact commit that
 produced it.
 
-Expected: npm reports version `0.2.2`, the push creates `v0.2.2`, and the final lookup
+Expected: npm reports version `0.2.3`, the push creates `v0.2.3`, and the final lookup
 shows the tag.
 
 Never move or force-push a published release tag. If the npm package is wrong, fix it
@@ -161,7 +161,7 @@ in a new version.
 ## 6. Verify released installation paths
 
 ```bash
-PLANLOFT_RELEASE_TAG=v0.2.2 pnpm test:installer:release
+PLANLOFT_RELEASE_TAG=v0.2.3 pnpm test:installer:release
 ```
 
 What this does: verifies that both skills exist at the tag, then installs from the real
@@ -184,7 +184,7 @@ Expected: both commands are silent. The published npm version and Git tag remain
 ## If a step fails
 
 - Before npm publication: fix the problem, merge it to `main`, and restart from step 1.
-- npm result is unclear: check `npm view planloft@0.2.2 version` before retrying.
+- npm result is unclear: check `npm view planloft@0.2.3 version` before retrying.
 - npm published but tagging failed: fix Git access, then tag the same release commit.
 - A released artifact is wrong: do not replace the npm version or move the tag; prepare
   the next version.

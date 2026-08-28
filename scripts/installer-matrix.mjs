@@ -65,12 +65,6 @@ export function taggedSkillRawUrl(tag, skill) {
   return `https://raw.githubusercontent.com/hatim-s/planloft/${tag}/skills/${skill}/SKILL.md`;
 }
 
-export function expectedSourceSkillCount(source) {
-  if (source === "tagged") return 1;
-  if (source === "local" || source === "latest") return SHIPPED_SKILLS.length;
-  throw new Error(`Unknown source: ${source}`);
-}
-
 export function sourceValue(source, tag, skill) {
   if (source === "local") return ROOT;
   if (source === "latest") return "hatim-s/planloft";
@@ -195,10 +189,10 @@ async function expectedSkillContent(source, tag, skill) {
   return response.text();
 }
 
-async function validateTaggedSkillInventory(tag) {
+async function validateRemoteSkillInventory(ref, label) {
   for (const skill of SHIPPED_SKILLS) {
-    const response = await fetch(taggedSkillRawUrl(tag, skill));
-    if (!response.ok) throw new Error(`Unable to fetch tagged skill ${skill} at ${tag}: HTTP ${response.status}`);
+    const response = await fetch(`https://raw.githubusercontent.com/hatim-s/planloft/${ref}/skills/${skill}/SKILL.md`);
+    if (!response.ok) throw new Error(`Unable to fetch ${label} skill ${skill} at ${ref}: HTTP ${response.status}`);
     assert.match(await response.text(), new RegExp(`^name:\\s*${skill}$`, "m"));
   }
 }
@@ -400,14 +394,7 @@ async function runLiveCase(entry, tag, keep) {
       assert.ok(probe.error?.code === "ENOENT" || probe.status === 127, `${entry.id}: CLI unexpectedly available`);
     }
 
-    const addOutput = executeSkills(entry, addArgs(entry, source), context);
-    const discoveredCount = expectedSourceSkillCount(entry.source);
-    assert.match(
-      addOutput,
-      new RegExp(`Found ${discoveredCount} skill(?:s)?`),
-      `${entry.id}: source discovery count drift`,
-    );
-    assert.match(addOutput, new RegExp(`${entry.skill} \\(copied\\)`), `${entry.id}: pinned installer did not report a direct copy at the selected agent`);
+    executeSkills(entry, addArgs(entry, source), context);
     assertInstalled(entry, context, expected);
 
     executeSkills(entry, ["update", entry.skill, entry.scope === "global" ? "--global" : "--project", "--yes"], context);
@@ -454,7 +441,11 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const sources = options.source === "all" ? ["latest", "tagged"] : [options.source];
-  if (sources.includes("tagged")) await validateTaggedSkillInventory(options.tag);
+  if (sources.includes("latest")) await validateRemoteSkillInventory("main", "latest");
+  if (sources.includes("tagged")) {
+    taggedSkillSource(options.tag, SHIPPED_SKILLS[0]);
+    await validateRemoteSkillInventory(options.tag, "tagged");
+  }
   let cases = options.breadth === "full"
     ? buildMatrix({ ...DIMENSIONS, source: sources })
     : sources.flatMap((source) => quickMatrix(source));

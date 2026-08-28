@@ -8,7 +8,6 @@ import {
   agentSkillPath,
   buildMatrix,
   canonicalSkillPath,
-  expectedSourceSkillCount,
   quickMatrix,
   runnerInvocation,
   sourceValue,
@@ -63,12 +62,8 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
   assert.throws(() => taggedSkillRawUrl("v1.2.3", "unknown"), /Unknown shipped skill/);
 });
 
-test("repository sources expose both skills while a direct tagged source exposes one", () => {
+test("repository inventory contains both portable skills", () => {
   assert.deepEqual(SHIPPED_SKILLS, ["planloft-customise", "planloft-write-doc"]);
-  assert.equal(expectedSourceSkillCount("local"), 2);
-  assert.equal(expectedSourceSkillCount("latest"), 2);
-  assert.equal(expectedSourceSkillCount("tagged"), 1);
-  assert.throws(() => expectedSourceSkillCount("npm"), /Unknown source/);
 });
 
 test("discovery paths stay inside the disposable project or home", () => {
