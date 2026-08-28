@@ -1,6 +1,6 @@
 # Migrate an existing Planloft installation
 
-Planloft 0.2.2 replaces the short portable skill names with
+Planloft 0.2.3 replaces the short portable skill names with
 `planloft-write-doc` and `planloft-customise`. Codex keeps the product labels
 `planloft:write-doc` and `planloft:customise`; Claude Code and other Agent Skills hosts
 use the new hyphenated names. Follow these steps once for every machine or project that
@@ -44,7 +44,7 @@ Do not delete the parent skills directory or the new `planloft-write-doc` and
 ## 2. Remove a retired host installation
 
 Older Planloft releases could be installed as a Codex or Claude host bundle. Planloft
-0.2.2 does not ship that product. If you used it, remove it before restarting the
+0.2.3 does not ship that product. If you used it, remove it before restarting the
 host so the retired skills and automatic lifecycle behavior do not remain active:
 
 ```bash
@@ -56,21 +56,21 @@ claude plugin uninstall planloft@planloft
 ```
 
 Expected: the host no longer lists a Planloft plugin. There is no replacement host
-bundle in 0.2.2; install the CLI and focused portable skills in the next steps.
+bundle in 0.2.3; install the CLI and focused portable skills in the next steps.
 
 ## 3. Upgrade the CLI
 
 Choose the package manager you use:
 
 ```bash
-npm install -g planloft@0.2.2
-# or: pnpm add -g planloft@0.2.2
-# or: bun add -g planloft@0.2.2
+npm install -g planloft@0.2.3
+# or: pnpm add -g planloft@0.2.3
+# or: bun add -g planloft@0.2.3
 
 planloft --version
 ```
 
-Expected: `planloft --version` prints `0.2.2`.
+Expected: `planloft --version` prints `0.2.3`.
 
 ## 4. Install the focused skills
 
@@ -160,6 +160,6 @@ planloft init
 planloft list
 ```
 
-Expected: the version is `0.2.2`, configuration validation succeeds, and existing
+Expected: the version is `0.2.3`, configuration validation succeeds, and existing
 documents are listed. Finally, create a small test plan with `planloft-write-doc` and preview it
 with `planloft preview [slug]`.

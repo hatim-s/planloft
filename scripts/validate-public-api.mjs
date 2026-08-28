@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED_RELEASE_VERSION = "0.2.2";
+const EXPECTED_RELEASE_VERSION = "0.2.3";
 const builtCliVersion = execFileSync(
   process.execPath,
   [path.join(root, "dist", "cli.js"), "--version"],

@@ -72,7 +72,7 @@ pnpm test:installer       # 288-case contract enumeration, no network or global 
 pnpm test:installer:live  # 12 pairwise lifecycle cases against this checkout
 
 # Run only after publishing the npm version and matching repository tag:
-PLANLOFT_RELEASE_TAG=v0.2.2 pnpm test:installer:release
+PLANLOFT_RELEASE_TAG=v0.2.3 pnpm test:installer:release
 ```
 
 Every live case creates and removes its own temporary project, `HOME`, Planloft home,
@@ -85,7 +85,7 @@ After building and packing, execute the extracted CLI and portable skill resolve
 than merely inspecting tar entries:
 
 ```bash
-node scripts/validate-packed-package.mjs /path/to/planloft-0.2.2.tgz
+node scripts/validate-packed-package.mjs /path/to/planloft-0.2.3.tgz
 ```
 
 The release suite intentionally fails without `PLANLOFT_RELEASE_TAG`. It first verifies
