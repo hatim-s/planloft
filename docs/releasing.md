@@ -186,5 +186,8 @@ Expected: both commands are silent. The published npm version and Git tag remain
 - Before npm publication: fix the problem, merge it to `main`, and restart from step 1.
 - npm result is unclear: check `npm view planloft@0.2.3 version` before retrying.
 - npm published but tagging failed: fix Git access, then tag the same release commit.
+- Released installer assertion failed: fix the assertion on `main`, then resume at the
+  failed one-based case number with
+  `PLANLOFT_RELEASE_TAG=v0.2.3 node scripts/installer-matrix.mjs --live --full --source all --from-case-index <case>`.
 - A released artifact is wrong: do not replace the npm version or move the tag; prepare
   the next version.
