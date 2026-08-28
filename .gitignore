@@ -8,3 +8,6 @@ dist/
 
 # Local test scratch
 .planloft-test/
+
+# Prepared npm release artifacts
+.release/

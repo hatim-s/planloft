@@ -6,6 +6,25 @@ This guide publishes `planloft@0.2.2` to npm and creates the matching Git tag
 Publishing to npm and pushing the tag are the only irreversible steps. Everything
 before them is preparation or verification.
 
+The checked-in release script runs the same gates and keeps the prepared tarball under
+the ignored `.release/` directory. The normal release path is:
+
+```bash
+git switch main
+git pull --ff-only origin main
+pnpm release:prepare
+npm login
+PLANLOFT_PUBLISH=1 pnpm release:publish
+```
+
+`release:prepare` never publishes or creates a tag. `release:publish` publishes the
+exact prepared tarball, verifies its npm SHA-1, creates `v0.2.2` on the prepared commit,
+pushes the tag, and runs the full released-installation matrix. If npm accepts the
+package but the command is interrupted before tagging, rerun `release:publish`. It will
+compare the registry tarball with the prepared candidate before continuing.
+
+The numbered commands below are the manual equivalent and the recovery reference.
+
 ## Before you start
 
 You need:
@@ -86,7 +105,7 @@ validates the packed CLI, skills, and runtime assets, and asks npm to simulate p
 Expected:
 
 - npm creates `planloft-0.2.2.tgz`.
-- The package contains 30 entries, including the focused `skills/planloft-write-doc` and
+- The package contains 37 files, including the focused `skills/planloft-write-doc` and
   `skills/planloft-customise` directories.
 - The packed-package validator passes.
 - The dry run ends with `+ planloft@0.2.2` without publishing anything.
