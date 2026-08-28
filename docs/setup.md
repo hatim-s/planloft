@@ -25,6 +25,11 @@ file is absent, validates an existing file, reports the active theme and default
 and checks whether the authenticated GitHub CLI is available. It does not install an
 agent skill, change a repository, or publish a document.
 
+To recover from stale or invalid configuration, run `planloft init --force`. This
+explicitly replaces only `config.json` with the current exact defaults, including
+removing any configured credentials. Stored documents, the index, custom themes,
+hosting clones, and project files are preserved.
+
 No configuration editing is required for local writing, storage, rendering, or
 previewing.
 

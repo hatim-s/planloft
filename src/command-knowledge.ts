@@ -46,6 +46,9 @@ export const GISCUS_REQUIREMENTS =
 export const TTL_REQUIREMENTS =
   "--ttl and config.defaultTtlDays must be finite positive integers; the configured default " +
   "is used only when --ttl is omitted.";
+export const INIT_FORCE_DISCLOSURE =
+  "init --force replaces only config.json with exact defaults, discarding configured settings " +
+  "and credentials while preserving stored documents, custom themes, hosting clones, and project files.";
 
 export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
   {
@@ -231,15 +234,15 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     name: "init",
     signature: "init",
     category: "Configuration",
-    purpose: "Create default configuration and report GitHub readiness.",
+    purpose: "Create or explicitly reset default configuration and report GitHub readiness.",
     input: "none",
     transition: "local environment -> configuration + readiness report",
     localWrite: "optional",
     externalWrite: "never",
     destructive: false,
-    defaults: ["Keeps an existing config unchanged."],
+    defaults: ["Keeps an existing config unchanged unless --force is provided."],
     examples: [{ argv: ["init"] }],
-    trustAndPrivacy: ["Does not publish a document."],
+    trustAndPrivacy: [INIT_FORCE_DISCLOSURE, "Does not publish a document."],
   },
 ];
 
@@ -274,6 +277,7 @@ export function formatRootWorkflowHelp(): string {
     `  ${GITHUB_AUTH_DISCLOSURE}`,
     `  ${GISCUS_REQUIREMENTS}`,
     `  ${TTL_REQUIREMENTS}`,
+    `  ${INIT_FORCE_DISCLOSURE}`,
     "  rm deletes stored source.",
     "",
     "Run `planloft help <command>` for defaults, examples, and command-specific safety notes.",

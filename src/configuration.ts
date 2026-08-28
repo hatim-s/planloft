@@ -31,6 +31,7 @@ export interface RedactedConfiguration {
 export interface PlanloftConfiguration {
   load(): Config;
   ensure(): Config;
+  reset(): Config;
   save(config: Config): void;
   update(patch: ConfigPatch): Config;
   resolveProject(projectKey: string, documentTheme?: string): ResolvedProjectConfiguration;
@@ -46,6 +47,7 @@ export function createPlanloftConfiguration(): PlanloftConfiguration {
   return {
     load: loadConfig,
     ensure: ensureConfig,
+    reset: resetConfig,
     save: saveConfig,
     update: updateConfig,
     resolveProject(projectKey, documentTheme) {
@@ -114,6 +116,13 @@ export function ensureConfig(): Config {
   const result = readConfig();
   if (result.absent) saveConfig(result.config);
   return result.config;
+}
+
+/** Replace config.json with the exact current defaults without touching other Planloft state. */
+export function resetConfig(): Config {
+  const defaults = structuredClone(DEFAULT_CONFIG);
+  saveConfig(defaults);
+  return defaults;
 }
 
 function readConfig(): { config: Config; absent: boolean } {

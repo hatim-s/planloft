@@ -291,10 +291,15 @@ export interface InitResult {
   operation: "init";
   configPath: string;
   configCreated: boolean;
+  configReinitialized: boolean;
   theme: string;
   captureFormat: "md";
   defaultTtlDays: number;
   github: { ready: boolean; repo: string };
+}
+
+export interface InitOptions {
+  force?: boolean;
 }
 
 export interface PlanloftApplication {
@@ -308,7 +313,7 @@ export interface PlanloftApplication {
   deploy(slug?: string, options?: DeployOptions): Promise<DeployResult>;
   remove(slug: string): Promise<RemoveResult>;
   config(): Promise<ConfigResult>;
-  init(): Promise<InitResult>;
+  init(options?: InitOptions): Promise<InitResult>;
 }
 
 const nativeFileSystem: ApplicationFileSystem = {
@@ -570,15 +575,21 @@ export function createPlanloftApplication(
         return { operation: "config", mode: "printed", path: file, config: configuration.redact() };
       }),
 
-    init: () =>
+    init: (options = {}) =>
       run("init", () => {
         const file = configPath();
         const configCreated = !fileSystem.exists(file);
-        const cfg = configCreated ? configuration.ensure() : configuration.load();
+        const configReinitialized = options.force === true && !configCreated;
+        const cfg = options.force === true
+          ? configuration.reset()
+          : configCreated
+            ? configuration.ensure()
+            : configuration.load();
         return {
           operation: "init",
           configPath: file,
           configCreated,
+          configReinitialized,
           theme: cfg.theme,
           captureFormat: "md",
           defaultTtlDays: cfg.defaultTtlDays,

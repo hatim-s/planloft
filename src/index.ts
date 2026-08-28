@@ -47,6 +47,7 @@ export type {
   DocumentSourceOptions,
   DocumentSummary,
   HoistResult,
+  InitOptions,
   InitResult,
   ListProjectResult,
   ListResult,

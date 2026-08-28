@@ -20,6 +20,13 @@ Valid names match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. A user directory takes precede
 over a bundled theme with the same name. Effective theme selection is document
 metadata, then project configuration, then the global configuration default.
 
+## Built-in catalog
+
+Choose a built-in by the document's job: `minimal` for terse execution, `detailed` for
+technical plans, `editorial` for narrative proposals, `decision` for durable choices,
+`research` for evidence-led investigations, and `briefing` for status or leadership
+reviews. Each built-in provides authoring guidance plus deliberate light and dark CSS.
+
 ## CSS requirements
 
 Include this exact marker when the theme provides its own complete dual palette:

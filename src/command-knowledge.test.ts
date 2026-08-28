@@ -70,6 +70,8 @@ contractTest("source metadata and copy replacement flags are exposed by the CLI"
   }
   const copy = program.commands.find((entry) => entry.name() === "copy");
   assert.ok(copy?.options.some((option) => option.long === "--force"));
+  const init = program.commands.find((entry) => entry.name() === "init");
+  assert.ok(init?.options.some((option) => option.long === "--force"));
 });
 
 contractTest("root help groups every public command and explains state and safety", async () => {
@@ -84,6 +86,7 @@ contractTest("root help groups every public command and explains state and safet
   assert.match(help, /--comments requires GitHub Discussions plus giscus\.repo/);
   assert.match(help, /--ttl and config\.defaultTtlDays must be finite positive integers/);
   assert.match(help, /--trusted-html accepts only content you trust/);
+  assert.match(help, /init --force replaces only config\.json with exact defaults/);
 });
 
 contractTest("every command help page includes its tested example and effect markers", async () => {
@@ -128,7 +131,7 @@ contractTest("every structured example reaches the expected application operatio
       args: [{ kind: "plan", slug: "auth-refactor", title: "Authentication Refactor" }],
     },
     config: { method: "config", args: [], environment: { EDITOR: "nano" } },
-    init: { method: "init", args: [] },
+    init: { method: "init", args: [{ force: undefined }] },
   };
 
   for (const command of COMMAND_KNOWLEDGE) {
@@ -174,6 +177,18 @@ contractTest("unknown example options fail parsing before any application operat
   );
   assert.match(output, /unknown option '--unknown-option'/);
   assert.deepEqual(calls, []);
+});
+
+test("init --force forwards an explicit configuration reset", async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const program = createProgram({
+    application: mockApplication(calls),
+    writeOut: () => undefined,
+    writeErr: () => undefined,
+    setExitCode: () => undefined,
+  });
+  await program.parseAsync(["node", "planloft", "init", "--force"]);
+  assert.deepEqual(calls, [{ method: "init", args: [{ force: true }] }]);
 });
 
 contractTest("TTL help contract is enforced by the CLI parser", async () => {
@@ -394,6 +409,7 @@ function mockResult(method: string): unknown {
         operation: "init",
         configPath: "/tmp/config.json",
         configCreated: true,
+        configReinitialized: false,
         theme: "detailed",
         captureFormat: "md",
         defaultTtlDays: 30,
