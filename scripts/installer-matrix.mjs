@@ -258,7 +258,7 @@ function controlledEnvironment(root, cliState) {
   if (cliState === "installed") {
     const node = findExecutable("node");
     const cli = path.join(ROOT, "dist", "cli.js");
-    assert.ok(fs.existsSync(cli), "run npm run build before the live installer matrix");
+    assert.ok(fs.existsSync(cli), "run bun run build before the live installer matrix");
     fs.writeFileSync(path.join(runnerBin, "planloft"), `#!/bin/sh\nexec "${node}" "${cli}" "$@"\n`);
     fs.chmodSync(path.join(runnerBin, "planloft"), 0o755);
   }

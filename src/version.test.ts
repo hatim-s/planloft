@@ -75,12 +75,12 @@ test("release guide is a short, ordered, executable operator flow", () => {
   }
 
   const commands = [
-    "pnpm test",
+    "bun run test",
     'npm pack --pack-destination "$RELEASE_DIR"',
     'npm publish --dry-run "$CANDIDATE"',
     'npm publish --access public "$CANDIDATE"',
     `git tag -a ${EXPECTED_RELEASE_TAG}`,
-    `PLANLOFT_RELEASE_TAG=${EXPECTED_RELEASE_TAG} pnpm test:installer:release`,
+    `PLANLOFT_RELEASE_TAG=${EXPECTED_RELEASE_TAG} bun run test:installer:release`,
   ];
   previous = -1;
   for (const command of commands) {

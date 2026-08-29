@@ -27,5 +27,5 @@ test("release commands use the checked-in guarded script", () => {
     1,
   );
   assert.match(script, /registry_sha1="\$\(npm view "\$PACKAGE_NAME@\$VERSION" dist\.shasum\)"/);
-  assert.match(script, /PLANLOFT_RELEASE_TAG="\$TAG" pnpm test:installer:release/);
+  assert.match(script, /PLANLOFT_RELEASE_TAG="\$TAG" bun run test:installer:release/);
 });

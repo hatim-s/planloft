@@ -100,12 +100,12 @@ prepare_release() {
   preflight_checkout
   require_unpublished_destinations
 
-  pnpm install --frozen-lockfile
-  pnpm test
-  pnpm typecheck
-  pnpm test:public-api
-  pnpm test:installer
-  pnpm test:installer:live
+  bun install --frozen-lockfile
+  bun run test
+  bun run typecheck
+  bun run test:public-api
+  bun run test:installer
+  bun run test:installer:live
 
   mkdir -p "$RELEASE_DIR"
   rm -f "$CANDIDATE" "$COMMIT_FILE"
@@ -124,7 +124,7 @@ prepare_release() {
   printf '  commit:   %s\n' "$release_commit"
   printf '  candidate: %s\n' "$CANDIDATE"
   printf '  sha1:      %s\n' "$candidate_sha1"
-  printf '\nPublish with:\n  PLANLOFT_PUBLISH=1 pnpm release:publish\n'
+  printf '\nPublish with:\n  PLANLOFT_PUBLISH=1 bun run release:publish\n'
 }
 
 wait_for_published_version() {
@@ -190,7 +190,7 @@ publish_release() {
     [[ "$tag_commit" == "$release_commit" ]] || fail "remote tag verification failed"
   fi
 
-  PLANLOFT_RELEASE_TAG="$TAG" pnpm test:installer:release
+  PLANLOFT_RELEASE_TAG="$TAG" bun run test:installer:release
   npm view "$PACKAGE_NAME@$VERSION" version dist.shasum dist.integrity
 
   printf '\nPublished %s@%s and tagged %s at %s.\n' "$PACKAGE_NAME" "$VERSION" "$TAG" "$release_commit"

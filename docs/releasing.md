@@ -12,9 +12,9 @@ the ignored `.release/` directory. The normal release path is:
 ```bash
 git switch main
 git pull --ff-only origin main
-pnpm release:prepare
+bun run release:prepare
 npm login
-PLANLOFT_PUBLISH=1 pnpm release:publish
+PLANLOFT_PUBLISH=1 bun run release:publish
 ```
 
 `release:prepare` never publishes or creates a tag. `release:publish` publishes the
@@ -29,8 +29,8 @@ The numbered commands below are the manual equivalent and the recovery reference
 
 You need:
 
-- Node.js 18 or newer, the pnpm version declared in `package.json`, and Bun with
-  `bunx` available for the mandatory cross-runner installer matrix.
+- Node.js 18 or newer, Bun 1.4 with `bunx`, and pnpm for the mandatory
+  cross-runner installer matrix.
 - An npm account allowed to publish the `planloft` package.
 - Permission to push tags to the GitHub repository.
 - A clean `main` branch with all release changes already merged.
@@ -39,9 +39,9 @@ Log in and check the two release destinations:
 
 ```bash
 node --version
-pnpm --version
 bun --version
 bunx --version
+pnpm --version
 npm login
 npm whoami
 npm view planloft@0.2.3 version
@@ -74,12 +74,12 @@ Expected: `git status --short` prints nothing and the version command prints `0.
 ## 2. Install dependencies and run the release checks
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm test
-pnpm typecheck
-pnpm test:public-api
-pnpm test:installer
-pnpm test:installer:live
+bun install --frozen-lockfile
+bun run test
+bun run typecheck
+bun run test:public-api
+bun run test:installer
+bun run test:installer:live
 ```
 
 What this does: verifies the source, public Node API, CLI, package declarations, and
@@ -161,7 +161,7 @@ in a new version.
 ## 6. Verify released installation paths
 
 ```bash
-PLANLOFT_RELEASE_TAG=v0.2.3 pnpm test:installer:release
+PLANLOFT_RELEASE_TAG=v0.2.3 bun run test:installer:release
 ```
 
 What this does: verifies that both skills exist at the tag, then installs from the real
