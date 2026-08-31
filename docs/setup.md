@@ -91,9 +91,9 @@ discovery files:
 npx --yes skills add hatim-s/planloft --skill planloft-write-doc -a codex -y
 ```
 
-Ordinary render and validation jobs need only the CLI. Publication jobs must provide a
-GitHub credential through an authenticated `gh` CLI or `PLANLOFT_GITHUB_TOKEN`.
-Noninteractive runs never prompt for a token.
+Ordinary render and validation jobs need only the CLI. Publication jobs must install
+the `gh` CLI and provide a GitHub credential through `gh auth login` or
+`PLANLOFT_GITHUB_TOKEN`. Noninteractive runs never prompt for a token.
 
 ## Verify
 
@@ -115,8 +115,8 @@ longer needed.
 ## Publishing readiness
 
 Publishing is optional. If `planloft init` reports that GitHub is not ready, local
-workflows still work. Authenticate `gh` or set `PLANLOFT_GITHUB_TOKEN` only before a
-deliberate `publish` or `deploy` operation.
+workflows still work. Install `gh`, then authenticate it or set
+`PLANLOFT_GITHUB_TOKEN` before a deliberate `publish` or `deploy` operation.
 
 Published pages live in a public, enumerable GitHub repository even though their paths
 are hard to guess and marked `noindex`. Keep sensitive documents local.

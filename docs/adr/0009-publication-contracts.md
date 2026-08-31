@@ -30,8 +30,9 @@ stable `PLANLOFT_GISCUS_CONFIG_INCOMPLETE` failure.
 Discover credentials in this order: authenticated `gh`,
 `PLANLOFT_GITHUB_TOKEN`, `github.token`, then an ephemeral hidden terminal prompt.
 Prompt only when stdin and stdout are TTYs. Validate the selected credential through
-GitHub's `/user` endpoint before repository mutation. Noninteractive failures use
-stable `PLANLOFT_GITHUB_AUTH_*` codes.
+`gh api user` before repository mutation. Repository lookup, creation, and Pages setup
+also use `gh api`, so the runtime does not make its own TLS requests. Noninteractive
+failures use stable `PLANLOFT_GITHUB_AUTH_*` codes.
 
 Never print credentials. Do not save prompted credentials. Authenticate Git commands
 with an ephemeral `GIT_ASKPASS` helper and environment-scoped credential values while

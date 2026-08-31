@@ -21,6 +21,7 @@ import {
 } from "./core/ttl.js";
 import type { Config, DocMeta } from "./core/types.js";
 import type { HostAdapter } from "./hosts/adapter.js";
+import { githubApi, GithubCliApiError } from "./github-cli.js";
 import {
   authenticatedGit,
   configureCleanRemote,
@@ -35,6 +36,35 @@ import {
   validateGithubCredential,
   type Manifest,
 } from "./publication.js";
+
+test("GitHub API calls use gh with token-safe argv and JSON stdin", () => {
+  const response = githubApi<{ id: number }>(
+    "api-secret",
+    "POST",
+    "/user/repos",
+    { name: "plans", private: false },
+    (args, options) => {
+      assert.deepEqual(args, ["api", "--method", "POST", "user/repos", "--input", "-"]);
+      assert.doesNotMatch(args.join(" "), /api-secret/);
+      assert.equal(options?.token, "api-secret");
+      assert.equal(options?.input, JSON.stringify({ name: "plans", private: false }));
+      return JSON.stringify({ id: 123 });
+    },
+  );
+  assert.deepEqual(response, { id: 123 });
+
+  assert.throws(
+    () => githubApi("api-secret", "POST", "repos/owner/plans/pages", {}, () => {
+      throw new Error("gh: the Pages site already exists (HTTP 409)");
+    }),
+    (error: Error) => {
+      assert.ok(error instanceof GithubCliApiError);
+      assert.equal(error.status, 409);
+      assert.doesNotMatch(error.message, /api-secret/);
+      return true;
+    },
+  );
+});
 
 test("giscus configuration resolves project values over global values", () => {
   const cfg = config({
@@ -232,13 +262,18 @@ test("interactive auth prompt is ephemeral and credential validation has stable 
   });
   assert.deepEqual(prompted, { token: "prompt-secret", source: "prompt" });
 
-  const login = await validateGithubCredential(prompted, async () =>
-    new Response(JSON.stringify({ login: "hatim-s" }), { status: 200 }),
-  );
+  const login = await validateGithubCredential(prompted, (args, options) => {
+    assert.deepEqual(args, ["api", "--method", "GET", "user"]);
+    assert.equal(options?.token, "prompt-secret");
+    assert.doesNotMatch(args.join(" "), /prompt-secret/);
+    return JSON.stringify({ login: "hatim-s" });
+  });
   assert.equal(login, "hatim-s");
 
   await assert.rejects(
-    validateGithubCredential(prompted, async () => new Response(null, { status: 401 })),
+    validateGithubCredential(prompted, () => {
+      throw new Error("gh: HTTP 401");
+    }),
     (error: Error) => {
       assert.match(error.message, new RegExp(`^${GITHUB_AUTH_INVALID}:`));
       assert.doesNotMatch(error.message, /prompt-secret/);
@@ -246,7 +281,7 @@ test("interactive auth prompt is ephemeral and credential validation has stable 
     },
   );
   await assert.rejects(
-    validateGithubCredential(prompted, async () => {
+    validateGithubCredential(prompted, () => {
       throw new Error("network includes prompt-secret");
     }),
     (error: Error) => {
@@ -424,9 +459,11 @@ test("the publication interface owns auth, manifest, rendering, privacy, and exa
         id: () => "candidate-id",
         host,
         auth: {
-          runGh: () => { throw new Error("gh unavailable"); },
+          runGh: (args) => {
+            if (args[0] === "api") return JSON.stringify({ login: "owner" });
+            throw new Error("gh unavailable");
+          },
           interactive: false,
-          request: async () => new Response(JSON.stringify({ login: "owner" }), { status: 200 }),
         },
       });
       const document: DocMeta = {
@@ -484,9 +521,11 @@ test("real-host publication cleans its one final-id artifact when the adapter fa
         id: () => "unused-candidate-id",
         host,
         auth: {
-          runGh: () => { throw new Error("gh unavailable"); },
+          runGh: (args) => {
+            if (args[0] === "api") return JSON.stringify({ login: "owner" });
+            throw new Error("gh unavailable");
+          },
           interactive: false,
-          request: async () => new Response(JSON.stringify({ login: "owner" }), { status: 200 }),
         },
       });
       const document: DocMeta = {

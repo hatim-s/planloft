@@ -104,10 +104,11 @@ the heavy runtime is provisioned.
 **Rejected.** Central managed service we operate (avoided infra/abuse liability);
 GitHub-only with no adapter seam (refactor cost to add hosts later).
 
-### D12 — GitHub auth: `gh` CLI primary, PAT fallback
-**Decision.** Use the `gh` CLI if installed + authenticated (repo create, Pages enable
-via API). Otherwise prompt for a PAT (repo + pages scope) stored in `config.json`. No
-OAuth app to operate.
+### D12 — GitHub auth: `gh` CLI with PAT fallback
+**Decision.** Use the `gh` CLI for GitHub API calls so publication uses the machine CA
+trust. Prefer its authenticated token. Otherwise accept a PAT from the environment,
+configuration, or terminal prompt and pass it to `gh` through `GH_TOKEN`. Git fetch and
+push use the system Git client. No OAuth app to operate.
 **Rejected.** OAuth device flow (requires operating a GitHub OAuth app); PAT-only
 (manual token friction).
 

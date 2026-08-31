@@ -3,38 +3,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hostingDir, templatesDir } from "../core/paths.js";
+import { githubApi, GithubCliApiError, runGhCommand } from "../github-cli.js";
 import type { DeployInput, HostAdapter, Manifest } from "./adapter.js";
 
 const DEFAULT_REPO = "planloft-plans";
-const API = "https://api.github.com";
 
 /** Is the `gh` CLI installed + authenticated? (ADR-0001 §D12) */
 export function hasGh(): boolean {
   try {
-    execFileSync("gh", ["auth", "status"], { stdio: "ignore" });
+    runGhCommand(["auth", "status"]);
     return true;
   } catch {
     return false;
   }
-}
-
-async function api(
-  token: string,
-  method: string,
-  pathname: string,
-  body?: unknown,
-): Promise<Response> {
-  return fetch(pathname.startsWith("http") ? pathname : `${API}${pathname}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      "User-Agent": "planloft",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
 }
 
 // ---- git helpers ----------------------------------------------------------
@@ -86,31 +67,46 @@ export function authenticatedGit(
 // ---- repo / pages ---------------------------------------------------------
 
 async function ensureRepo(token: string, user: string, repo: string): Promise<void> {
-  const res = await api(token, "GET", `/repos/${user}/${repo}`);
-  if (res.ok) return;
-  if (res.status !== 404) {
-    throw new Error(`Cannot read repo ${user}/${repo} (${res.status}).`);
+  try {
+    githubApi(token, "GET", `repos/${user}/${repo}`);
+    return;
+  } catch (error) {
+    if (!(error instanceof GithubCliApiError) || error.status !== 404) {
+      throw new Error(`Cannot read repo ${user}/${repo}${githubStatusSuffix(error)}.`);
+    }
   }
-  const create = await api(token, "POST", "/user/repos", {
-    name: repo,
-    private: false, // GitHub Pages on the free tier needs a public repo (ADR-0001 §D21)
-    auto_init: true, // gives us a main branch to clone immediately
-    description: "planloft plan/doc deploys",
-  });
-  if (!create.ok) {
-    throw new Error(`Failed to create ${user}/${repo} (${create.status}).`);
+  try {
+    githubApi(token, "POST", "user/repos", {
+      name: repo,
+      private: false, // GitHub Pages on the free tier needs a public repo (ADR-0001 §D21)
+      auto_init: true, // gives us a main branch to clone immediately
+      description: "planloft plan/doc deploys",
+    });
+  } catch (error) {
+    throw new Error(`Failed to create ${user}/${repo}${githubStatusSuffix(error)}.`);
   }
 }
 
 async function ensurePages(token: string, user: string, repo: string): Promise<string | undefined> {
-  const res = await api(token, "POST", `/repos/${user}/${repo}/pages`, {
-    source: { branch: "main", path: "/" },
-  });
-  // 201 created, 409 already enabled — both fine. Anything else: warn, don't fail the deploy.
-  if (!res.ok && res.status !== 409) {
-    return `Could not auto-enable Pages (${res.status}). Enable it once in repo Settings → Pages (branch: main, /).`;
+  try {
+    githubApi(token, "POST", `repos/${user}/${repo}/pages`, {
+      source: { branch: "main", path: "/" },
+    });
+    return undefined;
+  } catch (error) {
+    // 201 created, 409 already enabled. Anything else warns without failing the deploy.
+    if (error instanceof GithubCliApiError && error.status === 409) return undefined;
+    const status = error instanceof GithubCliApiError && error.status !== undefined
+      ? ` (${error.status})`
+      : "";
+    return `Could not auto-enable Pages${status}. Enable it once in repo Settings → Pages (branch: main, /).`;
   }
-  return undefined;
+}
+
+function githubStatusSuffix(error: unknown): string {
+  return error instanceof GithubCliApiError && error.status !== undefined
+    ? ` (${error.status})`
+    : "";
 }
 
 // ---- local working clone --------------------------------------------------

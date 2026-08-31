@@ -1,10 +1,15 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { PUBLICATION_PRIVACY_DISCLOSURE } from "./command-knowledge.js";
 import { createPlanloftConfiguration, type PlanloftConfiguration } from "./configuration.js";
 import { resolveGiscusConfig } from "./core/giscus.js";
 import { calculateExpiry, resolveTtlDays } from "./core/ttl.js";
 import type { Config, DocMeta, GiscusConfig } from "./core/types.js";
+import {
+  githubApi,
+  GithubCliApiError,
+  runGhCommand,
+  type GhRunner,
+} from "./github-cli.js";
 import type { HostAdapter, HostAuthentication, Manifest } from "./hosts/adapter.js";
 import { buildSite } from "./render/renderer.js";
 
@@ -296,19 +301,11 @@ export const GITHUB_AUTH_MISSING = "PLANLOFT_GITHUB_AUTH_MISSING";
 export const GITHUB_AUTH_INVALID = "PLANLOFT_GITHUB_AUTH_INVALID";
 export const GITHUB_AUTH_UNREACHABLE = "PLANLOFT_GITHUB_AUTH_UNREACHABLE";
 
-type GithubApi = (
-  token: string,
-  method: string,
-  pathname: string,
-  body?: unknown,
-) => Promise<Response>;
-
 export interface AuthDiscoveryOptions {
   env?: Readonly<Record<string, string | undefined>>;
   interactive?: boolean;
   promptToken?: () => Promise<string>;
-  runGh?: (args: string[]) => string;
-  request?: GithubApi;
+  runGh?: GhRunner;
 }
 
 export async function acquireGithubAuthentication(
@@ -316,7 +313,7 @@ export async function acquireGithubAuthentication(
   options: AuthDiscoveryOptions = {},
 ): Promise<GithubAuthentication> {
   const credential = await discoverGithubCredential(config, options);
-  const user = await validateGithubCredential(credential, options.request);
+  const user = await validateGithubCredential(credential, options.runGh);
   return { token: credential.token, user };
 }
 
@@ -351,48 +348,24 @@ export async function discoverGithubCredential(
 
 export async function validateGithubCredential(
   credential: GithubCredential,
-  request: GithubApi = githubApi,
+  runGh: GhRunner = runGhCommand,
 ): Promise<string> {
-  let response: Response;
+  let login: unknown;
   try {
-    response = await request(credential.token, "GET", "/user");
-  } catch {
+    login = githubApi<{ login?: unknown }>(credential.token, "GET", "user", undefined, runGh)
+      .login;
+  } catch (error) {
+    if (error instanceof GithubCliApiError && error.status !== undefined) {
+      throw new Error(
+        `${GITHUB_AUTH_INVALID}: GitHub rejected the ${credential.source} credential (${error.status}).`,
+      );
+    }
     throw new Error(`${GITHUB_AUTH_UNREACHABLE}: could not validate GitHub credentials.`);
   }
-  if (!response.ok) {
-    throw new Error(
-      `${GITHUB_AUTH_INVALID}: GitHub rejected the ${credential.source} credential (${response.status}).`,
-    );
-  }
-  const login = ((await response.json()) as { login?: unknown }).login;
   if (typeof login !== "string" || login.trim().length === 0) {
     throw new Error(`${GITHUB_AUTH_INVALID}: GitHub returned no user for the credential.`);
   }
   return login;
-}
-
-function runGhCommand(args: string[]): string {
-  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-}
-
-const GITHUB_API = "https://api.github.com";
-async function githubApi(
-  token: string,
-  method: string,
-  pathname: string,
-  body?: unknown,
-): Promise<Response> {
-  return fetch(pathname.startsWith("http") ? pathname : `${GITHUB_API}${pathname}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      "User-Agent": "planloft",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
 }
 
 export type { Manifest } from "./hosts/adapter.js";
