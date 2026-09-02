@@ -8,8 +8,8 @@ import { createProgram } from "./program.js";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const readJson = (file: string) => JSON.parse(read(file)) as Record<string, unknown>;
-const EXPECTED_RELEASE_VERSION = "0.2.3";
-const EXPECTED_RELEASE_TAG = "v0.2.3";
+const EXPECTED_RELEASE_VERSION = "0.2.4";
+const EXPECTED_RELEASE_TAG = "v0.2.4";
 
 const AUTHORITATIVE_RELEASE_FILES = [
   "package.json",
