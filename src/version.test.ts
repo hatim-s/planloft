@@ -29,7 +29,7 @@ test("package and CLI use the prepared release version", () => {
   assert.equal(createProgram().version(), EXPECTED_RELEASE_VERSION);
 });
 
-test("release operations pin 0.2.3 and v0.2.3 while the README stays version-agnostic", () => {
+test(`release operations pin ${EXPECTED_RELEASE_VERSION} and ${EXPECTED_RELEASE_TAG} while the README stays version-agnostic`, () => {
   const readme = read("README.md");
   const docsReadme = read("docs/README.md");
   const releaseGuide = read("docs/releasing.md");

@@ -21,6 +21,8 @@ test("release commands use the checked-in guarded script", () => {
   assert.match(help.stdout, /prepare[\s\S]+publish/);
 
   assert.match(script, /PLANLOFT_PUBLISH:-/);
+  assert.match(script, /VERSION="\$\(node -p 'require\("\.\/package\.json"\)\.version'\)"/);
+  assert.doesNotMatch(script, /0\.2\.3|v0\.2\.3/);
   assert.match(script, /npm publish --dry-run --access public "\$CANDIDATE"/);
   assert.equal(
     script.split("\n").filter((line) => line.trim() === 'npm publish --access public "$CANDIDATE"').length,
