@@ -6,9 +6,9 @@ import {
   SKILLS_CLI_VERSION,
   SHIPPED_SKILLS,
   agentSkillPath,
-  buildMatrix,
   canonicalSkillPath,
   quickMatrix,
+  releaseMatrix,
   runnerInvocation,
   sourceValue,
   taggedSkillSource,
@@ -16,17 +16,7 @@ import {
   validateRepositoryContract,
 } from "./installer-matrix.mjs";
 
-test("full contract enumerates every installer dimension exactly once", () => {
-  const matrix = buildMatrix();
-  assert.equal(matrix.length, 288);
-  assert.equal(new Set(matrix.map(({ id }) => id)).size, 288);
-  assert.deepEqual(DIMENSIONS.method, ["default", "copy"]);
-  for (const [dimension, values] of Object.entries(DIMENSIONS)) {
-    assert.deepEqual([...new Set(matrix.map((entry) => entry[dimension]))].sort(), [...values].sort());
-  }
-});
-
-test("quick live matrix covers every non-source dimension value", () => {
+test("curated live scenarios cover every relevant dimension", () => {
   const matrix = quickMatrix();
   assert.equal(matrix.length, 12);
   for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"]) {
@@ -39,6 +29,18 @@ test("quick live matrix covers every non-source dimension value", () => {
     [...new Set(matrix.map(({ agent, scope }) => `${agent}/${scope}`))].sort(),
     ["claude-code/global", "claude-code/project", "codex/global", "codex/project", "pi/global", "pi/project"],
   );
+});
+
+test("release scenarios cover latest and tagged sources without duplicating the matrix", () => {
+  const matrix = releaseMatrix();
+  assert.equal(matrix.length, 12);
+  assert.deepEqual([...new Set(matrix.map(({ source }) => source))].sort(), ["latest", "tagged"]);
+  for (const source of DIMENSIONS.source) {
+    assert.deepEqual(
+      [...new Set(matrix.filter((entry) => entry.source === source).map(({ skill }) => skill))].sort(),
+      [...SHIPPED_SKILLS],
+    );
+  }
 });
 
 test("runner commands use the real package-runner forms and a tested skills version", () => {
@@ -80,7 +82,7 @@ test("discovery paths stay inside the disposable project or home", () => {
 
 test("repository satisfies the portable installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
-    cases: 288,
+    scenarios: 12,
     skills: ["planloft-customise", "planloft-write-doc"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });

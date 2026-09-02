@@ -36,11 +36,10 @@ plugin solely to obtain Claude plugin namespacing.
 
 ### I3 — Add Pi to installer conformance
 
-Add Pi as an explicit installer target and add the selected skill as a matrix dimension.
-Pi grows the old 96-case contract to 144 host cases; exercising both shipped skills
-grows the complete contract to 288 cases across the existing runners, scopes, copy
-modes, CLI states, and sources. The 12-case quick live matrix must cover every
-agent-and-scope pair and run the full lifecycle for both skills.
+Add Pi as an explicit installer target and add the selected skill as a scenario
+dimension. The 12 curated scenarios must cover every agent-and-scope pair, every other
+installer dimension value, and the full lifecycle for both skills. Release verification
+distributes those scenarios across the latest branch and the new tag.
 
 ## Consequences
 

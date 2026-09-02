@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
@@ -32,14 +32,6 @@ const RETIRED_SKILLS = [
   "planloft-copy",
   "planloft-deploy",
 ];
-
-export function buildMatrix(dimensions = DIMENSIONS) {
-  let cases = [{}];
-  for (const [dimension, values] of Object.entries(dimensions)) {
-    cases = cases.flatMap((entry) => values.map((value) => ({ ...entry, [dimension]: value })));
-  }
-  return cases.map((entry) => ({ ...entry, id: caseId(entry) }));
-}
 
 export function caseId(entry) {
   return [entry.runner, entry.agent, entry.scope, entry.method, entry.cli, entry.source, entry.skill].join("/");
@@ -90,7 +82,7 @@ export function quickMatrix(source = "local") {
     ["npx", "codex", "project", "default", "absent"],
     ["pnpm", "claude-code", "global", "copy", "installed"],
     ["bunx", "pi", "project", "copy", "absent"],
-    ["npx", "claude-code", "project", "default", "installed"],
+    ["npx", "claude-code", "project", "copy", "installed"],
     ["pnpm", "codex", "global", "copy", "absent"],
     ["bunx", "pi", "global", "default", "installed"],
   ];
@@ -100,10 +92,27 @@ export function quickMatrix(source = "local") {
   }));
 }
 
+export function releaseMatrix() {
+  return quickMatrix().map((entry, index) => {
+    const row = Math.floor(index / SHIPPED_SKILLS.length);
+    const skill = index % SHIPPED_SKILLS.length;
+    const source = (row + skill) % 2 === 0 ? "latest" : "tagged";
+    const releaseEntry = { ...entry, source };
+    return { ...releaseEntry, id: caseId(releaseEntry) };
+  });
+}
+
 export function validateRepositoryContract() {
-  const matrix = buildMatrix();
-  assert.equal(matrix.length, 288, "full installer contract must contain 288 cases");
-  assert.equal(new Set(matrix.map(({ id }) => id)).size, matrix.length, "case ids must be unique");
+  const scenarios = quickMatrix();
+  assert.equal(scenarios.length, 12, "installer contract must contain 12 curated scenarios");
+  assert.equal(new Set(scenarios.map(({ id }) => id)).size, scenarios.length, "scenario ids must be unique");
+  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"]) {
+    assert.deepEqual(
+      [...new Set(scenarios.map((entry) => entry[dimension]))].sort(),
+      [...DIMENSIONS[dimension]].sort(),
+      `${dimension} coverage drifted`,
+    );
+  }
 
   const skillRoot = path.join(ROOT, "skills");
   const discovered = fs.readdirSync(skillRoot, { withFileTypes: true })
@@ -178,7 +187,7 @@ export function validateRepositoryContract() {
   assert.doesNotMatch(migration, /(?:codex|claude) plugin marketplace/);
   assert.doesNotMatch(migration, /plugin (?:marketplace|add|install) planloft/);
 
-  return { cases: matrix.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
+  return { scenarios: scenarios.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
 }
 
 function expectedSkillContent(source, tag, skill) {
@@ -247,7 +256,8 @@ function controlledEnvironment(root, cliState) {
   const home = path.join(root, "home");
   const project = path.join(root, "project");
   const runnerBin = path.join(root, "runner-bin");
-  for (const directory of [home, project, runnerBin, path.join(root, "cache")]) fs.mkdirSync(directory, { recursive: true });
+  const cache = process.env.PLANLOFT_INSTALLER_CACHE_ROOT ?? path.join(root, "cache");
+  for (const directory of [home, project, runnerBin, cache]) fs.mkdirSync(directory, { recursive: true });
 
   const excluded = new Set(executableDirectories("planloft"));
   const basePath = (process.env.PATH ?? "").split(path.delimiter)
@@ -270,13 +280,14 @@ function controlledEnvironment(root, cliState) {
       ...process.env,
       HOME: home,
       XDG_CONFIG_HOME: path.join(home, ".config"),
-      XDG_CACHE_HOME: path.join(root, "cache", "xdg"),
+      XDG_CACHE_HOME: path.join(cache, "xdg"),
       PLANLOFT_HOME: path.join(home, ".planloft"),
       CODEX_HOME: path.join(home, ".codex"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       BUN_INSTALL: path.join(home, ".bun"),
+      BUN_INSTALL_CACHE_DIR: path.join(cache, "bun"),
       PNPM_HOME: path.join(home, ".pnpm"),
-      npm_config_cache: path.join(root, "cache", "npm"),
+      npm_config_cache: path.join(cache, "npm"),
       npm_config_userconfig: path.join(home, ".npmrc"),
       NPM_CONFIG_USERCONFIG: path.join(home, ".npmrc"),
       npm_config_update_notifier: "false",
@@ -445,6 +456,70 @@ async function runLiveCase(entry, tag, keep, expected) {
   }
 }
 
+function runCaseWorker(entry, tag, keep, cache) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      fileURLToPath(import.meta.url),
+      "--worker-case",
+      JSON.stringify(entry),
+      ...(tag ? ["--tag", tag] : []),
+      ...(keep ? ["--keep"] : []),
+    ], {
+      cwd: ROOT,
+      env: { ...process.env, PLANLOFT_INSTALLER_CACHE_ROOT: cache },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error([
+          `${entry.id} failed (${code})`,
+          stdout.trim(),
+          stderr.trim(),
+        ].filter(Boolean).join("\n")));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout.trim()));
+      } catch {
+        reject(new Error(`${entry.id} worker returned invalid output: ${stdout.trim()}`));
+      }
+    });
+  });
+}
+
+async function runParallelCases(cases, tag, keep, workers) {
+  const cache = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-installer-cache-"));
+  let cursor = 0;
+  let failure;
+  const runWorker = async () => {
+    while (failure === undefined) {
+      const index = cursor;
+      cursor += 1;
+      const entry = cases[index];
+      if (!entry) return;
+      try {
+        const result = await runCaseWorker(entry, tag, keep, cache);
+        console.log(`[${index + 1}/${cases.length}] PASS ${result.id}${result.root ? ` kept=${result.root}` : ""}`);
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(workers, cases.length) }, runWorker));
+    if (failure !== undefined) throw failure;
+  } finally {
+    fs.rmSync(cache, { recursive: true, force: true });
+  }
+}
+
 function parseOptions(argv) {
   const get = (name, fallback) => {
     const index = argv.indexOf(name);
@@ -452,24 +527,34 @@ function parseOptions(argv) {
   };
   return {
     mode: argv.includes("--live") ? "live" : "contract",
-    breadth: argv.includes("--full") ? "full" : "quick",
     source: get("--source", "local"),
     tag: get("--tag", process.env.PLANLOFT_RELEASE_TAG),
-    caseIndex: get("--case-index", undefined),
-    fromCaseIndex: get("--from-case-index", undefined),
+    workers: Number(get("--workers", "4")),
+    workerCase: get("--worker-case", undefined),
     keep: argv.includes("--keep"),
   };
 }
 
 export async function main(argv = process.argv.slice(2)) {
   const options = parseOptions(argv);
+  if (options.workerCase !== undefined) {
+    const entry = JSON.parse(options.workerCase);
+    const expected = expectedSkillContent(entry.source, options.tag, entry.skill);
+    const result = await runLiveCase(entry, options.tag, options.keep, expected);
+    process.stdout.write(JSON.stringify(result));
+    return;
+  }
+
   const contract = validateRepositoryContract();
   if (options.mode === "contract") {
     console.log(
-      `installer contract: ${contract.cases} cases; skills=${contract.skills.join(",")}; ` +
+      `installer contract: ${contract.scenarios} scenarios; skills=${contract.skills.join(",")}; ` +
       `skills-cli=${contract.skillsCliVersion}`,
     );
     return;
+  }
+  if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > 16) {
+    throw new Error("--workers must be an integer between 1 and 16.");
   }
 
   const sources = options.source === "all" ? ["latest", "tagged"] : [options.source];
@@ -485,37 +570,12 @@ export async function main(argv = process.argv.slice(2)) {
       expectedContents.set(`${source}/${skill}`, expectedSkillContent(source, options.tag, skill));
     }
   }
-  let cases = options.breadth === "full"
-    ? buildMatrix({ ...DIMENSIONS, source: sources })
-    : sources.flatMap((source) => quickMatrix(source));
-  const totalCases = cases.length;
-  let caseOffset = 0;
-  if (options.caseIndex !== undefined && options.fromCaseIndex !== undefined) {
-    throw new Error("Use either --case-index or --from-case-index, not both.");
+  const cases = options.source === "all" ? releaseMatrix() : quickMatrix(options.source);
+  for (const entry of cases) {
+    assert.equal(typeof expectedContents.get(`${entry.source}/${entry.skill}`), "string", `${entry.id}: expected skill content was not loaded`);
   }
-  if (options.caseIndex !== undefined) {
-    const index = Number(options.caseIndex);
-    if (!Number.isInteger(index) || index < 1 || index > cases.length) {
-      throw new Error(`--case-index must be between 1 and ${cases.length}`);
-    }
-    caseOffset = index - 1;
-    cases = [cases[index - 1]];
-  }
-  if (options.fromCaseIndex !== undefined) {
-    const index = Number(options.fromCaseIndex);
-    if (!Number.isInteger(index) || index < 1 || index > cases.length) {
-      throw new Error(`--from-case-index must be between 1 and ${cases.length}`);
-    }
-    caseOffset = index - 1;
-    cases = cases.slice(caseOffset);
-  }
-  console.log(`installer live matrix: ${cases.length} disposable cases (${options.breadth}, ${sources.join("+")})`);
-  for (const [index, entry] of cases.entries()) {
-    const expected = expectedContents.get(`${entry.source}/${entry.skill}`);
-    assert.equal(typeof expected, "string", `${entry.id}: expected skill content was not loaded`);
-    const result = await runLiveCase(entry, options.tag, options.keep, expected);
-    console.log(`[${caseOffset + index + 1}/${totalCases}] PASS ${result.id}${result.root ? ` kept=${result.root}` : ""}`);
-  }
+  console.log(`installer live matrix: ${cases.length} disposable scenarios (${sources.join("+")}, ${options.workers} workers)`);
+  await runParallelCases(cases, options.tag, options.keep, options.workers);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

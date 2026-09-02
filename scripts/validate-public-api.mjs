@@ -6,13 +6,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED_RELEASE_VERSION = "0.2.4";
+const expectedVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 const builtCliVersion = execFileSync(
   process.execPath,
   [path.join(root, "dist", "cli.js"), "--version"],
   { cwd: root, encoding: "utf8" },
 ).trim();
-assert.equal(builtCliVersion, EXPECTED_RELEASE_VERSION);
+assert.equal(builtCliVersion, expectedVersion);
 const publicApi = await import(path.join(root, "dist", "index.js"));
 
 assert.deepEqual(Object.keys(publicApi).sort(), [

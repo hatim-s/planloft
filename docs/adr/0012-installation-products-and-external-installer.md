@@ -37,18 +37,17 @@ Release verification must prove the tag exists and contains exactly the focused 
 Development verification may use the local checkout, while tagged installation remains
 a release gate.
 
-### I3 — Maintain a disposable conformance matrix
+### I3 — Maintain disposable conformance scenarios
 
-`scripts/installer-matrix.mjs` owns the matrix across runner, agent, scope, default or
-explicit-copy install mode, CLI state, and source version. Every case uses a temporary
-project, home, Planloft home, and package-manager caches and installs only its selected
-agent. The matrix asserts one selected installed skill, exact source content, actionable
-CLI prerequisite behavior, and complete add/list/update/remove/reinstall lifecycle
-behavior.
+`scripts/installer-matrix.mjs` owns 12 curated scenarios across runner, agent, scope,
+default or explicit-copy install mode, CLI state, and both skills. Every scenario uses
+a temporary project and home and installs only its selected agent. The scenarios assert
+one selected installed skill, exact source content, actionable CLI prerequisite
+behavior, and the add/list/update/remove/reinstall lifecycle.
 
-The contract suite enumerates the full 96-case product. A quick live suite covers every
-dimension value against the local checkout. The release suite exercises the full live
-latest/tag matrix and requires `PLANLOFT_RELEASE_TAG`.
+The local suite runs 12 scenarios. Release verification distributes 12 scenarios across
+the latest branch and the new tag instead of duplicating the suite for each source. Four
+worker processes share package download caches while keeping installation homes isolated.
 
 ### I4 — Defer `planloft setup`
 

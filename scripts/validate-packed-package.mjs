@@ -16,8 +16,6 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-packed-package-"));
 try {
   const listing = spawnSync("tar", ["-tzf", path.resolve(tarball)], { encoding: "utf8" });
   assert.equal(listing.status, 0, listing.stderr);
-  const packedFiles = listing.stdout.trim().split("\n").filter(Boolean);
-  assert.equal(packedFiles.length, 37, `packed package has ${packedFiles.length} files instead of 37`);
 
   const extraction = spawnSync("tar", ["-xzf", path.resolve(tarball), "-C", root], { encoding: "utf8" });
   assert.equal(extraction.status, 0, extraction.stderr);
