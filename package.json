@@ -1,6 +1,6 @@
 {
   "name": "planloft",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Agent-native document compiler with focused authoring and customization skills, deep CLI help, and light/dark themed output.",
   "packageManager": "bun@1.4.0",
   "type": "module",
