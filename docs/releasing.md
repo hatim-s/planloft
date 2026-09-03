@@ -10,16 +10,25 @@ bun run release 0.2.5
 Replace `0.2.5` with the version you want to publish. The command accepts stable
 `major.minor.patch` versions only.
 
-The release command:
+## What it checks
 
-1. Checks npm authentication, the branch, the remote commit, npm, and Git tags.
-2. Updates `package.json` with the requested version.
-3. Runs the source tests, typecheck, public API check, and 12 local installer scenarios.
-4. Builds and validates one npm tarball, then runs an npm publish dry run.
-5. Commits and pushes `main` with the message `Release <version>`.
-6. Publishes that tarball, verifies its SHA-1, and pushes `v<version>`.
-7. Runs 12 remote skill installation scenarios across the latest branch and new tag
-   with four workers.
+Before changing the version, the command confirms that the checkout is clean, on
+`main`, and equal to `origin/main`. It also checks whether the npm version or Git tag
+already exists and confirms npm authentication for a new release.
+
+After the preflight, it updates `package.json` and runs:
+
+- source tests, including the release argument and static installer contracts
+- TypeScript checks for `src`, release scripts, and their tests
+- one build followed by checks for the CLI version, public exports, application methods,
+  and declarations
+- 12 local installer scenarios covering add, list, update, remove, and reinstall
+- one npm pack, checks against the actual tarball, a Node consumer import, and an npm
+  publish dry run
+
+After those checks pass, the command commits and pushes `main`, publishes the checked
+tarball, verifies its SHA-1, and pushes `v<version>`. It then runs
+12 remote installer scenarios across the latest branch and new tag with four workers.
 
 The command stops before changing `package.json` if npm authentication or the release
 destinations are not ready. It also stops before publication if any test, build,

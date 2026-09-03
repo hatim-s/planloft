@@ -27,7 +27,7 @@ These files are public repo docs for maintainers and contributors:
 - `docs/adr/`
 - `CONTEXT.md`
 - future planning, architecture, release, or investigation notes under `docs/`
-- `scripts/installer-matrix.mjs` and its contract tests
+- `scripts/installer-matrix.ts` and its contract tests
 
 This segment can record decision history, rejected options, deferred work, and
 implementation rationale. It can mention future hosts or internal seams that should not
@@ -81,7 +81,7 @@ After building and packing, execute the extracted CLI and portable skill resolve
 than merely inspecting tar entries:
 
 ```bash
-node scripts/validate-packed-package.mjs /path/to/planloft-<version>.tgz
+bun scripts/validate-packed-package.ts /path/to/planloft-<version>.tgz
 ```
 
 After a release, start fresh Codex, Claude Code, and Pi sessions and confirm the

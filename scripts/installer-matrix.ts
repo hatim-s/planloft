@@ -1,4 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+
+/**
+ * Verifies that the two shipped skills survive the add, list, update, remove, and
+ * reinstall lifecycle across a small set of representative installer scenarios.
+ * Each live scenario runs in its own temporary home and project.
+ */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -9,16 +15,61 @@ import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
 export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the planloft-write-doc skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
-export const SHIPPED_SKILLS = Object.freeze(["planloft-customise", "planloft-write-doc"]);
-export const DIMENSIONS = Object.freeze({
-  runner: ["npx", "pnpm", "bunx"],
-  agent: ["codex", "claude-code", "pi"],
-  scope: ["project", "global"],
-  method: ["default", "copy"],
-  cli: ["absent", "installed"],
-  source: ["latest", "tagged"],
+export const SHIPPED_SKILLS = ["planloft-customise", "planloft-write-doc"] as const;
+export const DIMENSIONS = {
+  runner: ["npx", "pnpm", "bunx"] as const,
+  agent: ["codex", "claude-code", "pi"] as const,
+  scope: ["project", "global"] as const,
+  method: ["default", "copy"] as const,
+  cli: ["absent", "installed"] as const,
+  source: ["latest", "tagged"] as const,
   skill: SHIPPED_SKILLS,
-});
+} as const;
+
+type Runner = typeof DIMENSIONS.runner[number];
+type Agent = typeof DIMENSIONS.agent[number];
+type Scope = typeof DIMENSIONS.scope[number];
+type InstallMethod = typeof DIMENSIONS.method[number];
+type CliState = typeof DIMENSIONS.cli[number];
+type RemoteSource = typeof DIMENSIONS.source[number];
+type Skill = typeof SHIPPED_SKILLS[number];
+type Source = "local" | RemoteSource;
+
+export interface InstallerScenario {
+  runner: Runner;
+  agent: Agent;
+  scope: Scope;
+  method: InstallMethod;
+  cli: CliState;
+  source: Source;
+  skill: Skill;
+  id: string;
+}
+
+interface ScenarioPaths {
+  project: string;
+  home: string;
+  skill: Skill;
+}
+
+interface InstallerContext {
+  home: string;
+  project: string;
+  env: NodeJS.ProcessEnv;
+}
+
+interface InstalledSkill {
+  name: string;
+}
+
+interface Options {
+  mode: "contract" | "live";
+  source: Source | "all";
+  tag?: string;
+  workers: number;
+  workerCase?: string;
+  keep: boolean;
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RETIRED_SKILLS = [
@@ -33,42 +84,47 @@ const RETIRED_SKILLS = [
   "planloft-deploy",
 ];
 
-export function caseId(entry) {
+function isSkill(value: string): value is Skill {
+  return (SHIPPED_SKILLS as readonly string[]).includes(value);
+}
+
+/** Returns the stable label printed for an installer scenario. */
+export function caseId(entry: Omit<InstallerScenario, "id">): string {
   return [entry.runner, entry.agent, entry.scope, entry.method, entry.cli, entry.source, entry.skill].join("/");
 }
 
-export function runnerInvocation(runner, args) {
+/** Builds the real command used to invoke the pinned external skills CLI. */
+export function runnerInvocation(runner: Runner | string, args: string[]): string[] {
   if (runner === "npx") return ["npx", "--yes", `skills@${SKILLS_CLI_VERSION}`, ...args];
   if (runner === "pnpm") return ["pnpm", "dlx", `skills@${SKILLS_CLI_VERSION}`, ...args];
   if (runner === "bunx") return ["bunx", `skills@${SKILLS_CLI_VERSION}`, ...args];
   throw new Error(`Unknown runner: ${runner}`);
 }
 
-export function taggedSkillSource(tag, skill) {
+/** Returns the GitHub tree URL accepted by the skills CLI for a tagged skill. */
+export function taggedSkillSource(tag: string | undefined, skill: string): string {
   if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(tag ?? "")) {
     throw new Error("A release source requires PLANLOFT_RELEASE_TAG=v<semver> or --tag v<semver>.");
   }
-  if (!SHIPPED_SKILLS.includes(skill)) throw new Error(`Unknown shipped skill: ${skill}`);
+  if (!isSkill(skill)) throw new Error(`Unknown shipped skill: ${skill}`);
   return `https://github.com/hatim-s/planloft/tree/${tag}/skills/${skill}`;
 }
 
-export function taggedSkillRawUrl(tag, skill) {
-  taggedSkillSource(tag, skill);
-  return `https://raw.githubusercontent.com/hatim-s/planloft/${tag}/skills/${skill}/SKILL.md`;
-}
-
-export function sourceValue(source, tag, skill) {
+/** Resolves a local, branch, or tag selector into a skills CLI source. */
+export function sourceValue(source: Source, tag: string | undefined, skill: Skill): string {
   if (source === "local") return ROOT;
   if (source === "latest") return "hatim-s/planloft";
   if (source === "tagged") return taggedSkillSource(tag, skill);
   throw new Error(`Unknown source: ${source}`);
 }
 
-export function canonicalSkillPath({ scope, project, home, skill }) {
+/** Returns the canonical path managed by the skills CLI. */
+export function canonicalSkillPath({ scope, project, home, skill }: ScenarioPaths & { scope: Scope }): string {
   return path.join(scope === "global" ? home : project, ".agents", "skills", skill);
 }
 
-export function agentSkillPath({ agent, scope, project, home, skill }) {
+/** Returns the path read by the selected agent. */
+export function agentSkillPath({ agent, scope, project, home, skill }: ScenarioPaths & { agent: Agent; scope: Scope }): string {
   const base = scope === "global" ? home : project;
   if (agent === "claude-code") return path.join(base, ".claude", "skills", skill);
   if (agent === "pi") {
@@ -77,8 +133,9 @@ export function agentSkillPath({ agent, scope, project, home, skill }) {
   return path.join(base, ".agents", "skills", skill);
 }
 
-export function quickMatrix(source = "local") {
-  const rows = [
+/** Builds the 12 representative scenarios used before publication. */
+export function quickMatrix(source: Source = "local"): InstallerScenario[] {
+  const rows: ReadonlyArray<readonly [Runner, Agent, Scope, InstallMethod, CliState]> = [
     ["npx", "codex", "project", "default", "absent"],
     ["pnpm", "claude-code", "global", "copy", "installed"],
     ["bunx", "pi", "project", "copy", "absent"],
@@ -92,21 +149,23 @@ export function quickMatrix(source = "local") {
   }));
 }
 
-export function releaseMatrix() {
+/** Distributes the same 12 scenarios across the branch and release tag. */
+export function releaseMatrix(): InstallerScenario[] {
   return quickMatrix().map((entry, index) => {
     const row = Math.floor(index / SHIPPED_SKILLS.length);
     const skill = index % SHIPPED_SKILLS.length;
-    const source = (row + skill) % 2 === 0 ? "latest" : "tagged";
+    const source: RemoteSource = (row + skill) % 2 === 0 ? "latest" : "tagged";
     const releaseEntry = { ...entry, source };
     return { ...releaseEntry, id: caseId(releaseEntry) };
   });
 }
 
-export function validateRepositoryContract() {
+/** Checks static package, skill, documentation, and scenario contracts without network access. */
+export function validateRepositoryContract(): { scenarios: number; skills: string[]; skillsCliVersion: string } {
   const scenarios = quickMatrix();
   assert.equal(scenarios.length, 12, "installer contract must contain 12 curated scenarios");
   assert.equal(new Set(scenarios.map(({ id }) => id)).size, scenarios.length, "scenario ids must be unique");
-  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"]) {
+  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"] as const) {
     assert.deepEqual(
       [...new Set(scenarios.map((entry) => entry[dimension]))].sort(),
       [...DIMENSIONS[dimension]].sort(),
@@ -190,19 +249,13 @@ export function validateRepositoryContract() {
   return { scenarios: scenarios.length, skills: discovered, skillsCliVersion: SKILLS_CLI_VERSION };
 }
 
-function expectedSkillContent(source, tag, skill) {
+function expectedSkillContent(source: Source, tag: string | undefined, skill: Skill): string {
   if (source === "local") return fs.readFileSync(path.join(ROOT, "skills", skill, "SKILL.md"), "utf8");
   return skillContentAtRef(source === "latest" ? "origin/main" : tag, skill);
 }
 
-function validateRefSkillInventory(ref, label) {
-  for (const skill of SHIPPED_SKILLS) {
-    const content = skillContentAtRef(ref, skill);
-    assert.match(content, new RegExp(`^name:\\s*${skill}$`, "m"));
-  }
-}
-
-function skillContentAtRef(ref, skill) {
+function skillContentAtRef(ref: string | undefined, skill: Skill): string {
+  if (!ref) throw new Error(`Missing Git ref for ${skill}.`);
   const result = spawnSync("git", ["show", `${ref}:skills/${skill}/SKILL.md`], {
     cwd: ROOT,
     encoding: "utf8",
@@ -213,7 +266,7 @@ function skillContentAtRef(ref, skill) {
   return result.stdout;
 }
 
-function refreshRemoteRefs() {
+function refreshRemoteRefs(): void {
   const result = spawnSync("git", ["fetch", "origin", "main", "--tags"], {
     cwd: ROOT,
     encoding: "utf8",
@@ -221,11 +274,11 @@ function refreshRemoteRefs() {
   if (result.status !== 0) throw new Error(`Unable to refresh release refs: ${result.stderr.trim()}`);
 }
 
-function readJson(relative) {
-  return JSON.parse(fs.readFileSync(path.join(ROOT, relative), "utf8"));
+function readJson(relative: string): { files: string[] } {
+  return JSON.parse(fs.readFileSync(path.join(ROOT, relative), "utf8")) as { files: string[] };
 }
 
-function findExecutable(name) {
+function findExecutable(name: string): string {
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
     const candidate = path.join(directory, name);
     try {
@@ -236,7 +289,7 @@ function findExecutable(name) {
   throw new Error(`Required executable is unavailable: ${name}`);
 }
 
-function executableDirectories(name) {
+function executableDirectories(name: string): string[] {
   return (process.env.PATH ?? "").split(path.delimiter).filter((directory) => {
     try {
       fs.accessSync(path.join(directory, name), fs.constants.X_OK);
@@ -247,12 +300,12 @@ function executableDirectories(name) {
   }).map((directory) => path.resolve(directory));
 }
 
-function writeExecWrapper(target, destination) {
+function writeExecWrapper(target: string, destination: string): void {
   fs.writeFileSync(destination, `#!/bin/sh\nexec "${target}" "$@"\n`);
   fs.chmodSync(destination, 0o755);
 }
 
-function controlledEnvironment(root, cliState) {
+function controlledEnvironment(root: string, cliState: CliState): InstallerContext {
   const home = path.join(root, "home");
   const project = path.join(root, "project");
   const runnerBin = path.join(root, "runner-bin");
@@ -298,7 +351,7 @@ function controlledEnvironment(root, cliState) {
   };
 }
 
-function execute(command, args, options) {
+function execute(command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }): string {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     env: options.env,
@@ -307,7 +360,7 @@ function execute(command, args, options) {
   });
   if (result.error || result.status !== 0) {
     throw new Error([
-      `${command} ${args.join(" ")} failed (${result.status ?? result.error?.code})`,
+      `${command} ${args.join(" ")} failed (${result.status ?? (result.error as NodeJS.ErrnoException | undefined)?.code})`,
       result.stdout?.slice(-4000),
       result.stderr?.slice(-4000),
     ].filter(Boolean).join("\n"));
@@ -315,12 +368,13 @@ function execute(command, args, options) {
   return result.stdout;
 }
 
-function executeSkills(entry, args, context) {
+function executeSkills(entry: InstallerScenario, args: string[], context: InstallerContext): string {
   const [command, ...runnerArgs] = runnerInvocation(entry.runner, args);
+  assert.ok(command, `${entry.id}: runner command is empty`);
   return execute(command, runnerArgs, { cwd: context.project, env: context.env });
 }
 
-function addArgs(entry, source) {
+function addArgs(entry: InstallerScenario, source: string): string[] {
   return [
     "add", source, "--skill", entry.skill,
     "--agent", entry.agent,
@@ -330,28 +384,33 @@ function addArgs(entry, source) {
   ];
 }
 
-function listInstalled(entry, context) {
+function listInstalled(entry: InstallerScenario, context: InstallerContext): InstalledSkill[] {
   const output = executeSkills(entry, [
     "list", "--agent", entry.agent,
     ...(entry.scope === "global" ? ["--global"] : []),
     "--json",
   ], context);
-  return JSON.parse(output.trim());
+  const installed = JSON.parse(output.trim()) as unknown;
+  assert.ok(Array.isArray(installed), `${entry.id}: skills list did not return an array`);
+  for (const item of installed) {
+    assert.ok(typeof item === "object" && item !== null && "name" in item && typeof item.name === "string");
+  }
+  return installed as InstalledSkill[];
 }
 
-function installationPaths(entry, context) {
+function installationPaths(entry: InstallerScenario, context: InstallerContext): string[] {
   return [...new Set([
     canonicalSkillPath({ ...entry, ...context }),
     agentSkillPath({ ...entry, ...context }),
   ])];
 }
 
-function isInside(root, candidate) {
+function isInside(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
-function assertInstallPath(entry, context, expected, installPath) {
+function assertInstallPath(entry: InstallerScenario, context: InstallerContext, expected: string, installPath: string): void {
   const skillFile = path.join(installPath, "SKILL.md");
   assert.ok(fs.existsSync(skillFile), `${entry.id}: installed skill missing at ${installPath}`);
   assert.ok(fs.statSync(installPath).isDirectory(), `${entry.id}: installed skill path is not a directory`);
@@ -370,7 +429,7 @@ function assertInstallPath(entry, context, expected, installPath) {
   }
 }
 
-function assertSkillCliBehavior(entry, context) {
+function assertSkillCliBehavior(entry: InstallerScenario, context: InstallerContext): void {
   if (entry.skill !== "planloft-write-doc") return;
   const target = agentSkillPath({ ...entry, ...context });
   const resolverPath = path.join(target, "scripts", "resolve-planloft-command.sh");
@@ -396,7 +455,7 @@ function assertSkillCliBehavior(entry, context) {
   assert.equal(probe.status, 0, `${entry.id}: resolved CLI path failed: ${probe.stderr}`);
 }
 
-function assertInstalled(entry, context, expected) {
+function assertInstalled(entry: InstallerScenario, context: InstallerContext, expected: string): void {
   const target = agentSkillPath({ ...entry, ...context });
   assert.ok(fs.existsSync(path.join(target, "SKILL.md")), `${entry.id}: agent skill missing`);
   for (const installPath of installationPaths(entry, context)) {
@@ -415,14 +474,14 @@ function assertInstalled(entry, context, expected) {
   assert.equal(listed.length, 1, `${entry.id}: expected exactly one discovered skill`);
 }
 
-function assertRemoved(entry, context) {
+function assertRemoved(entry: InstallerScenario, context: InstallerContext): void {
   for (const installPath of installationPaths(entry, context)) {
     assert.ok(!fs.existsSync(installPath), `${entry.id}: remove left installer path ${installPath}`);
   }
   assert.equal(listInstalled(entry, context).filter(({ name }) => name === entry.skill).length, 0, `${entry.id}: remove left the skill discoverable`);
 }
 
-async function runLiveCase(entry, tag, keep, expected) {
+function runLiveCase(entry: InstallerScenario, tag: string | undefined, keep: boolean, expected: string): { id: string; root?: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-installer-matrix-"));
   const context = controlledEnvironment(root, entry.cli);
   const source = sourceValue(entry.source, tag, entry.skill);
@@ -433,7 +492,7 @@ async function runLiveCase(entry, tag, keep, expected) {
     if (entry.cli === "installed") {
       assert.equal(probe.status, 0, `${entry.id}: installed CLI resolve failed: ${probe.stderr}`);
     } else {
-      assert.ok(probe.error?.code === "ENOENT" || probe.status === 127, `${entry.id}: CLI unexpectedly available`);
+      assert.ok((probe.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT" || probe.status === 127, `${entry.id}: CLI unexpectedly available`);
     }
 
     executeSkills(entry, addArgs(entry, source), context);
@@ -456,7 +515,7 @@ async function runLiveCase(entry, tag, keep, expected) {
   }
 }
 
-function runCaseWorker(entry, tag, keep, cache) {
+function runCaseWorker(entry: InstallerScenario, tag: string | undefined, keep: boolean, cache: string): Promise<{ id: string; root?: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
       fileURLToPath(import.meta.url),
@@ -473,8 +532,8 @@ function runCaseWorker(entry, tag, keep, cache) {
     let stderr = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
     child.on("error", reject);
     child.on("close", (code) => {
       if (code !== 0) {
@@ -486,7 +545,7 @@ function runCaseWorker(entry, tag, keep, cache) {
         return;
       }
       try {
-        resolve(JSON.parse(stdout.trim()));
+        resolve(JSON.parse(stdout.trim()) as { id: string; root?: string });
       } catch {
         reject(new Error(`${entry.id} worker returned invalid output: ${stdout.trim()}`));
       }
@@ -494,10 +553,10 @@ function runCaseWorker(entry, tag, keep, cache) {
   });
 }
 
-async function runParallelCases(cases, tag, keep, workers) {
+async function runParallelCases(cases: InstallerScenario[], tag: string | undefined, keep: boolean, workers: number): Promise<void> {
   const cache = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-installer-cache-"));
   let cursor = 0;
-  let failure;
+  let failure: unknown;
   const runWorker = async () => {
     while (failure === undefined) {
       const index = cursor;
@@ -520,14 +579,14 @@ async function runParallelCases(cases, tag, keep, workers) {
   }
 }
 
-function parseOptions(argv) {
-  const get = (name, fallback) => {
+function parseOptions(argv: string[]): Options {
+  const get = (name: string, fallback?: string): string | undefined => {
     const index = argv.indexOf(name);
     return index >= 0 ? argv[index + 1] : fallback;
   };
   return {
     mode: argv.includes("--live") ? "live" : "contract",
-    source: get("--source", "local"),
+    source: get("--source", "local") as Source | "all",
     tag: get("--tag", process.env.PLANLOFT_RELEASE_TAG),
     workers: Number(get("--workers", "4")),
     workerCase: get("--worker-case", undefined),
@@ -535,18 +594,19 @@ function parseOptions(argv) {
   };
 }
 
-export async function main(argv = process.argv.slice(2)) {
+/** Runs a static contract check or the disposable live installer scenarios. */
+export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseOptions(argv);
   if (options.workerCase !== undefined) {
-    const entry = JSON.parse(options.workerCase);
+    const entry = JSON.parse(options.workerCase) as InstallerScenario;
     const expected = expectedSkillContent(entry.source, options.tag, entry.skill);
-    const result = await runLiveCase(entry, options.tag, options.keep, expected);
+    const result = runLiveCase(entry, options.tag, options.keep, expected);
     process.stdout.write(JSON.stringify(result));
     return;
   }
 
-  const contract = validateRepositoryContract();
   if (options.mode === "contract") {
+    const contract = validateRepositoryContract();
     console.log(
       `installer contract: ${contract.scenarios} scenarios; skills=${contract.skills.join(",")}; ` +
       `skills-cli=${contract.skillsCliVersion}`,
@@ -557,30 +617,19 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error("--workers must be an integer between 1 and 16.");
   }
 
-  const sources = options.source === "all" ? ["latest", "tagged"] : [options.source];
+  const sources: Source[] = options.source === "all" ? ["latest", "tagged"] : [options.source];
   if (sources.some((source) => source !== "local")) refreshRemoteRefs();
-  if (sources.includes("latest")) validateRefSkillInventory("origin/main", "latest");
   if (sources.includes("tagged")) {
     taggedSkillSource(options.tag, SHIPPED_SKILLS[0]);
-    validateRefSkillInventory(options.tag, "tagged");
-  }
-  const expectedContents = new Map();
-  for (const source of sources) {
-    for (const skill of SHIPPED_SKILLS) {
-      expectedContents.set(`${source}/${skill}`, expectedSkillContent(source, options.tag, skill));
-    }
   }
   const cases = options.source === "all" ? releaseMatrix() : quickMatrix(options.source);
-  for (const entry of cases) {
-    assert.equal(typeof expectedContents.get(`${entry.source}/${entry.skill}`), "string", `${entry.id}: expected skill content was not loaded`);
-  }
   console.log(`installer live matrix: ${cases.length} disposable scenarios (${sources.join("+")}, ${options.workers} workers)`);
   await runParallelCases(cases, options.tag, options.keep, options.workers);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error) => {
-    console.error(error.stack ?? error);
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.stack : error);
     process.exitCode = 1;
   });
 }
