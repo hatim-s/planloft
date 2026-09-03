@@ -1,6 +1,13 @@
 #!/usr/bin/env bun
 
+/**
+ * Runs the complete Planloft release from a clean main checkout. The command
+ * validates one tarball, pushes its source commit, publishes it, and tags that
+ * same commit. Re-running a completed version only verifies the release.
+ */
+
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +29,7 @@ interface CommandResult {
   stderr: string;
 }
 
+/** Compares two stable semantic versions. */
 export function compareVersions(left: string, right: string): number {
   const leftParts = parseVersion(left);
   const rightParts = parseVersion(right);
@@ -32,6 +40,7 @@ export function compareVersions(left: string, right: string): number {
   return 0;
 }
 
+/** Rejects prereleases, malformed versions, and version downgrades. */
 export function validateReleaseVersion(current: string, target: string): void {
   parseVersion(current);
   parseVersion(target);
@@ -56,26 +65,14 @@ function writePackageVersion(version: string): void {
   fs.writeFileSync(PACKAGE_FILE, `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 
-function commandResult(command: string, args: string[], env?: NodeJS.ProcessEnv): CommandResult {
-  const result = spawnSync(command, args, {
-    cwd: ROOT,
-    env: { ...process.env, ...env },
-    encoding: "utf8",
-  });
+function commandResult(command: string, args: string[]): CommandResult {
+  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8" });
   if (result.error) throw result.error;
-  return {
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-  };
+  return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
-function run(command: string, args: string[], env?: NodeJS.ProcessEnv): void {
-  const result = spawnSync(command, args, {
-    cwd: ROOT,
-    env: { ...process.env, ...env },
-    stdio: "inherit",
-  });
+function run(command: string, args: string[]): void {
+  const result = spawnSync(command, args, { cwd: ROOT, stdio: "inherit" });
   if (result.error || result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}.`);
   }
@@ -83,45 +80,26 @@ function run(command: string, args: string[], env?: NodeJS.ProcessEnv): void {
 
 function output(command: string, args: string[]): string {
   const result = commandResult(command, args);
-  if (result.status !== 0) {
-    throw new Error(result.stderr.trim() || `${command} ${args.join(" ")} failed.`);
-  }
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `${command} ${args.join(" ")} failed.`);
   return result.stdout.trim();
-}
-
-function requireCommands(commands: string[]): void {
-  const directories = (process.env.PATH ?? "").split(path.delimiter);
-  for (const command of commands) {
-    const found = directories.some((directory) => {
-      try {
-        fs.accessSync(path.join(directory, command), fs.constants.X_OK);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-    if (!found) throw new Error(`Missing required command: ${command}.`);
-  }
 }
 
 function gitStatus(): string[] {
   const result = commandResult("git", ["status", "--porcelain", "--untracked-files=all"]);
   if (result.status !== 0) throw new Error(result.stderr.trim() || "Could not inspect the checkout.");
-  return result.stdout
-    .trimEnd()
-    .split(/\r?\n/)
-    .filter(Boolean);
+  return result.stdout.trimEnd().split(/\r?\n/).filter(Boolean);
 }
 
-function preflightCheckout(): void {
+/** Confirms that the release starts from a clean, synchronized main checkout. */
+function validateCheckout(): void {
   run("git", ["fetch", "origin", "main", "--tags"]);
   const branch = output("git", ["branch", "--show-current"]);
   if (branch !== "main") throw new Error(`Run releases from main, not ${branch || "detached HEAD"}.`);
   const status = gitStatus();
   if (status.length > 0) throw new Error(`The checkout is not clean:\n${status.join("\n")}`);
-  const head = output("git", ["rev-parse", "HEAD"]);
-  const remoteHead = output("git", ["rev-parse", "origin/main"]);
-  if (head !== remoteHead) throw new Error("main does not match origin/main.");
+  if (output("git", ["rev-parse", "HEAD"]) !== output("git", ["rev-parse", "origin/main"])) {
+    throw new Error("main does not match origin/main.");
+  }
 }
 
 function npmVersionExists(name: string, version: string): boolean {
@@ -138,7 +116,7 @@ function remoteTagCommit(tag: string): string | undefined {
   return refs.find(([, ref]) => ref?.endsWith("^{}"))?.[0] ?? refs[0]?.[0];
 }
 
-function ensureReleaseChanges(versionChanged: boolean): void {
+function assertExpectedChanges(versionChanged: boolean): void {
   const status = gitStatus();
   const expected = versionChanged ? [" M package.json"] : [];
   if (JSON.stringify(status) !== JSON.stringify(expected)) {
@@ -146,6 +124,7 @@ function ensureReleaseChanges(versionChanged: boolean): void {
   }
 }
 
+/** Runs every reversible check and creates the one tarball used for publication. */
 function prepareCandidate(name: string, version: string, versionChanged: boolean): string {
   const candidate = path.join(RELEASE_DIR, `${name}-${version}.tgz`);
   fs.mkdirSync(RELEASE_DIR, { recursive: true });
@@ -154,24 +133,26 @@ function prepareCandidate(name: string, version: string, versionChanged: boolean
   run("bun", ["install", "--frozen-lockfile"]);
   run("bun", ["run", "test"]);
   run("bun", ["run", "typecheck"]);
-  run("bun", ["run", "test:public-api"]);
-  run("node", ["scripts/installer-matrix.mjs", "--live", "--source", "local", "--workers", "4"]);
-  ensureReleaseChanges(versionChanged);
+  run("bun", ["run", "build"]);
+  run("bun", ["scripts/validate-public-api.ts"]);
+  run("bun", ["scripts/installer-matrix.ts", "--live", "--source", "local", "--workers", "4"]);
+  assertExpectedChanges(versionChanged);
 
   run("npm", ["pack", "--ignore-scripts", "--pack-destination", RELEASE_DIR]);
   if (!fs.existsSync(candidate)) throw new Error(`npm pack did not create ${candidate}.`);
-  run("node", ["scripts/validate-packed-package.mjs", candidate]);
+  run("bun", ["scripts/validate-packed-package.ts", candidate]);
   run("npm", ["publish", "--dry-run", "--access", "public", candidate]);
-  ensureReleaseChanges(versionChanged);
+  assertExpectedChanges(versionChanged);
   return candidate;
 }
 
-function commitAndPush(version: string): string {
+/** Commits only the version bump and pushes it after all reversible checks pass. */
+function commitVersion(version: string): string {
   run("git", ["fetch", "origin", "main"]);
   if (output("git", ["rev-parse", "HEAD"]) !== output("git", ["rev-parse", "origin/main"])) {
     throw new Error("origin/main changed while release checks were running. Rebase and rerun the release.");
   }
-  ensureReleaseChanges(true);
+  assertExpectedChanges(true);
   run("git", ["add", "package.json"]);
   run("git", ["commit", "-m", `Release ${version}`]);
   run("git", ["push", "origin", "main"]);
@@ -187,12 +168,13 @@ async function waitForNpm(name: string, version: string): Promise<void> {
 }
 
 function verifyPublishedCandidate(name: string, version: string, candidate: string): void {
-  const localSha = output("shasum", [candidate]).split(/\s+/)[0];
+  const localSha = createHash("sha1").update(fs.readFileSync(candidate)).digest("hex");
   const registrySha = output("npm", ["view", `${name}@${version}`, "dist.shasum"]);
   if (localSha !== registrySha) throw new Error("The npm tarball does not match the release candidate.");
 }
 
-function createAndPushTag(name: string, version: string, commit: string): void {
+/** Creates the annotated release tag unless the correct tag already exists. */
+function createTag(name: string, version: string, commit: string): void {
   const tag = `v${version}`;
   const existing = remoteTagCommit(tag);
   if (existing) {
@@ -206,14 +188,12 @@ function createAndPushTag(name: string, version: string, commit: string): void {
 
 function verifyTagVersion(commit: string, version: string): void {
   const packageAtTag = JSON.parse(output("git", ["show", `${commit}:package.json`])) as PackageJson;
-  if (packageAtTag.version !== version) {
-    throw new Error(`v${version} points to package version ${packageAtTag.version}.`);
-  }
+  if (packageAtTag.version !== version) throw new Error(`v${version} points to package version ${packageAtTag.version}.`);
 }
 
 function verifyReleasedSkills(version: string): void {
-  run("node", [
-    "scripts/installer-matrix.mjs",
+  run("bun", [
+    "scripts/installer-matrix.ts",
     "--live",
     "--source",
     "all",
@@ -224,49 +204,51 @@ function verifyReleasedSkills(version: string): void {
   ]);
 }
 
-async function release(target: string): Promise<void> {
-  requireCommands(["git", "node", "npm", "npx", "pnpm", "bun", "bunx", "tar", "shasum"]);
-  preflightCheckout();
-
-  const initialPackage = readPackage();
-  validateReleaseVersion(initialPackage.version, target);
-  const tag = `v${target}`;
-  const published = npmVersionExists(initialPackage.name, target);
+/** Handles completed releases and the recoverable npm-published, tag-missing state. */
+async function resumeExistingRelease(packageJson: PackageJson, version: string): Promise<boolean> {
+  const tag = `v${version}`;
+  const published = npmVersionExists(packageJson.name, version);
   const taggedCommit = remoteTagCommit(tag);
+  if (!published && !taggedCommit) return false;
+  if (taggedCommit && !published) throw new Error(`${tag} exists but ${packageJson.name}@${version} is missing from npm.`);
 
-  if (published || taggedCommit) {
-    if (taggedCommit && !published) {
-      throw new Error(`${tag} exists but ${initialPackage.name}@${target} is missing from npm.`);
-    }
-    if (!taggedCommit) {
-      const candidate = path.join(RELEASE_DIR, `${initialPackage.name}-${target}.tgz`);
-      const commitFile = `${candidate}.commit`;
-      if (!fs.existsSync(candidate) || !fs.existsSync(commitFile)) {
-        throw new Error(`npm has ${initialPackage.name}@${target}, but the prepared candidate is missing.`);
-      }
-      verifyPublishedCandidate(initialPackage.name, target, candidate);
-      const commit = fs.readFileSync(commitFile, "utf8").trim();
-      verifyTagVersion(commit, target);
-      createAndPushTag(initialPackage.name, target, commit);
-      verifyReleasedSkills(target);
-      console.log(`Recovered ${initialPackage.name}@${target} and pushed ${tag}.`);
-      return;
-    }
-    verifyTagVersion(taggedCommit, target);
-    console.log(`${initialPackage.name}@${target} and ${tag} already exist. Verifying released skills.`);
-    verifyReleasedSkills(target);
-    console.log(`Verified ${initialPackage.name}@${target}.`);
-    return;
+  if (published && taggedCommit) {
+    verifyTagVersion(taggedCommit, version);
+    console.log(`${packageJson.name}@${version} and ${tag} already exist. Verifying released skills.`);
+    verifyReleasedSkills(version);
+    console.log(`Verified ${packageJson.name}@${version}.`);
+    return true;
   }
 
+  const candidate = path.join(RELEASE_DIR, `${packageJson.name}-${version}.tgz`);
+  const commitFile = `${candidate}.commit`;
+  if (!fs.existsSync(candidate) || !fs.existsSync(commitFile)) {
+    throw new Error(`npm has ${packageJson.name}@${version}, but the prepared candidate is missing.`);
+  }
+  verifyPublishedCandidate(packageJson.name, version, candidate);
+  const commit = fs.readFileSync(commitFile, "utf8").trim();
+  verifyTagVersion(commit, version);
+  createTag(packageJson.name, version, commit);
+  verifyReleasedSkills(version);
+  console.log(`Recovered ${packageJson.name}@${version} and pushed ${tag}.`);
+  return true;
+}
+
+/** Runs a new release or safely resumes an interrupted one. */
+async function release(version: string): Promise<void> {
+  validateCheckout();
+  const packageJson = readPackage();
+  validateReleaseVersion(packageJson.version, version);
+  if (await resumeExistingRelease(packageJson, version)) return;
+
   run("npm", ["whoami"]);
-  const versionChanged = initialPackage.version !== target;
+  const versionChanged = packageJson.version !== version;
   const originalPackage = fs.readFileSync(PACKAGE_FILE, "utf8");
-  if (versionChanged) writePackageVersion(target);
+  if (versionChanged) writePackageVersion(version);
 
   let candidate: string;
   try {
-    candidate = prepareCandidate(initialPackage.name, target, versionChanged);
+    candidate = prepareCandidate(packageJson.name, version, versionChanged);
   } catch (error) {
     if (versionChanged) fs.writeFileSync(PACKAGE_FILE, originalPackage);
     throw error;
@@ -274,32 +256,31 @@ async function release(target: string): Promise<void> {
 
   let commit = output("git", ["rev-parse", "HEAD"]);
   if (versionChanged) {
-    const beforeCommit = commit;
+    const previousCommit = commit;
     try {
-      commit = commitAndPush(target);
+      commit = commitVersion(version);
     } catch (error) {
-      if (output("git", ["rev-parse", "HEAD"]) === beforeCommit) {
-        fs.writeFileSync(PACKAGE_FILE, originalPackage);
-      }
+      if (output("git", ["rev-parse", "HEAD"]) === previousCommit) fs.writeFileSync(PACKAGE_FILE, originalPackage);
       throw error;
     }
   } else {
-    ensureReleaseChanges(false);
+    assertExpectedChanges(false);
   }
 
   fs.writeFileSync(`${candidate}.commit`, `${commit}\n`);
   run("npm", ["publish", "--access", "public", candidate]);
-  await waitForNpm(initialPackage.name, target);
-  verifyPublishedCandidate(initialPackage.name, target, candidate);
-  createAndPushTag(initialPackage.name, target, commit);
-  verifyReleasedSkills(target);
-  console.log(`Released ${initialPackage.name}@${target} from ${commit}.`);
+  await waitForNpm(packageJson.name, version);
+  verifyPublishedCandidate(packageJson.name, version, candidate);
+  createTag(packageJson.name, version, commit);
+  verifyReleasedSkills(version);
+  console.log(`Released ${packageJson.name}@${version} from ${commit}.`);
 }
 
 function printHelp(): void {
   console.log(`Usage: bun run release <version>\n\nExample:\n  bun run release 0.2.5`);
 }
 
+/** Parses the release command's single version argument. */
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (argv.includes("--help") || argv.includes("-h")) {
     printHelp();
