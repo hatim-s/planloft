@@ -35,14 +35,14 @@
   "scripts": {
     "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
     "dev": "bun src/cli.ts",
-    "test": "tsx --test src/*.test.ts src/**/*.test.ts _tests_/*.test.ts && bun test scripts/*.test.mjs _tests_/*.test.mjs",
-    "test:installer": "node scripts/installer-matrix.mjs --contract",
-    "test:public-api": "bun run build && node scripts/validate-public-api.mjs",
-    "test:installer:live": "bun run build && node scripts/installer-matrix.mjs --live --source local --workers 4",
-    "test:installer:release": "node scripts/installer-matrix.mjs --live --source all --workers 4",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts _tests_/*.test.ts scripts/*.test.ts",
+    "test:installer": "bun scripts/installer-matrix.ts --contract",
+    "test:public-api": "bun run build && bun scripts/validate-public-api.ts",
+    "test:installer:live": "bun run build && bun scripts/installer-matrix.ts --live --source local --workers 4",
+    "test:installer:release": "bun scripts/installer-matrix.ts --live --source all --workers 4",
     "release": "bun scripts/release.ts",
     "prepack": "bun run build && bun run typecheck",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json"
   },
   "publishConfig": {
     "access": "public"

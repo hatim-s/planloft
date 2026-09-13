@@ -12,14 +12,13 @@ import {
   runnerInvocation,
   sourceValue,
   taggedSkillSource,
-  taggedSkillRawUrl,
   validateRepositoryContract,
-} from "./installer-matrix.mjs";
+} from "./installer-matrix.js";
 
 test("curated live scenarios cover every relevant dimension", () => {
   const matrix = quickMatrix();
   assert.equal(matrix.length, 12);
-  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"]) {
+  for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"] as const) {
     assert.deepEqual(
       [...new Set(matrix.map((entry) => entry[dimension]))].sort(),
       [...DIMENSIONS[dimension]].sort(),
@@ -51,17 +50,13 @@ test("runner commands use the real package-runner forms and a tested skills vers
 });
 
 test("latest and tagged GitHub skill sources are independent from npm versions", () => {
-  assert.equal(sourceValue("latest"), "hatim-s/planloft");
+  assert.equal(sourceValue("latest", undefined, "planloft-write-doc"), "hatim-s/planloft");
   assert.equal(
     taggedSkillSource("v1.2.3", "planloft-write-doc"),
     "https://github.com/hatim-s/planloft/tree/v1.2.3/skills/planloft-write-doc",
   );
   assert.throws(() => taggedSkillSource("latest", "planloft-write-doc"), /PLANLOFT_RELEASE_TAG/);
-  assert.equal(
-    taggedSkillRawUrl("v1.2.3", "planloft-customise"),
-    "https://raw.githubusercontent.com/hatim-s/planloft/v1.2.3/skills/planloft-customise/SKILL.md",
-  );
-  assert.throws(() => taggedSkillRawUrl("v1.2.3", "unknown"), /Unknown shipped skill/);
+  assert.throws(() => taggedSkillSource("v1.2.3", "unknown"), /Unknown shipped skill/);
 });
 
 test("repository inventory contains both portable skills", () => {

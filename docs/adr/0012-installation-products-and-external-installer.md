@@ -39,7 +39,7 @@ a release gate.
 
 ### I3 — Maintain disposable conformance scenarios
 
-`scripts/installer-matrix.mjs` owns 12 curated scenarios across runner, agent, scope,
+`scripts/installer-matrix.ts` owns 12 curated scenarios across runner, agent, scope,
 default or explicit-copy install mode, CLI state, and both skills. Every scenario uses
 a temporary project and home and installs only its selected agent. The scenarios assert
 one selected installed skill, exact source content, actionable CLI prerequisite
