@@ -1,4 +1,4 @@
-# Authoring guidance — decision
+# Authoring guidance: decision
 
 Author Markdown only. Never hand-author HTML or generated presentation markup.
 
@@ -15,8 +15,9 @@ Describe the forces that shaped the choice, including non-negotiable technical,
 operational, security, cost, or timing constraints.
 
 ## Options considered
-Compare the credible options against explicit criteria. Use a table when it makes the
-trade-offs easier to verify.
+Compare the credible options against explicit criteria. Put the comparison in a table
+with one row per option and the option's name in the first column. The table is the
+part of the record people return to.
 
 ## Rationale
 Explain why the selected option best fits the criteria. Separate evidence from

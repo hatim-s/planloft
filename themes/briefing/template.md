@@ -1,4 +1,4 @@
-# Authoring guidance — briefing
+# Authoring guidance: briefing
 
 Author Markdown only. Never hand-author HTML or generated presentation markup.
 
@@ -7,7 +7,8 @@ Write an executive briefing that a busy reader can scan, understand, and act on.
 Use this structure:
 
 ## Headline
-One sentence stating the current situation and why it matters now.
+One sentence stating the current situation and why it matters now. This is the first
+paragraph of the document and is set larger than the rest, so it must stand alone.
 
 ## At a glance
 Three to five bullets covering outcome, progress, timing, and the most important signal.

@@ -8,6 +8,11 @@
   --pl-surface: #f4f6f8;
   --pl-rule: #d9dee4;
   --pl-accent: #235ea7;
+  /* The renderer's light/dark control reads these so it matches the page. */
+  --planloft-ink: var(--pl-ink);
+  --planloft-paper: var(--pl-paper);
+  --planloft-rule: var(--pl-rule);
+  --planloft-accent: var(--pl-accent);
 }
 
 @media (prefers-color-scheme: dark) {

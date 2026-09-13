@@ -75,7 +75,7 @@ test("legacy indexed HTML remains readable and deploy-renderable", () => {
 test("comments are off by default", () => {
   const html = renderDocument(document({}), "minimal");
   assert.doesNotMatch(html, /giscus\.app\/client\.js/);
-  assert.doesNotMatch(html, /planloft-comments/);
+  assert.doesNotMatch(html, /<section class="planloft-comments"/);
 });
 
 test("configured comments render the complete giscus integration with escaped attributes", () => {

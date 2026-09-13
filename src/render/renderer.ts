@@ -123,40 +123,68 @@ function renderLayout(layout: string, slots: Record<string, string>): string {
 
 const THEME_SUPPORT_MARKER = "planloft-color-schemes: light dark";
 
+// The control reads four optional custom properties from the theme so it matches
+// the page instead of the operating system. Themes without them get system colors.
 const THEME_CONTROL_CSS = `
 :root { color-scheme: light dark; }
 .planloft-theme-selector {
+  --planloft-control-ink: var(--planloft-ink, CanvasText);
+  --planloft-control-paper: var(--planloft-paper, Canvas);
+  --planloft-control-rule: var(--planloft-rule, color-mix(in srgb, CanvasText 18%, transparent));
+  --planloft-control-accent: var(--planloft-accent, var(--planloft-control-ink));
   position: fixed;
   z-index: 1000;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: 1rem;
+  right: 1rem;
   display: inline-flex;
-  gap: 0.125rem;
-  border: 1px solid ButtonBorder;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--planloft-control-rule);
   border-radius: 999px;
-  padding: 0.2rem;
-  background: Canvas;
-  color: CanvasText;
-  box-shadow: 0 1px 3px color-mix(in srgb, CanvasText 14%, transparent);
+  background: color-mix(in srgb, var(--planloft-control-paper) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--planloft-control-ink);
+  line-height: 0;
 }
 .planloft-theme-option {
   display: inline-grid;
   width: 1.75rem;
   height: 1.75rem;
   place-items: center;
+  margin: 0;
   border: 0;
   border-radius: 999px;
   padding: 0;
   background: transparent;
-  color: inherit;
+  color: color-mix(in srgb, var(--planloft-control-ink) 60%, transparent);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.planloft-theme-option:hover {
+  color: var(--planloft-control-ink);
+  background: color-mix(in srgb, var(--planloft-control-ink) 9%, transparent);
 }
 .planloft-theme-option[aria-pressed="true"] {
-  background: SelectedItem;
-  color: SelectedItemText;
+  background: var(--planloft-control-ink);
+  color: var(--planloft-control-paper);
 }
-.planloft-theme-option svg { width: 1rem; height: 1rem; pointer-events: none; }
-.planloft-theme-option:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+.planloft-theme-option svg { width: 0.95rem; height: 0.95rem; pointer-events: none; }
+.planloft-theme-option:focus-visible {
+  outline: 2px solid var(--planloft-control-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 40rem) {
+  .planloft-theme-selector { top: 0.625rem; right: 0.625rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planloft-theme-option { transition: none; }
+}
+@media print {
+  .planloft-theme-selector { display: none; }
+}
 `;
 
 const SYSTEM_DARK_FALLBACK_CSS = `
@@ -174,13 +202,13 @@ const SYSTEM_DARK_FALLBACK_CSS = `
 
 const THEME_TOGGLE = `<div class="planloft-theme-selector planloft-theme-toggle" role="group" aria-label="Color theme">
   <button class="planloft-theme-option" type="button" data-planloft-theme-option="light" aria-label="Light theme" title="Light theme" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
   </button>
   <button class="planloft-theme-option" type="button" data-planloft-theme-option="dark" aria-label="Dark theme" title="Dark theme" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" fill="currentColor"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11z"/></svg>
   </button>
   <button class="planloft-theme-option" type="button" data-planloft-theme-option="system" aria-label="System theme" title="System theme" aria-pressed="true">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 17v3.5"/></svg>
   </button>
 </div>
 <script>

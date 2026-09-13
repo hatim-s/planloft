@@ -1,4 +1,4 @@
-# Authoring guidance — research
+# Authoring guidance: research
 
 Author Markdown only. Never hand-author HTML or generated presentation markup.
 
@@ -8,15 +8,16 @@ next steps.
 Use this structure:
 
 ## Research question
-Define the question, intended decision, scope, and exclusions.
+Define the question, the decision it informs, the scope, and the exclusions.
 
 ## Summary of findings
 Give the most decision-relevant findings first. State confidence for each major finding.
 
 ## Evidence
-Organize evidence by theme rather than source chronology. Link primary sources, note
+Organize evidence by theme rather than by source chronology. Link primary sources, note
 dates, and distinguish direct evidence from inference. Use tables for comparisons or
-datasets.
+datasets. Put quoted material in a `>` block so an excerpt is never mistaken for your
+own claim.
 
 ## Gaps and limitations
 Identify missing data, conflicting evidence, sampling limits, and assumptions that

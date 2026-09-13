@@ -47,6 +47,12 @@ Planloft injects the top theme control and persists its explicit selection. With
 marker, the renderer adds a readable system-color fallback, but it cannot invent a
 deliberate dark palette for custom components.
 
+The control takes its colors from four optional custom properties on `:root`:
+`--planloft-ink`, `--planloft-paper`, `--planloft-rule`, and `--planloft-accent`.
+Point them at the theme's own variables once, in the base `:root` block, and they
+follow every color state. Without them the control falls back to system colors, which
+can clash with a tinted palette.
+
 Style semantic Markdown output rather than hand-authored presentation markup. Cover at
 least body text, headings, links, lists, code, preformatted blocks, blockquotes, tables,
 rules, and focus states. Preserve horizontal overflow for code and tables on narrow
