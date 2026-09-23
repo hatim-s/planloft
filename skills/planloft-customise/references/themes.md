@@ -27,6 +27,9 @@ technical plans, `editorial` for narrative proposals, `decision` for durable cho
 `research` for evidence-led investigations, and `briefing` for status or leadership
 reviews. Each built-in provides authoring guidance plus deliberate light and dark CSS.
 
+Built-in report containers use 200px of total side gutters on wide screens, 100px at
+64rem and below, and 50px at 40rem and below. They do not use per-theme max-width caps.
+
 ## CSS requirements
 
 Include this exact marker when the theme provides its own complete dual palette:

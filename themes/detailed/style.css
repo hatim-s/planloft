@@ -59,7 +59,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 .planloft-plan {
-  width: min(100% - 2.5rem, 42rem);
+  width: calc(100% - 200px);
   margin-inline: auto;
   padding-block: 4.5rem 7rem;
 }
@@ -180,15 +180,31 @@ summary { cursor: pointer; font-weight: 650; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 .planloft-comments { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
 
+@media (max-width: 64rem) {
+  .planloft-plan { width: calc(100% - 100px); }
+}
 @media (max-width: 40rem) {
   body { font-size: 16px; }
-  .planloft-plan { width: min(100% - 2rem, 42rem); padding-block: 4.25rem 5rem; }
+  .planloft-plan { width: calc(100% - 50px); padding-block: 4.25rem 5rem; }
   h1 { font-size: 1.85rem; }
   h2 { padding-left: 0.85rem; font-size: 1.3rem; }
   h2::before { left: 0; width: 3px; }
   pre { padding: 0.85rem 1rem; }
 }
 @media print {
+  html:root,
+  html:root:not([data-planloft-color-scheme="light"]),
+  html:root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --ink: #1c2128;
+    --muted: #59636e;
+    --paper: #f9fafb;
+    --surface: #eff2f6;
+    --rule: #d8dee5;
+    --accent: #1d4ed8;
+    --accent-soft: #e4ecfb;
+    --code-bg: #eef1f5;
+  }
   body { background: #fff; color: #000; font-size: 11pt; }
   .planloft-plan { width: auto; padding: 0; }
   a { color: inherit; }
