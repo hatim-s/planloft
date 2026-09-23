@@ -8,7 +8,7 @@ reading experience you want:
 |---|---|---|---|
 | `minimal` | Checklists and terse execution plans | Flat, compact steps | Monospace, monochrome, heading marks kept visible |
 | `detailed` | Technical implementation plans | Context, ordered work, risks | Neutral sans, section bars in the margin, room for code |
-| `editorial` | Narrative proposals | Situation, tension, approach, outcome | Old-style serif, narrow column, drop cap, hanging quotes |
+| `editorial` | Narrative proposals | Situation, tension, approach, outcome | Old-style serif, drop cap, hanging quotes |
 | `decision` | ADRs and durable choices | Options, criteria, rationale, consequences | Grotesk sans, ruled sections, fully boxed options table |
 | `research` | Investigations and evidence reviews | Sources, confidence, gaps, implications | Text serif with sans headings and tables, tinted excerpts |
 | `briefing` | Status updates and leadership reviews | Signals, asks, owners, next moves | Humanist sans, the first paragraph set as a lede |

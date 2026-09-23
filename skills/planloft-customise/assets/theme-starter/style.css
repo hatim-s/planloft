@@ -63,6 +63,18 @@ body {
   .planloft-plan { width: calc(100% - 50px); }
 }
 @media print {
+  :root,
+  :root:not([data-planloft-color-scheme="light"]),
+  :root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --pl-ink: #1c2024;
+    --pl-muted: #606974;
+    --pl-paper: #ffffff;
+    --pl-surface: #f4f6f8;
+    --pl-rule: #d9dee4;
+    --pl-accent: #235ea7;
+  }
+  body { background: #fff; color: #000; }
   .planloft-plan { width: auto; padding: 0; }
 }
 h1, h2, h3 { line-height: 1.2; }
