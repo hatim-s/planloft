@@ -189,6 +189,19 @@ summary { cursor: pointer; font-family: var(--sans); font-weight: 700; }
   pre { padding: 0.85rem 1rem; }
 }
 @media print {
+  html:root,
+  html:root:not([data-planloft-color-scheme="light"]),
+  html:root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --ink: #1d2622;
+    --muted: #5f6e67;
+    --paper: #fafbf8;
+    --surface: #eef2ef;
+    --rule: #d5ded8;
+    --accent: #1a6b57;
+    --accent-soft: #e6f1ec;
+    --code-bg: #edf1ee;
+  }
   body { background: #fff; color: #000; font-size: 11pt; }
   .planloft-plan { width: auto; padding: 0; }
   a { color: inherit; }

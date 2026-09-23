@@ -202,6 +202,18 @@ summary { cursor: pointer; font-weight: 700; }
   blockquote::before { left: -1rem; font-size: 2.2em; }
 }
 @media print {
+  html:root,
+  html:root:not([data-planloft-color-scheme="light"]),
+  html:root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --ink: #24201c;
+    --muted: #6e655d;
+    --paper: #fbf9f5;
+    --surface: #f1ede6;
+    --rule: #e2dbd1;
+    --accent: #7d2436;
+    --code-bg: #efeae2;
+  }
   body { background: #fff; color: #000; font-size: 11.5pt; }
   .planloft-plan { width: auto; padding: 0; }
   a { color: inherit; }

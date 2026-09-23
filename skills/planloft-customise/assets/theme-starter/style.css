@@ -63,7 +63,7 @@ body {
   .planloft-plan { width: calc(100% - 50px); }
 }
 @media print {
-  :root,
+  :root:root,
   :root:not([data-planloft-color-scheme="light"]),
   :root[data-planloft-color-scheme="dark"] {
     color-scheme: light;

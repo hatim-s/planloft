@@ -169,6 +169,17 @@ summary { cursor: pointer; font-weight: 700; }
   h1 { font-size: 1.35rem; }
 }
 @media print {
+  html:root,
+  html:root:not([data-planloft-color-scheme="light"]),
+  html:root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --ink: #1b1b1b;
+    --muted: #6d6d6d;
+    --paper: #fbfbfa;
+    --surface: #f1f1ef;
+    --rule: #dcdcd9;
+    --accent: #1b1b1b;
+  }
   body { background: #fff; color: #000; font-size: 10.5pt; }
   .planloft-plan { width: auto; padding: 0; }
   pre, code, kbd { background: #f3f3f3; }
