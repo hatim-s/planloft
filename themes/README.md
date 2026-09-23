@@ -13,11 +13,12 @@ reading experience you want:
 | `research` | Investigations and evidence reviews | Sources, confidence, gaps, implications | Text serif with sans headings and tables, tinted excerpts |
 | `briefing` | Status updates and leadership reviews | Signals, asks, owners, next moves | Humanist sans, the first paragraph set as a lede |
 
-Every theme keeps body text between 60 and 75 characters per line, uses off-black on
-off-white in light mode and soft grey on charcoal in dark mode, and styles the full
-Markdown vocabulary: headings to level six, lists and task lists, links, inline code
-and code blocks, quotes, tables that scroll sideways on narrow screens, rules, images,
-keyboard keys, and the comments section.
+Built-in themes share a responsive report layout. The report container has 200px of total
+side gutters on wide screens, 100px at 64rem and below, and 50px at 40rem and below.
+It has no per-theme max-width cap. Themes use off-black on off-white in light mode and
+soft grey on charcoal in dark mode, and style the full Markdown vocabulary: headings to
+level six, lists and task lists, links, inline code and code blocks, quotes, tables that
+scroll sideways on narrow screens, rules, images, keyboard keys, and the comments section.
 
 Render a document with a one-off choice:
 
