@@ -52,9 +52,15 @@ body {
   font: 16px/1.65 system-ui, sans-serif;
 }
 .planloft-plan {
-  width: min(100% - 2rem, 52rem);
+  width: calc(100% - 200px);
   margin-inline: auto;
   padding-block: 4rem 6rem;
+}
+@media (max-width: 64rem) {
+  .planloft-plan { width: calc(100% - 100px); }
+}
+@media (max-width: 40rem) {
+  .planloft-plan { width: calc(100% - 50px); }
 }
 h1, h2, h3 { line-height: 1.2; }
 h2 { margin-top: 2.25rem; padding-top: 1rem; border-top: 1px solid var(--pl-rule); }

@@ -51,7 +51,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 .planloft-plan {
-  width: min(100% - 2.5rem, 72ch);
+  width: calc(100% - 200px);
   margin-inline: auto;
   padding-block: 4.5rem 7rem;
 }
@@ -160,9 +160,12 @@ summary { cursor: pointer; font-weight: 700; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 .planloft-comments { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
 
+@media (max-width: 64rem) {
+  .planloft-plan { width: calc(100% - 100px); }
+}
 @media (max-width: 40rem) {
   body { font-size: 14px; }
-  .planloft-plan { width: min(100% - 2rem, 72ch); padding-block: 4.25rem 5rem; }
+  .planloft-plan { width: calc(100% - 50px); padding-block: 4.25rem 5rem; }
   h1 { font-size: 1.35rem; }
 }
 @media print {
