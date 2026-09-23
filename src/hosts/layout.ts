@@ -135,10 +135,12 @@ export function prepareHostingRepository(dir: string, candidate?: { project: str
     ["pages.yml", ".github/workflows/planloft-pages.yml"],
     ["prune-plans.yml", ".github/workflows/prune-plans.yml"],
     ["prune.mjs", ".planloft/prune.mjs"],
+    ["update-indexes.mjs", ".planloft/update-indexes.mjs"],
   ]) {
     const file = path.join(dir, target!);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    if (!initialized || !fs.existsSync(file) || (version < 3 && source === "prune.mjs")) fs.copyFileSync(path.join(tpl, source!), file);
+    const managedScript = source === "prune.mjs" || source === "update-indexes.mjs";
+    if (managedScript || !initialized || !fs.existsSync(file)) fs.copyFileSync(path.join(tpl, source!), file);
   }
   const index = path.join(dir, "public", "index.html");
   if (!fs.existsSync(index)) fs.writeFileSync(index, '<!doctype html><meta name="robots" content="noindex, nofollow"><title>planloft</title>\n');
@@ -148,15 +150,6 @@ export function prepareHostingRepository(dir: string, candidate?: { project: str
     const contents = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     const missing = [".vercel", ".env*"].filter(pattern => !contents.split(/\r?\n/).includes(pattern));
     if (missing.length) fs.writeFileSync(file, `${contents}${contents && !contents.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
-  }
-  // Existing index generators read repository metadata but now write to public/.
-  const generator = path.join(dir, ".planloft", "update-indexes.mjs");
-  if (!initialized && fs.existsSync(generator)) {
-    const script = fs.readFileSync(generator, "utf8")
-      .replaceAll('path.join(root, "index.html")', 'path.join(root, "public", "index.html")')
-      .replaceAll("Planloft / GitHub Pages", "Planloft")
-      .replaceAll("Plans currently available on GitHub Pages.", "Published plans and documents.");
-    fs.writeFileSync(generator, script);
   }
   fs.writeFileSync(marker, '{"version":3}\n');
   return { migrated: version < 3 };

@@ -185,7 +185,10 @@ export async function publishRepository(input: DeployInput, siteUrl?: string): P
   const url = siteUrl ?? `https://${user}.github.io/${repo}`;
   fs.writeFileSync(path.join(dir, ".planloft", "site.json"), JSON.stringify({ url }) + "\n");
   const generator = path.join(dir, ".planloft", "update-indexes.mjs");
-  if (fs.existsSync(generator)) execFileSync(process.execPath, [generator, "--pages-base-url", url], { cwd: dir, stdio: "ignore" });
+  execFileSync(process.execPath, [generator, "--pages-base-url", url, "--now", input.now.toISOString()], {
+    cwd: dir,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
   git(dir, ["add", "-A"]);
   const changes = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: dir, encoding: "utf8" });
   if (changes.trim()) git(dir, ["commit", "-m", `planloft: deploy ${input.doc.slug} (${id})`]);
