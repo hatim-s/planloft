@@ -17,18 +17,26 @@ export interface SourceFlags {
 
 export interface SourceReader {
   readText(file: string): string;
+  readBytes?(file: string): Uint8Array;
 }
 
 export async function readCanonicalDocument(
   input: string,
   flags: SourceFlags,
-  reader: SourceReader = { readText: (file) => fs.readFileSync(file, "utf8") },
+  reader: SourceReader = {
+    readText: (file) => fs.readFileSync(file, "utf8"),
+    readBytes: (file) => fs.readFileSync(file),
+  },
 ): Promise<CanonicalDocument> {
   const format = flags.format ? parseSourceFormat(flags.format) : inferFormat(input);
   if (input === "-" && flags.stdin === undefined) {
     throw new Error('Stdin input must be supplied by the calling adapter.');
   }
-  const raw = input === "-" ? flags.stdin! : reader.readText(input);
+  const raw = input === "-"
+    ? flags.stdin!
+    : format === "html" && reader.readBytes
+      ? new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(reader.readBytes(input))
+      : reader.readText(input);
   return ingestDocument(raw, {
     format,
     sourceName: input === "-" ? undefined : input,

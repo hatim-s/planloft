@@ -105,7 +105,7 @@ test("trusted HTML publishes and redeploys without changing its content", async 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-direct-html-test-"));
   const cwd = path.join(root, "project");
   const source = path.join(cwd, "page.html");
-  const html = "<!doctype html>\n<html><head><title>Direct</title></head><body><main>As is</main></body></html>\n";
+  const html = "\uFEFF<!doctype html>\n<html><head><title>Direct</title></head><body><main>As is</main></body></html>\n";
   const deployed: string[] = [];
   fs.mkdirSync(cwd, { recursive: true });
   fs.writeFileSync(source, html);
@@ -113,6 +113,7 @@ test("trusted HTML publishes and redeploys without changing its content", async 
     cwd,
     planloftHome: path.join(root, "home"),
     id: () => "direct-id",
+    openUrl: () => true,
     publicationAdapter: {
       basePath: () => "/plans/direct-id/",
       deploy: async ({ dist }) => {
@@ -130,6 +131,15 @@ test("trusted HTML publishes and redeploys without changing its content", async 
     await application.publish(source, { trustedHtml: true });
     await application.deploy("page");
     assert.deepEqual(deployed, [html, html]);
+    withPlanloftHome(path.join(root, "home"), () =>
+      saveConfig({ ...DEFAULT_CONFIG, theme: "does-not-exist" }),
+    );
+    const preview = await application.preview("page");
+    assert.equal(fs.readFileSync(path.join(preview.directory, "index.html"), "utf8"), html);
+
+    const invalid = path.join(cwd, "invalid.html");
+    fs.writeFileSync(invalid, Buffer.from([0x3c, 0x70, 0x3e, 0xe9, 0x3c, 0x2f, 0x70, 0x3e]));
+    await assert.rejects(application.publish(invalid, { trustedHtml: true }));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

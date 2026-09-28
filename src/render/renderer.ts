@@ -81,7 +81,10 @@ function renderGiscus(config: GiscusConfig): string {
 
 /** Render an indexed store document to a temporary directory for preview/deploy. */
 export function buildSite(opts: BuildOpts): string {
-  const raw = fs.readFileSync(opts.doc.file, "utf8");
+  const bytes = fs.readFileSync(opts.doc.file);
+  const raw = opts.doc.format === "html"
+    ? new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)
+    : bytes.toString("utf8");
   const canonical = ingestDocument(raw, {
     format: opts.doc.format,
     sourceName: opts.doc.file,

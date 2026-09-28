@@ -498,12 +498,13 @@ export function createPlanloftApplication(
     preview: (slug) =>
       run("preview", () => {
         const cwd = currentDirectory();
-        const { key } = projectKey(cwd);
         const meta = persistence.find(slug);
         if (!meta) throw applicationError("not_found", "preview", {
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
-        const theme = configuration.resolveProject(key, meta.theme).theme;
+        const theme = meta.format === "html"
+          ? ""
+          : configuration.resolveProject(projectKey(cwd).key, meta.theme).theme;
         const directory = buildSite({ doc: meta, theme, base: "/" });
         const url = `file://${directory}/index.html`;
         const opened = (dependencies.openUrl ?? openUrl)(url);

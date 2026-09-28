@@ -82,5 +82,5 @@ the user controls.
 
 Publishing is always explicit. Published paths are hard to guess. Rendered Markdown
 gets `noindex`; trusted HTML keeps only the metadata supplied in its source.
-but the backing GitHub repository and manifest are public and enumerable. Keep
+The backing GitHub repository and manifest are public and enumerable. Keep
 sensitive documents local.
