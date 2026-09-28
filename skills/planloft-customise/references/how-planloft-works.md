@@ -59,6 +59,9 @@ falling back. See [themes.md](themes.md) for the asset contract.
 The renderer owns Markdown parsing, safe URL handling, constrained layout slots,
 light/dark support, the theme toggle, optional `noindex` metadata, and optional giscus
 comments. A rendered artifact is self-contained.
+Trusted HTML bypasses the renderer's theme, layout, and metadata injection. Publishing
+`page.html --trusted-html` stores and deploys its content as supplied. Add `noindex`
+to the source when needed. Planloft rejects `--comments` for direct HTML.
 
 ## Agent boundary
 
@@ -77,6 +80,7 @@ Untrusted Markdown escapes embedded HTML and rejects unsafe link and image schem
 Raw HTML requires an explicit trusted-HTML option and should be used only for content
 the user controls.
 
-Publishing is always explicit. Published paths are hard to guess and marked `noindex`,
+Publishing is always explicit. Published paths are hard to guess. Rendered Markdown
+gets `noindex`; trusted HTML keeps only the metadata supplied in its source.
 but the backing GitHub repository and manifest are public and enumerable. Keep
 sensitive documents local.

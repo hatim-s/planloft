@@ -86,6 +86,7 @@ Common next actions:
 - `"$PLANLOFT_COMMAND" copy [slug]` copies raw source into the repository.
 - `"$PLANLOFT_COMMAND" deploy [slug]` explicitly publishes a stored plan.
 - `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, JSON, or trusted HTML document.
+- `"$PLANLOFT_COMMAND" publish page.html --trusted-html` deploys trusted HTML exactly as supplied, without a theme or wrapper. Put any `noindex` metadata in the source.
 <!-- planloft:command-knowledge:end -->
 
 Never deploy unless the user explicitly requests publication. GitHub Pages publication

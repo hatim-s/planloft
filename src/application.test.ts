@@ -101,6 +101,40 @@ test("application publication is host-injectable and returns a secret-free resul
   }
 });
 
+test("trusted HTML publishes and redeploys without changing its content", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-direct-html-test-"));
+  const cwd = path.join(root, "project");
+  const source = path.join(cwd, "page.html");
+  const html = "<!doctype html>\n<html><head><title>Direct</title></head><body><main>As is</main></body></html>\n";
+  const deployed: string[] = [];
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(source, html);
+  const application = createPlanloftApplication({
+    cwd,
+    planloftHome: path.join(root, "home"),
+    id: () => "direct-id",
+    publicationAdapter: {
+      basePath: () => "/plans/direct-id/",
+      deploy: async ({ dist }) => {
+        deployed.push(fs.readFileSync(path.join(dist, "index.html"), "utf8"));
+        return { url: "https://example.test/direct", expiresAt: "2031-03-11T05:06:07.000Z" };
+      },
+    },
+  });
+  try {
+    const rendered = await application.render(source, { trustedHtml: true });
+    assert.equal(rendered.output, "stdout");
+    if (rendered.output === "stdout") assert.equal(rendered.html, html);
+    await assert.rejects(application.render(source, { trustedHtml: true, noindex: true }), /Direct HTML stays unchanged/);
+    await assert.rejects(application.publish(source, { trustedHtml: true, comments: true }), /Direct HTML stays unchanged/);
+    await application.publish(source, { trustedHtml: true });
+    await application.deploy("page");
+    assert.deepEqual(deployed, [html, html]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("first application hoist and publish persist exact defaults after validation", async () => {
   for (const operation of ["hoist", "publish"] as const) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `planloft-first-${operation}-test-`));

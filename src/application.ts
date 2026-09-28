@@ -91,6 +91,7 @@ export type ApplicationDiagnosticCode =
   | "PLANLOFT_DOCUMENT_INPUT_INVALID"
   | "PLANLOFT_DOCUMENT_FORMAT_INVALID"
   | "PLANLOFT_TRUSTED_HTML_REQUIRED"
+  | "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED"
   | "PLANLOFT_TTL_INVALID"
   | "PLANLOFT_EXPIRY_INVALID"
   | "PLANLOFT_GISCUS_CONFIG_INCOMPLETE"
@@ -396,8 +397,12 @@ export function createPlanloftApplication(
           options,
           sourceReader,
         );
-        const { key } = projectKey(cwd);
-        const theme = configuration.resolveProject(key, doc.theme).theme;
+        if (doc.contentFormat === "html" && options.noindex) {
+          throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --noindex");
+        }
+        const theme = doc.contentFormat === "html"
+          ? ""
+          : configuration.resolveProject(projectKey(cwd).key, doc.theme).theme;
         const html = renderDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
@@ -748,6 +753,9 @@ function validationDiagnostic(message: unknown): PlanloftApplicationErrorDetails
   if (/^(?:HTML input|JSON HTML content) is disabled by default\./.test(message)) {
     return { diagnosticCode: "PLANLOFT_TRUSTED_HTML_REQUIRED" };
   }
+  if (message.startsWith("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED:")) {
+    return { diagnosticCode: "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED" };
+  }
   if (/^(?:Stdin input requires --format|Input format must be|Cannot infer input format from)/.test(message)) {
     return { diagnosticCode: "PLANLOFT_DOCUMENT_FORMAT_INVALID" };
   }
@@ -782,6 +790,7 @@ const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
   "PLANLOFT_DOCUMENT_INPUT_INVALID",
   "PLANLOFT_DOCUMENT_FORMAT_INVALID",
   "PLANLOFT_TRUSTED_HTML_REQUIRED",
+  "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED",
   "PLANLOFT_TTL_INVALID",
   "PLANLOFT_EXPIRY_INVALID",
   "PLANLOFT_GISCUS_CONFIG_INCOMPLETE",
@@ -924,6 +933,7 @@ function applicationErrorMessage(
     PLANLOFT_DOCUMENT_INPUT_INVALID: "Document input is invalid. Check its structure and required fields.",
     PLANLOFT_DOCUMENT_FORMAT_INVALID: "Document format is invalid. Use md, json, or html and specify stdin format explicitly.",
     PLANLOFT_TRUSTED_HTML_REQUIRED: "HTML input is disabled by default. Enable trusted HTML only for content you trust.",
+    PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: "Direct HTML stays unchanged. Add noindex or comments to the source instead of using Planloft options.",
     PLANLOFT_TTL_INVALID: "TTL must be a supported finite positive integer.",
     PLANLOFT_EXPIRY_INVALID: "TTL does not produce a representable expiry from the current time.",
     PLANLOFT_GISCUS_CONFIG_INCOMPLETE: "Comments require complete valid giscus configuration.",

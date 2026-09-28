@@ -34,9 +34,9 @@ export interface CommandKnowledge {
 }
 
 export const PUBLICATION_PRIVACY_DISCLOSURE =
-  "Public deployment: the URL path is hard to guess and marked noindex, but the backing " +
-  "GitHub repository is public. Repository visitors can enumerate document folders and " +
-  "manifest metadata. Keep sensitive plans local.";
+  "Public deployment: the URL path is hard to guess. Planloft adds noindex to rendered " +
+  "Markdown, but publishes trusted HTML unchanged; add noindex to the HTML yourself if needed. " +
+  "The backing GitHub repository is public, and its manifest is enumerable. Keep sensitive plans local.";
 export const GITHUB_AUTH_DISCLOSURE =
   "GitHub auth precedence is authenticated gh, PLANLOFT_GITHUB_TOKEN, github.token, then " +
   "a hidden TTY prompt; noninteractive runs never prompt.";
@@ -359,5 +359,6 @@ export function renderSkillDiscoveryReference(command = "planloft"): string {
     `- \`${command} copy [slug]\` copies raw source into the repository.`,
     `- \`${command} deploy [slug]\` explicitly publishes a stored plan.`,
     `- \`${command} hoist <input>\` stores another Markdown, JSON, or trusted HTML document.`,
+    `- \`${command} publish page.html --trusted-html\` deploys trusted HTML exactly as supplied, without a theme or wrapper. Put any \`noindex\` metadata in the source.`,
   ].join("\n");
 }

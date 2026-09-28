@@ -46,7 +46,7 @@ test("untrusted Markdown escapes raw HTML and removes unsafe links", () => {
   assert.match(html, /href="https:\/\/example.com"/);
 });
 
-test("legacy indexed HTML remains readable and deploy-renderable", () => {
+test("stored HTML is deployed byte for byte", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-legacy-html-test-"));
   const source = path.join(directory, "legacy.html");
   fs.writeFileSync(source, '<section data-legacy="true"><h1>Stored HTML</h1></section>');
@@ -64,12 +64,19 @@ test("legacy indexed HTML remains readable and deploy-renderable", () => {
   try {
     site = buildSite({ doc: meta, theme: "minimal", base: "/" });
     const html = fs.readFileSync(path.join(site, "index.html"), "utf8");
-    assert.match(html, /<section data-legacy="true"><h1>Stored HTML<\/h1><\/section>/);
-    assert.match(html, /planloft-theme-toggle/);
+    assert.equal(html, fs.readFileSync(source, "utf8"));
   } finally {
     if (site) fs.rmSync(site, { recursive: true, force: true });
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("trusted HTML rendering adds no wrapper, theme, or metadata", () => {
+  const source = "<!doctype html>\n<html><head><title>Original</title></head><body><main>Exact</main></body></html>\n";
+  const html = renderDocument(document({ contentFormat: "html", content: source, trustedHtml: true }), "minimal", {
+    noindex: true,
+  });
+  assert.equal(html, source);
 });
 
 test("comments are off by default", () => {

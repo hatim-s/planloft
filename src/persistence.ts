@@ -131,9 +131,9 @@ export function createDocumentPersistence(
 
     hoist(document, now = clock()) {
       const project = identity();
-      // Validate configuration and the selected theme without mutating first, then
-      // persist defaults before the first document-store write.
-      configuration.resolveProject(project.key, document.theme);
+      // HTML needs valid configuration but no theme; Markdown validates both before writing.
+      if (document.contentFormat === "html") configuration.load();
+      else configuration.resolveProject(project.key, document.theme);
       configuration.ensure();
       const file = docFile(project.label, document.slug, document.contentFormat);
       const previous = find(document.slug);

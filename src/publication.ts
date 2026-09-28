@@ -104,7 +104,13 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
 
   return {
     prepare(document, publicationOptions = {}, operationNow) {
-      const { config, theme } = configuration.resolveProject(document.project, document.theme);
+      const config = configuration.load();
+      const theme = document.format === "html"
+        ? ""
+        : configuration.resolveProject(document.project, document.theme).theme;
+      if (document.format === "html" && publicationOptions.comments) {
+        throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --comments");
+      }
       const ttlDays = resolveTtlDays(publicationOptions.ttl, config.defaultTtlDays);
       const now = operationNow ?? clock();
       const expiresAt = calculateExpiry(

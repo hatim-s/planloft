@@ -24,8 +24,11 @@ export function renderDocument(
   theme: string,
   options: RenderOptions = {},
 ): string {
-  const body =
-    doc.contentFormat === "html" ? doc.content : renderMarkdown(doc.content, doc.trustedHtml);
+  if (doc.contentFormat === "html") {
+    if (options.comments) throw new Error("Comments cannot be added to HTML published as is.");
+    return doc.content;
+  }
+  const body = renderMarkdown(doc.content, doc.trustedHtml);
 
   const layout = readLayout(theme);
   const styles = themeStyles(readStyle(theme));

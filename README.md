@@ -118,7 +118,10 @@ Run `planloft help` for workflows, defaults, examples, and write-safety markers,
 
 `<input>` may be a `.md`, `.json`, or `.html` file. Use `- --format md|json|html` for
 stdin. HTML input and embedded Markdown HTML require `--trusted-html`; use it only for
-content you control.
+content you control. Planloft renders trusted HTML exactly as supplied, with no theme,
+wrapper, or injected metadata. For example, `planloft publish page.html --trusted-html`
+stores and deploys that HTML unchanged. Add your own `noindex` tag if needed. The
+`--comments` publication option and `render --noindex` cannot modify direct HTML.
 
 ```text
 <!-- planloft:command-examples:start -->
@@ -130,7 +133,8 @@ planloft publish proposal.md --ttl 30
 
 ## Publication safety
 
-Published pages use hard-to-guess paths and `noindex`, but the backing GitHub Pages
+Published pages use hard-to-guess paths. Planloft adds `noindex` to rendered Markdown;
+trusted HTML is published as is. The backing GitHub Pages
 repository is public and enumerable. Keep sensitive documents local. Publishing and
 deploying are always explicit; stored documents remain local until copied or published.
 

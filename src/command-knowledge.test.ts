@@ -212,9 +212,9 @@ contractTest("TTL help contract is enforced by the CLI parser", async () => {
 contractTest("publication privacy disclosure is snapshot-stable and present in both publishing commands", async () => {
   assert.equal(
     PUBLICATION_PRIVACY_DISCLOSURE,
-    "Public deployment: the URL path is hard to guess and marked noindex, but the backing " +
-      "GitHub repository is public. Repository visitors can enumerate document folders and " +
-      "manifest metadata. Keep sensitive plans local.",
+    "Public deployment: the URL path is hard to guess. Planloft adds noindex to rendered " +
+      "Markdown, but publishes trusted HTML unchanged; add noindex to the HTML yourself if needed. " +
+      "The backing GitHub repository is public, and its manifest is enumerable. Keep sensitive plans local.",
   );
   for (const command of ["deploy", "publish"]) {
     assert.ok((await captureHelp(["help", command])).includes(PUBLICATION_PRIVACY_DISCLOSURE));
