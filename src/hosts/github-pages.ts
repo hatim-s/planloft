@@ -30,6 +30,31 @@ export function cleanUrl(user: string, repo: string): string {
 
 type GitRunner = typeof execFileSync;
 
+class GitOperationError extends Error {
+  constructor(readonly operationError: unknown) {
+    super("GitHub Git operation failed. Check credential and repository permissions.");
+    this.name = "GitOperationError";
+  }
+}
+
+function gitErrorText(error: unknown): string {
+  if (error instanceof GitOperationError) return gitErrorText(error.operationError);
+  if (typeof error !== "object" || error === null) return "";
+  const values: string[] = [];
+  for (const property of ["message", "stderr", "stdout"] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(error, property);
+    if (!descriptor || !("value" in descriptor)) continue;
+    if (typeof descriptor.value === "string") values.push(descriptor.value);
+    else if (Buffer.isBuffer(descriptor.value)) values.push(descriptor.value.toString("utf8"));
+  }
+  return values.join("\n");
+}
+
+function isNonFastForward(error: unknown): boolean {
+  return /\bnon-fast-forward\b|\(fetch first\)|remote contains work that you (?:do not|don't) have locally/i
+    .test(gitErrorText(error));
+}
+
 export function authenticatedGit(
   cwd: string,
   args: string[],
@@ -45,7 +70,7 @@ export function authenticatedGit(
       { mode: 0o700 },
     );
     run("git", ["-C", cwd, ...args], {
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         GIT_ASKPASS: askPass,
@@ -57,10 +82,41 @@ export function authenticatedGit(
         PLANLOFT_GIT_TOKEN: token,
       },
     });
-  } catch {
-    throw new Error("GitHub Git operation failed. Check credential and repository permissions.");
+  } catch (error) {
+    throw new GitOperationError(error);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+  }
+}
+
+function fetchFullMain(dir: string, token: string): void {
+  const shallow = execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
+    cwd: dir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim() === "true";
+  const args = ["fetch"];
+  if (shallow) args.push("--unshallow");
+  args.push("origin", "main");
+  authenticatedGit(dir, args, token);
+}
+
+function pushMain(dir: string, token: string): void {
+  const push = ["push", "--porcelain", "origin", "HEAD:main"];
+  try {
+    authenticatedGit(dir, push, token);
+  } catch (error) {
+    if (!isNonFastForward(error)) throw error;
+    fetchFullMain(dir, token);
+    try {
+      git(dir, ["rebase", "FETCH_HEAD"]);
+    } catch (rebaseError) {
+      try {
+        git(dir, ["rebase", "--abort"]);
+      } catch {}
+      throw rebaseError;
+    }
+    authenticatedGit(dir, push, token);
   }
 }
 
@@ -87,20 +143,45 @@ async function ensureRepo(token: string, user: string, repo: string): Promise<vo
   }
 }
 
-async function ensurePages(token: string, user: string, repo: string): Promise<string | undefined> {
+async function ensurePages(token: string, user: string, repo: string): Promise<void> {
   try {
-    githubApi(token, "POST", `repos/${user}/${repo}/pages`, {
+    await githubApi(token, "POST", `repos/${user}/${repo}/pages`, {
       source: { branch: "main", path: "/" },
     });
-    return undefined;
+    return;
   } catch (error) {
-    // 201 created, 409 already enabled. Anything else warns without failing the deploy.
-    if (error instanceof GithubCliApiError && error.status === 409) return undefined;
-    const status = error instanceof GithubCliApiError && error.status !== undefined
-      ? ` (${error.status})`
-      : "";
-    return `Could not auto-enable Pages${status}. Enable it once in repo Settings → Pages (branch: main, /).`;
+    if (!(error instanceof GithubCliApiError) || error.status !== 409) {
+      throw new Error(
+        `Failed to configure GitHub Pages${githubStatusSuffix(error)}. Check repository permissions and network access.`,
+      );
+    }
   }
+
+  let pages: unknown;
+  try {
+    pages = await githubApi<unknown>(token, "GET", `repos/${user}/${repo}/pages`);
+  } catch (error) {
+    throw new Error(
+      `Failed to read the GitHub Pages source${githubStatusSuffix(error)}. Check repository permissions and network access.`,
+    );
+  }
+  const sourceError = pagesSourceWarning(pages);
+  if (sourceError) throw new Error(sourceError);
+}
+
+export function pagesSourceWarning(pages: unknown): string | undefined {
+  if (!isRecord(pages)) {
+    return "GitHub Pages returned an unreadable source configuration. Set it to branch main, path /.";
+  }
+  const source = isRecord(pages.source) ? pages.source : undefined;
+  const branch = source?.branch;
+  const directory = source?.path;
+  if (pages.build_type === "legacy" && branch === "main" && directory === "/") return undefined;
+  const buildType = pages.build_type === "workflow" ? "an Actions build" : "an unsupported build type";
+  const details = pages.build_type === "legacy" && typeof branch === "string" && typeof directory === "string"
+    ? `branch ${branch}, path ${directory}`
+    : buildType;
+  return `GitHub Pages uses ${details}, not legacy branch main, path /. The plan index and returned plan URL will not be served until the source is updated.`;
 }
 
 function githubStatusSuffix(error: unknown): string {
@@ -132,62 +213,239 @@ export function configureCleanRemote(dir: string, user: string, repo: string): v
 function syncClone(dir: string, user: string, repo: string, token: string): void {
   configureCleanRemote(dir, user, repo);
   // Remote is source of truth (the prune Action rewrites it) — hard-reset to it.
-  authenticatedGit(dir, ["fetch", "--depth", "1", "origin", "main"], token);
+  fetchFullMain(dir, token);
   git(dir, ["reset", "--hard", "FETCH_HEAD"]);
   git(dir, ["clean", "-fd"]);
   git(dir, ["config", "user.name", "planloft"]);
   git(dir, ["config", "user.email", `${user}@users.noreply.github.com`]);
 }
 
-function writeIfMissing(file: string, contents: string): void {
-  if (fs.existsSync(file)) return;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, contents);
+function filesystemCode(error: unknown): string | undefined {
+  return error && typeof error === "object" && "code" in error
+    ? String(error.code)
+    : undefined;
 }
 
-/** Self-install the scaffold the repo needs: no-jekyll, manifest, prune Action, landing. */
+function managedFileExists(file: string, label: string): boolean {
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(file);
+  } catch (error) {
+    if (filesystemCode(error) === "ENOENT") return false;
+    throw error;
+  }
+  if (stats.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link.`);
+  if (!stats.isFile()) throw new Error(`${label} must be a regular file.`);
+  return true;
+}
+
+function writeManagedFile(file: string, label: string, contents: string): void {
+  const exists = managedFileExists(file, label);
+  if (exists) return;
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0;
+  const descriptor = fs.openSync(
+    file,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | noFollow,
+  );
+  try {
+    fs.writeFileSync(descriptor, contents, { encoding: "utf8" });
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function overwriteManagedFile(file: string, label: string, contents: string): void {
+  managedFileExists(file, label);
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0;
+  const descriptor = fs.openSync(
+    file,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow,
+  );
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) throw new Error(`${label} must be a regular file.`);
+    fs.writeFileSync(descriptor, contents, { encoding: "utf8" });
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+/** Self-install the scaffold the repo needs: no-jekyll, manifest, prune Action, indexes. */
 function scaffold(dir: string): void {
-  writeIfMissing(path.join(dir, ".nojekyll"), "");
-  writeIfMissing(
+  writeManagedFile(path.join(dir, ".nojekyll"), ".nojekyll", "");
+  writeManagedFile(
     path.join(dir, "manifest.json"),
+    "manifest.json",
     JSON.stringify({ version: 1, deploys: [] } satisfies Manifest, null, 2) + "\n",
   );
 
   const tpl = path.join(templatesDir(), "github-pages");
-  writeIfMissing(
-    path.join(dir, ".github", "workflows", "prune-plans.yml"),
+  const githubDir = path.join(dir, ".github");
+  const workflowsDir = path.join(githubDir, "workflows");
+  ensureRealDirectory(githubDir, ".github");
+  ensureRealDirectory(workflowsDir, ".github/workflows");
+  overwriteManagedFile(
+    path.join(workflowsDir, "prune-plans.yml"),
+    ".github/workflows/prune-plans.yml",
     fs.readFileSync(path.join(tpl, "prune-plans.yml"), "utf8"),
   );
-  writeIfMissing(
-    path.join(dir, ".planloft", "prune.mjs"),
+  const planloftDir = path.join(dir, ".planloft");
+  ensureRealDirectory(planloftDir, ".planloft");
+  overwriteManagedFile(
+    path.join(planloftDir, "prune.mjs"),
+    ".planloft/prune.mjs",
     fs.readFileSync(path.join(tpl, "prune.mjs"), "utf8"),
   );
+  overwriteManagedFile(
+    path.join(planloftDir, "update-indexes.mjs"),
+    ".planloft/update-indexes.mjs",
+    fs.readFileSync(path.join(tpl, "update-indexes.mjs"), "utf8"),
+  );
+}
 
-  // Bare landing at root — no gallery listing (ADR-0001 §D21).
-  writeIfMissing(
-    path.join(dir, "index.html"),
-    '<!doctype html><meta name="robots" content="noindex, nofollow"><title>planloft</title>\n',
+function updatePlanIndexes(dir: string, pagesBaseUrl: string, now: string): void {
+  execFileSync(
+    process.execPath,
+    [
+      path.join(dir, ".planloft", "update-indexes.mjs"),
+      "--pages-base-url",
+      pagesBaseUrl,
+      "--now",
+      now,
+    ],
+    { cwd: dir, stdio: "ignore" },
   );
 }
 
 // ---- manifest -------------------------------------------------------------
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isSafeManifestId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-zA-Z0-9_-]+$/.test(value);
+}
+
+function isCanonicalIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const timestamp = Date.parse(value);
+  return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function isManifest(value: unknown): value is Manifest {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.deploys)) return false;
+  const ids = new Set<string>();
+  for (const entry of value.deploys) {
+    if (!isRecord(entry)) return false;
+    if (!isSafeManifestId(entry.id)) return false;
+    if (ids.has(entry.id)) return false;
+    ids.add(entry.id);
+    if (
+      !isNonemptyString(entry.project) ||
+      !isNonemptyString(entry.slug) ||
+      !isNonemptyString(entry.title) ||
+      !isNonemptyString(entry.kind) ||
+      !isCanonicalIsoTimestamp(entry.createdAt) ||
+      (entry.expiresAt !== null && !isCanonicalIsoTimestamp(entry.expiresAt))
+    ) return false;
+  }
+  return true;
+}
+
 function readManifest(dir: string): Manifest {
+  const manifestPath = path.join(dir, "manifest.json");
+  let linkStats: fs.Stats;
   try {
-    return JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8")) as Manifest;
+    linkStats = fs.lstatSync(manifestPath);
   } catch {
-    return { version: 1, deploys: [] };
+    throw new Error("Cannot deploy because the planloft-plans manifest is invalid.");
+  }
+  if (linkStats.isSymbolicLink()) {
+    throw new Error("Cannot deploy because manifest.json is a symbolic link.");
+  }
+  if (!linkStats.isFile()) {
+    throw new Error("Cannot deploy because manifest.json is not a regular file.");
+  }
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(
+      manifestPath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    if (!fs.fstatSync(descriptor).isFile()) {
+      throw new Error("manifest.json is not a regular file");
+    }
+    const value: unknown = JSON.parse(fs.readFileSync(descriptor, "utf8"));
+    if (!isManifest(value)) throw new Error("manifest.json is invalid");
+    return value;
+  } catch {
+    throw new Error("Cannot deploy because the planloft-plans manifest is invalid.");
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 
 function writeManifest(dir: string, m: Manifest): void {
-  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(m, null, 2) + "\n");
+  overwriteManagedFile(
+    path.join(dir, "manifest.json"),
+    "manifest.json",
+    JSON.stringify(m, null, 2) + "\n",
+  );
+}
+
+function requireRealDirectory(directory: string, label: string): void {
+  if (!fs.lstatSync(directory).isDirectory()) {
+    throw new Error(`${label} must be a real directory, not a symbolic link or other file.`);
+  }
+}
+
+function ensureRealDirectory(directory: string, label: string): void {
+  try {
+    fs.mkdirSync(directory);
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
+      throw error;
+    }
+  }
+  requireRealDirectory(directory, label);
 }
 
 function copyDist(src: string, dest: string): void {
   fs.rmSync(dest, { recursive: true, force: true });
   fs.mkdirSync(dest, { recursive: true });
   fs.cpSync(src, dest, { recursive: true });
+}
+
+function liveDeploymentIds(manifest: Manifest, now: Date): string[] {
+  return manifest.deploys
+    .filter((entry) => entry.expiresAt === null || Date.parse(entry.expiresAt) > now.getTime())
+    .map((entry) => entry.id);
+}
+
+function stageManagedDeployment(dir: string, liveIds: string[]): string[] {
+  const managedPaths = [
+    "README.md",
+    "index.html",
+    "manifest.json",
+    ".nojekyll",
+    ".github/workflows/prune-plans.yml",
+    ".planloft/prune.mjs",
+    ".planloft/update-indexes.mjs",
+    ...liveIds.map((id) => `p/${id}`),
+  ];
+  git(dir, ["add", "-f", "--", ...managedPaths]);
+  return managedPaths;
+}
+
+function verifyTracked(dir: string, managedPaths: string[]): void {
+  for (const managedPath of managedPaths) {
+    git(dir, ["ls-files", "--error-unmatch", "--", managedPath]);
+  }
 }
 
 // ---- adapter --------------------------------------------------------------
@@ -216,27 +474,47 @@ export const githubPages: HostAdapter = {
       (entry) => entry.project === input.doc.project && entry.slug === input.doc.slug,
     );
     const id = existing?.id ?? input.id;
+    if (!isSafeManifestId(id)) {
+      throw new Error("Cannot deploy because the deployment id is invalid.");
+    }
 
-    copyDist(input.render(id), path.join(dir, "p", id));
+    const plansDirectory = path.join(dir, "p");
+    const deploymentDirectory = path.join(plansDirectory, id);
+    ensureRealDirectory(plansDirectory, "p");
+    for (const entry of manifest.deploys) {
+      const live = entry.expiresAt === null || Date.parse(entry.expiresAt) > input.now.getTime();
+      if (live && entry.id !== id) {
+        requireRealDirectory(path.join(plansDirectory, entry.id), `p/${entry.id}`);
+      }
+    }
+    ensureRealDirectory(deploymentDirectory, `p/${id}`);
+    copyDist(input.render(id), deploymentDirectory);
 
     const expiresAt = input.updateManifest(manifest, id);
+    const liveIds = liveDeploymentIds(manifest, input.now);
+    for (const liveId of liveIds) {
+      requireRealDirectory(path.join(plansDirectory, liveId), `p/${liveId}`);
+    }
     writeManifest(dir, manifest);
+    updatePlanIndexes(dir, `https://${user}.github.io/${repo}`, input.now.toISOString());
+    await ensurePages(token, user, repo);
 
     // Commit + push (Pages redeploys from the branch).
-    git(dir, ["add", "-A"]);
-    try {
+    const managedPaths = stageManagedDeployment(dir, liveIds);
+    const changes = execFileSync("git", ["diff", "--cached", "--name-only"], {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (changes) {
       git(dir, ["commit", "-m", `planloft: deploy ${input.doc.slug} (${id})`]);
-    } catch {
-      /* nothing changed */
     }
-    authenticatedGit(dir, ["push", "origin", "HEAD:main"], token);
-
-    const pagesWarning = await ensurePages(token, user, repo);
+    verifyTracked(dir, managedPaths);
+    pushMain(dir, token);
 
     return {
       url: `https://${user}.github.io/${repo}/p/${id}/`,
       expiresAt,
-      ...(pagesWarning ? { warnings: [pagesWarning] } : {}),
     };
   },
 };
