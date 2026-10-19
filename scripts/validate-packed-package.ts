@@ -26,7 +26,10 @@ const REQUIRED_FILES = [
   "themes/research/template.md",
   "themes/README.md",
   "schemas/config.schema.json",
-  "templates/github-pages/prune-plans.yml",
+  "templates/hosting/prune-plans.yml",
+  "templates/hosting/pages.yml",
+  "templates/hosting/vercel.json",
+  "templates/hosting/prune.mjs",
 ] as const;
 const RETIRED_PATHS = ["bin", "hooks", ".agents", ".codex-plugin", ".claude-plugin"] as const;
 

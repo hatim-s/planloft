@@ -41,6 +41,7 @@ const APPLICATION_METHODS = [
   "remove",
   "config",
   "init",
+  "migrateToVercel",
 ] as const;
 const PUBLIC_DECLARATIONS = [
   "interface PlanloftApplication",

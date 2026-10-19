@@ -13,7 +13,8 @@ import { configPath, withPlanloftHome } from "./core/paths.js";
 import { projectKey } from "./core/project.js";
 import { slugify } from "./core/slug.js";
 import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
-import { githubPages, hasGh } from "./hosts/github-pages.js";
+import { hasGh } from "./hosts/github-pages.js";
+import { prepareHostingRepository } from "./hosts/layout.js";
 import {
   createDocumentPersistence,
 } from "./persistence.js";
@@ -56,7 +57,8 @@ export type ApplicationOperation =
   | "deploy"
   | "remove"
   | "config"
-  | "init";
+  | "init"
+  | "migrate-to-vercel";
 
 const APPLICATION_OPERATIONS = new Set<ApplicationOperation>([
   "render",
@@ -70,6 +72,7 @@ const APPLICATION_OPERATIONS = new Set<ApplicationOperation>([
   "remove",
   "config",
   "init",
+  "migrate-to-vercel",
 ]);
 
 const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
@@ -99,6 +102,10 @@ export type ApplicationDiagnosticCode =
   | "PLANLOFT_GITHUB_AUTH_INVALID"
   | "PLANLOFT_GITHUB_AUTH_UNREACHABLE"
   | "PLANLOFT_DOCUMENT_NOT_FOUND"
+  | "PLANLOFT_VERCEL_CONFIG_INVALID"
+  | "PLANLOFT_VERCEL_FAILED"
+  | "PLANLOFT_HOST_INVALID"
+  | "PLANLOFT_HOSTING_INVALID"
   | "PLANLOFT_COPY_CONFLICT";
 
 export type ApplicationDiagnosticField = "title" | "slug" | "kind" | "theme" | "status";
@@ -315,6 +322,7 @@ export interface PlanloftApplication {
   remove(slug: string): Promise<RemoveResult>;
   config(): Promise<ConfigResult>;
   init(options?: InitOptions): Promise<InitResult>;
+  migrateToVercel(directory: string): Promise<{ operation: "migrate-to-vercel"; directory: string; migrated: boolean }>;
 }
 
 const nativeFileSystem: ApplicationFileSystem = {
@@ -362,7 +370,6 @@ export function createPlanloftApplication(
     id: makeId,
     applicationAdapter: dependencies.publicationAdapter,
     environment,
-    host: githubPages,
     auth: { promptToken: dependencies.promptGithubToken },
   });
 
@@ -389,6 +396,10 @@ export function createPlanloftApplication(
   };
 
   return {
+    migrateToVercel: (directory) => run("migrate-to-vercel", () => {
+      const target = path.resolve(currentDirectory(), directory);
+      return { operation: "migrate-to-vercel", directory: target, ...prepareHostingRepository(target) };
+    }),
     render: (input, options = {}) =>
       run("render", async () => {
         const cwd = currentDirectory();
@@ -685,6 +696,10 @@ function classifyError(
   if (candidate.name === "ThemeError" && validThemeDiagnostic(candidate.code)) {
     return applicationError("validation", operation, { diagnosticCode: candidate.code });
   }
+  const hostingCode = typeof candidate.message === "string" ? candidate.message.split(":")[0] : undefined;
+  if (hostingCode && validDiagnostic(hostingCode) && ["PLANLOFT_VERCEL_CONFIG_INVALID", "PLANLOFT_HOST_INVALID", "PLANLOFT_HOSTING_INVALID"].includes(hostingCode)) {
+    return applicationError("validation", operation, { diagnosticCode: validDiagnostic(hostingCode) });
+  }
   const validation = validationDiagnostic(candidate.message);
   if (validation) return applicationError("validation", operation, validation);
   return applicationError("local_effect", operation);
@@ -722,6 +737,8 @@ function applicationError(
 function publicationDiagnostic(message: unknown): ApplicationDiagnosticCode | undefined {
   if (typeof message !== "string") return undefined;
   for (const code of [
+    "PLANLOFT_VERCEL_FAILED",
+    "PLANLOFT_HOSTING_INVALID",
     "PLANLOFT_GITHUB_AUTH_MISSING",
     "PLANLOFT_GITHUB_AUTH_INVALID",
     "PLANLOFT_GITHUB_AUTH_UNREACHABLE",
@@ -799,6 +816,10 @@ const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
   "PLANLOFT_GITHUB_AUTH_INVALID",
   "PLANLOFT_GITHUB_AUTH_UNREACHABLE",
   "PLANLOFT_DOCUMENT_NOT_FOUND",
+  "PLANLOFT_VERCEL_CONFIG_INVALID",
+  "PLANLOFT_VERCEL_FAILED",
+  "PLANLOFT_HOST_INVALID",
+  "PLANLOFT_HOSTING_INVALID",
   "PLANLOFT_COPY_CONFLICT",
 ]);
 
@@ -942,6 +963,10 @@ function applicationErrorMessage(
     PLANLOFT_GITHUB_AUTH_INVALID: "GitHub rejected the configured credential. Authenticate again and retry.",
     PLANLOFT_GITHUB_AUTH_UNREACHABLE: "GitHub authentication could not be validated. Check connectivity and retry.",
     PLANLOFT_DOCUMENT_NOT_FOUND: "No matching stored document was found.",
+    PLANLOFT_VERCEL_CONFIG_INVALID: "Set vercel.project to a lowercase project name and vercel.url to an HTTPS origin, if used.",
+    PLANLOFT_VERCEL_FAILED: "Vercel deployment failed. Install the Vercel CLI, run vercel login, and check project permissions. The repository push may have succeeded; retry deploy.",
+    PLANLOFT_HOST_INVALID: "Choose --host github-pages or --host vercel.",
+    PLANLOFT_HOSTING_INVALID: "Hosting layout or manifest is invalid. Check for conflicting public paths, symlinks, missing plan files, and invalid manifest entries before retrying.",
     PLANLOFT_COPY_CONFLICT: "Copy would overwrite an existing repository document. Retry with force to replace it.",
   };
   if (diagnostic && messages[diagnostic]) return `${prefix}${messages[diagnostic]}`;

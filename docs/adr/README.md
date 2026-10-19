@@ -16,7 +16,7 @@ is shaped the way it is, not just *what* it does.
 | [0002](./0002-document-kinds.md) | generalize the store from plans to documents | Accepted (amends 0001 §D3, §D6) |
 | [0003](./0003-marked-renderer.md) | replace Astro with a minimal `marked` renderer | Accepted (supersedes 0001 §D10, §D25; partially superseded by 0007) |
 | [0005](./0005-custom-domain.md) | optional custom domain for GitHub Pages deploys | Superseded by 0006 |
-| [0006](./0006-github-pages-only.md) | narrow active hosting scope to GitHub Pages | Accepted (supersedes 0005; amends 0001 §D11) |
+| [0006](./0006-github-pages-only.md) | narrow active hosting scope to GitHub Pages | Superseded by 0017 |
 | [0007](./0007-document-pipeline.md) | canonical document pipeline and constrained theme layouts | Accepted (amends 0001, 0002; partially supersedes 0003; amended by 0011) |
 | [0008](./0008-single-skill-command-knowledge.md) | single skill, authoritative command knowledge, and dual-theme output | Accepted (G1 and G6 amended by 0015; supersedes 0002 E4; amends 0001) |
 | [0009](./0009-publication-contracts.md) | explicit publication security, comments, and expiry contracts | Accepted (supersedes 0001 D12; amends D19-D21 and D23) |
@@ -27,6 +27,7 @@ is shaped the way it is, not just *what* it does.
 | [0014](./0014-deep-configuration-persistence-publication-modules.md) | deep configuration, persistence, and publication modules | Accepted (amends 0007, 0009, 0010, 0011, 0013) |
 | [0015](./0015-planloft-customization-skill.md) | focused Planloft explanation and theme-customization skill | Accepted (amends 0008 and 0012) |
 | [0016](./0016-cross-host-skill-identities.md) | cross-host Planloft skill identities | Accepted (amends 0012 and 0015) |
+| [0017](./0017-shared-static-hosting.md) | shared static hosting for Vercel and GitHub Pages | Accepted (supersedes 0006) |
 
 ## Conventions
 

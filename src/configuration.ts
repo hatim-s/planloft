@@ -22,10 +22,11 @@ export interface RedactedConfiguration {
   version: 1;
   theme: string;
   defaultTtlDays: number;
+  host?: Config["host"];
   projects: Record<string, { theme?: string; giscus?: Partial<GiscusCoordinates> }>;
   giscus?: Partial<GiscusCoordinates>;
   github?: { token?: "[redacted]"; user?: string; repo?: string };
-  vercel?: { token?: "[redacted]" };
+  vercel?: { token?: "[redacted]"; project?: string; scope?: string; url?: string };
 }
 
 export interface PlanloftConfiguration {
@@ -73,7 +74,7 @@ export function redactConfig(config: Config): RedactedConfiguration {
       }))(config.github)
     : undefined;
   const vercel = config.vercel
-    ? { ...(config.vercel.token === undefined ? {} : { token: "[redacted]" as const }) }
+    ? (({ token: _token, ...visible }) => ({ ...visible, ...(config.vercel?.token === undefined ? {} : { token: "[redacted]" as const }) }))(config.vercel)
     : undefined;
   return {
     ...visibleConfig,
@@ -229,6 +230,7 @@ export function updateConfig(patch: ConfigPatch): Config {
     ...current,
     version: 1,
     projects,
+    ...(patch.host === undefined ? {} : { host: patch.host }),
     ...(patch.theme === undefined ? {} : { theme: patch.theme }),
     ...(patch.defaultTtlDays === undefined ? {} : { defaultTtlDays: patch.defaultTtlDays }),
     ...optionalNestedUpdate("giscus", current.giscus, patch.giscus),
@@ -264,7 +266,8 @@ function validateConfigValue(value: unknown): Config {
       `${detail} Remove planFormat from config.json; agent-authored documents now resolve to Markdown, while explicit trusted HTML input remains available through --trusted-html.`,
     );
   }
-  exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel"], "$config");
+  exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel", "host"], "$config");
+  if (root.host !== undefined && root.host !== "github-pages" && root.host !== "vercel") fail("$config.host must be github-pages or vercel");
   if (root.version !== 1) fail("$config.version must equal 1");
   const theme = nonEmptyString(root.theme, "$config.theme");
   assertThemeName(theme);
@@ -289,6 +292,7 @@ function validateConfigValue(value: unknown): Config {
     version: 1,
     theme,
     defaultTtlDays,
+    ...(root.host === undefined ? {} : { host: root.host }),
     projects,
     ...(root.giscus === undefined ? {} : { giscus: validateStringMap(root.giscus, "$config.giscus", GISCUS_KEYS) }),
     ...(root.github === undefined ? {} : { github: validateStringMap(root.github, "$config.github", GITHUB_KEYS) }),
@@ -298,7 +302,7 @@ function validateConfigValue(value: unknown): Config {
 
 const GISCUS_KEYS = ["repo", "repoId", "category", "categoryId"] as const;
 const GITHUB_KEYS = ["token", "user", "repo"] as const;
-const VERCEL_KEYS = ["token"] as const;
+const VERCEL_KEYS = ["token", "project", "scope", "url"] as const;
 
 function validateStringMap<const K extends readonly string[]>(
   value: unknown,

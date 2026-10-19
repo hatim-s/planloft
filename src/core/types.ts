@@ -60,7 +60,8 @@ export interface ProjectEntry {
 export interface Config {
   version: 1; // versioned manual-editing contract
   theme: string; // global default theme
-  defaultTtlDays: number; // GitHub Pages TTL default
+  defaultTtlDays: number; // publication TTL default
+  host?: "github-pages" | "vercel";
   projects: Record<string, { theme?: string; giscus?: Partial<GiscusConfig> }>; // key -> overrides
   giscus?: Partial<GiscusConfig>; // global defaults; project values take precedence
   github?: {
@@ -68,7 +69,7 @@ export interface Config {
     user?: string;
     repo?: string; // default: planloft-plans
   };
-  vercel?: { token?: string }; // deferred host (ADR-0006); kept for the pluggable seam
+  vercel?: { token?: string; project?: string; scope?: string; url?: string };
 }
 
 /** Required giscus repository/category coordinates for opt-in comments. */

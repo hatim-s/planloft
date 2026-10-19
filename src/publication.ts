@@ -10,7 +10,8 @@ import {
   runGhCommand,
   type GhRunner,
 } from "./github-cli.js";
-import type { HostAdapter, HostAuthentication, Manifest } from "./hosts/adapter.js";
+import { getAdapter, type HostAdapter, type HostAuthentication, type Manifest } from "./hosts/adapter.js";
+import { vercelSettings } from "./hosts/vercel.js";
 import { buildSite } from "./render/renderer.js";
 
 export interface ApplicationPublicationInput {
@@ -36,6 +37,7 @@ export interface ApplicationPublicationAdapter {
 }
 
 export interface PublicationOptions {
+  host?: "github-pages" | "vercel";
   ttl?: number;
   comments?: boolean;
 }
@@ -51,6 +53,7 @@ export interface PreparedPublication {
   basePath?: string;
   /** Internal validated configuration; never returned from the application interface. */
   config: Config;
+  host: HostAdapter;
 }
 
 export interface PublicationResult {
@@ -79,7 +82,7 @@ export interface PublicationModuleOptions {
   configuration?: PlanloftConfiguration;
   clock?: () => Date;
   id?: () => string;
-  host: HostAdapter;
+  host?: HostAdapter;
   applicationAdapter?: ApplicationPublicationAdapter;
   environment?: Readonly<Record<string, string | undefined>>;
   auth?: AuthDiscoveryOptions;
@@ -100,11 +103,13 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
   const createId = options.id ?? (() => {
     throw new Error("Publication requires an injected id generator.");
   });
-  const host = options.host;
 
   return {
     prepare(document, publicationOptions = {}, operationNow) {
       const config = configuration.load();
+      const host = options.host ?? getAdapter(publicationOptions.host ?? config.host ?? "github-pages");
+      if (!host) throw new Error("PLANLOFT_HOST_INVALID: Choose github-pages or vercel.");
+      if (host.name === "vercel") vercelSettings(config);
       const theme = document.format === "html"
         ? ""
         : configuration.resolveProject(document.project, document.theme).theme;
@@ -125,10 +130,11 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       const basePath = options.applicationAdapter
         ? externalPublicationValue("host", () => options.applicationAdapter!.basePath(id))
         : undefined;
-      return { id, now, ttlDays, expiresAt, theme, comments, basePath, config };
+      return { id, now, ttlDays, expiresAt, theme, comments, basePath, config, host };
     },
 
     async publish(document, prepared) {
+      const host = prepared.host;
       const common = {
         id: prepared.id,
         ttlDays: prepared.ttlDays,
@@ -180,6 +186,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
               doc: document,
               cfg: prepared.config,
               authentication,
+              environment: options.environment,
               updateManifest: (manifest, candidateId) =>
                 updatePublicationManifest(manifest, common, candidateId, prepared.expiresAt),
               render: (id) => {

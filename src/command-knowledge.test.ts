@@ -45,8 +45,8 @@ contractTest("command knowledge covers every public command with examples and ef
     new Set(commands.map((command) => command.name())),
     new Set(COMMAND_KNOWLEDGE.map((command) => command.name)),
   );
-  assert.equal(COMMAND_KNOWLEDGE.length, 11);
-  assert.equal(new Set(COMMAND_KNOWLEDGE.map((command) => command.name)).size, 11);
+  assert.equal(COMMAND_KNOWLEDGE.length, 12);
+  assert.equal(new Set(COMMAND_KNOWLEDGE.map((command) => command.name)).size, 12);
 
   for (const command of COMMAND_KNOWLEDGE) {
     assert.ok(COMMAND_CATEGORIES.includes(command.category));
@@ -79,8 +79,8 @@ contractTest("root help groups every public command and explains state and safet
   for (const category of COMMAND_CATEGORIES) assert.match(help, new RegExp(category));
   for (const command of COMMAND_KNOWLEDGE) assert.ok(help.includes(command.signature));
   assert.match(help, /source -> canonical document -> store/);
-  assert.match(help, /publish: source -> store -> artifact -> GitHub Pages/);
-  assert.match(help, /deploy:  stored document -> public GitHub Pages artifact/);
+  assert.match(help, /publish: source -> store -> artifact -> selected host/);
+  assert.match(help, /deploy:  stored document -> public artifact on selected host/);
   assert.ok(help.includes(PUBLICATION_PRIVACY_DISCLOSURE));
   assert.match(help, /rm deletes stored source/);
   assert.match(help, /--comments requires GitHub Discussions plus giscus\.repo/);
@@ -123,8 +123,9 @@ contractTest("every structured example reaches the expected application operatio
     copy: { method: "copy", args: ["architecture-roadmap", { force: undefined }] },
     deploy: {
       method: "deploy",
-      args: ["architecture-roadmap", { ttl: 30, comments: undefined }],
+      args: ["architecture-roadmap", { ttl: 30, comments: undefined, host: undefined }],
     },
+    "migrate-to-vercel": { method: "migrateToVercel", args: ["./planloft-plans"] },
     rm: { method: "remove", args: ["obsolete-roadmap"] },
     resolve: {
       method: "resolve",

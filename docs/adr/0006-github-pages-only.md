@@ -1,6 +1,6 @@
 # ADR-0006 — narrow active hosting scope to GitHub Pages
 
-- **Status**: Accepted
+- **Status**: Superseded by [0017](./0017-shared-static-hosting.md)
 - **Date**: 2026-07-04
 - **Supersedes**: [ADR-0005](./0005-custom-domain.md) (custom domains).
 - **Amends**: ADR-0001 §D11 (hosting: was "ship GitHub Pages + Vercel now").

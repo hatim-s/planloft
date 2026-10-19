@@ -14,6 +14,7 @@
       "propertyNames": { "minLength": 1 },
       "additionalProperties": { "$ref": "#/$defs/project" }
     },
+    "host": { "enum": ["github-pages", "vercel"] },
     "giscus": { "$ref": "#/$defs/giscus" },
     "github": {
       "type": "object",
@@ -27,7 +28,10 @@
     "vercel": {
       "type": "object",
       "properties": {
-        "token": { "$ref": "#/$defs/nonblankString" }
+        "token": { "$ref": "#/$defs/nonblankString" },
+        "project": { "$ref": "#/$defs/nonblankString" },
+        "scope": { "$ref": "#/$defs/nonblankString" },
+        "url": { "$ref": "#/$defs/nonblankString" }
       },
       "additionalProperties": false
     }

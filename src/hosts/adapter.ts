@@ -30,6 +30,7 @@ export interface DeployInput {
   /** The application clock captured before effects begin. */
   now: Date;
   authentication: HostAuthentication;
+  environment?: Readonly<Record<string, string | undefined>>;
   updateManifest(manifest: Manifest, candidateId: string): string;
   render(id: string): string;
 }

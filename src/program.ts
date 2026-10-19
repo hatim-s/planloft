@@ -108,7 +108,8 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--theme <theme>", "override theme")
     .option("--status <status>", "override document status")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
-    .option("--ttl <days>", "GitHub Pages expiry in days", positiveInteger)
+    .option("--ttl <days>", "publication expiry in days", positiveInteger)
+    .option("--host <host>", "github-pages | vercel")
     .option("--comments", "enable giscus review comments")
     .action(async (input, parsed) => {
       await run(
@@ -139,15 +140,21 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     );
 
   withKnowledge(program.command("deploy [slug]"), "deploy")
-    .option("--ttl <days>", "GitHub Pages expiry in days", positiveInteger)
+    .option("--ttl <days>", "publication expiry in days", positiveInteger)
+    .option("--host <host>", "github-pages | vercel")
     .option("--comments", "enable giscus review comments")
     .action((slug, parsed) =>
       run(
         "deploy",
-        () => application.deploy(slug, { ttl: parsed.ttl, comments: parsed.comments }),
+        () => application.deploy(slug, { ttl: parsed.ttl, comments: parsed.comments, host: parsed.host }),
         presentDeploy,
       ),
     );
+
+  withKnowledge(program.command("migrate-to-vercel <directory>"), "migrate-to-vercel")
+    .action(directory => run("migrate-to-vercel", () => application.migrateToVercel(directory), result =>
+      `${result.migrated ? "Migrated for Vercel" : "Already prepared for Vercel"}: ${result.directory}\nCommit and push the changes, then choose GitHub Actions in Pages settings.\n`,
+    ));
 
   withKnowledge(program.command("rm <slug>"), "rm").action((slug) =>
     run("remove", () => application.remove(slug), presentRemove),
@@ -235,7 +242,7 @@ function presentDeployment(deployment: DeployResult["deployment"]): string {
     `${pc.green("Deployed: ")}${deployment.url}\n` +
     `${pc.dim(`Expires at ${deployment.expiresAt} (${deployment.ttlDays} days; redeploy moves expiry forward).`)}\n` +
     `${warnings}${warnings ? "\n" : ""}` +
-    `${pc.dim("GitHub Pages can take ~1 min to build on first deploy.")}\n`
+    `${pc.dim("GitHub Pages builds asynchronously; Vercel deploys finish before returning.")}\n`
   );
 }
 

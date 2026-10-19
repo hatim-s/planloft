@@ -280,6 +280,7 @@ function emptyApplication(): PlanloftApplication {
     remove: fail,
     config: fail,
     init: fail,
+    migrateToVercel: fail,
   };
 }
 
