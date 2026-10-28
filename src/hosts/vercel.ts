@@ -38,12 +38,12 @@ export function runVercel(
 
 export const vercel: HostAdapter = {
   name: "vercel",
-  basePath(id) { return `/p/${id}/`; },
+  basePath(id) { return `/${id}/`; },
   async deploy(input) {
     const settings = vercelSettings(input.cfg);
     // Authenticate before creating or updating the backing GitHub repository.
     runVercel(["whoami"], input.cfg, undefined, input.environment);
-    const { id, dir, expiresAt, pagesWarning } = await publishRepository(input, settings.origin);
+    const { dir, expiresAt, pagesWarning } = await publishRepository(input, settings.origin);
     runVercel(["link", "--yes", "--project", settings.project], input.cfg, dir, input.environment);
     const output = runVercel(["deploy", "--prod", "--yes", "--json"], input.cfg, dir, input.environment);
     const result: unknown = JSON.parse(output);
@@ -56,6 +56,6 @@ export const vercel: HostAdapter = {
     }
     const deploymentUrl = result.deployment.url;
     runVercel(["alias", "set", deploymentUrl, settings.domain], input.cfg, dir, input.environment);
-    return { url: `${settings.origin}/p/${id}/`, expiresAt, ...(pagesWarning ? { warnings: [pagesWarning] } : {}) };
+    return { url: `${settings.origin}/${input.doc.slug}/`, expiresAt, ...(pagesWarning ? { warnings: [pagesWarning] } : {}) };
   },
 };

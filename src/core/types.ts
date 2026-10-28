@@ -61,7 +61,7 @@ export interface Config {
   version: 1; // versioned manual-editing contract
   theme: string; // global default theme
   defaultTtlDays: number; // publication TTL default
-  host?: "github-pages" | "vercel";
+  host?: "github-pages" | "vercel" | "cloudflare";
   projects: Record<string, { theme?: string; giscus?: Partial<GiscusConfig> }>; // key -> overrides
   giscus?: Partial<GiscusConfig>; // global defaults; project values take precedence
   github?: {
@@ -70,6 +70,7 @@ export interface Config {
     repo?: string; // default: planloft-plans
   };
   vercel?: { token?: string; project?: string; scope?: string; url?: string };
+  cloudflare?: { worker?: string; accountId?: string; url?: string };
 }
 
 /** Required giscus repository/category coordinates for opt-in comments. */

@@ -102,12 +102,12 @@ configuration. See the [theme catalog](./themes/README.md) for authoring emphasi
 <!-- planloft:command-knowledge:start -->
 - `planloft render <input>` — Render Markdown, JSON, or trusted HTML to a self-contained HTML artifact.
 - `planloft hoist <input>` — Normalize Markdown, JSON, or trusted HTML into the current project's store.
-- `planloft publish <input>` — Hoist, render, and publish a source to GitHub Pages or Vercel.
+- `planloft publish <input>` — Hoist, render, and publish a source to GitHub Pages, Vercel, or Cloudflare.
 - `planloft list` — List stored documents grouped by project.
 - `planloft preview [slug]` — Build and open a local themed preview of a stored document.
 - `planloft copy [slug]` — Copy a stored document's raw source into the current repository.
-- `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages or Vercel.
-- `planloft migrate-to-vercel <directory>` — Migrate a legacy hosting repository to the Vercel layout while retaining GitHub Pages support.
+- `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages, Vercel, or Cloudflare.
+- `planloft migrate-to-vercel <directory>` — Migrate a hosting repository to readable slug URLs and the shared static layout.
 - `planloft rm <slug>` — Delete a stored document's source and index entry.
 - `planloft resolve` — Resolve the exact plan path, kind, theme, and authoring template.
 - `planloft config` — Open the versioned global configuration in $EDITOR, validate it, or print it.

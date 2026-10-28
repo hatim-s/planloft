@@ -482,7 +482,7 @@ test("the publication interface owns auth, manifest, rendering, privacy, and exa
       assert.match(result.warnings.join("\n"), /repository is public/i);
       assert.doesNotMatch(JSON.stringify(result), /publication-secret/);
       assert.equal(renderCalls, 1);
-      assert.deepEqual(basePathIds, ["stable-id"]);
+      assert.deepEqual(basePathIds, ["roadmap"]);
       assert.equal(fs.existsSync(renderedDirectory), false);
 
       assert.match(renderedHtml, /planloft-theme-toggle/);

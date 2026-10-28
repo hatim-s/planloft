@@ -7,6 +7,7 @@ import test from "node:test";
 import { prepareHostingRepository, readManifest } from "../src/hosts/layout.js";
 import { loadConfig, saveConfig, updateConfig, redactConfig, validateConfig } from "../src/configuration.js";
 
+import { cloudflareSettings, verifyCloudflareDeployment } from "../src/hosts/cloudflare.js";
 import { withPlanloftHome } from "../src/core/paths.js";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -26,9 +27,13 @@ test("migration preserves bytes, IDs, root HTML and relative assets and is repea
     fs.mkdirSync(path.join(dir, "assets"));
     fs.writeFileSync(path.join(dir, "assets", "example.svg"), "<svg/>");
     fs.writeFileSync(path.join(dir, "README.md"), "Repository notes");
+    fs.writeFileSync(path.join(dir, "p", entry.id, "asset.css"), "legacy asset");
     const before = fs.readFileSync(path.join(dir, "p", entry.id, "index.html"));
     assert.deepEqual(prepareHostingRepository(dir), { migrated: true });
     assert.deepEqual(fs.readFileSync(path.join(dir, "public", "p", entry.id, "index.html")), before);
+    assert.equal(fs.readFileSync(path.join(dir, "public", "p", entry.id, "asset.css"), "utf8"), "legacy asset");
+    assert.ok(!fs.existsSync(path.join(dir, "public", entry.slug, "asset.css")));
+    assert.match(fs.readFileSync(path.join(dir, "public", entry.slug, "index.html"), "utf8"), /\.\.\/p\/stable-id\//);
     assert.deepEqual(readManifest(dir).deploys, [entry]);
     assert.equal(fs.readFileSync(path.join(dir, "public", "extra.html"), "utf8"), '<img src="assets/example.svg">');
     assert.ok(fs.existsSync(path.join(dir, "public", "assets", "example.svg")));
@@ -77,11 +82,18 @@ test("publication uses one whole-site Vercel project and stable IDs across hosts
     git(["config", "--global", `url.file://${path.join(dir, "remote.git")}.insteadOf`, "https://github.com/test/planloft-plans.git"]);
     fs.writeFileSync(path.join(dir, "bin", "gh"), `#!/bin/sh\ncase "$*" in\n  'auth status') exit 0;;\n  'auth token') echo github-test-token;;\n  *user) echo '{"login":"test"}';;\n  *) echo '{}';;\nesac\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(dir, "bin", "vercel"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "$HOME/vercel-calls"\ncase "$1" in\n  whoami) echo test;;\n  link) mkdir -p .vercel; echo '{}' > .vercel/project.json;;\n  deploy) test -f public/index.html || exit 1; cp -R public "$HOME/deployed"; echo '{ "status": "ok", "deployment": { "url": "https://deployment-test.vercel.app", "readyState": "READY" } }';;\n  alias) exit 0;;\nesac\n`, { mode: 0o755 });
-    const cfg = { version: 1, theme: "minimal", defaultTtlDays: 30, projects: {}, host: "vercel", vercel: { project: "shared-plans", token: "vercel-test-token" } };
+    fs.writeFileSync(path.join(dir, "bin", "wrangler"), `#!/bin/sh
+printf '%s\n' "$*" >> "$HOME/wrangler-calls"
+case "$1" in
+  whoami) exit 0;;
+  deploy) test "$CLOUDFLARE_ACCOUNT_ID" = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || exit 1; test -f "$3" || exit 1; echo '{"type":"deploy","version":1,"worker_name":"shared-plans","targets":["https://shared-plans.example.workers.dev"]}' > "$WRANGLER_OUTPUT_FILE_PATH";;
+esac
+`, { mode: 0o755 });
+    const cfg = { version: 1, theme: "minimal", defaultTtlDays: 30, projects: {}, host: "vercel", vercel: { project: "shared-plans", token: "vercel-test-token" }, cloudflare: { worker: "shared-plans", accountId: "a".repeat(32), url: "https://shared-plans.example.workers.dev" } };
     fs.writeFileSync(path.join(env.PLANLOFT_HOME, "config.json"), JSON.stringify(cfg));
     fs.writeFileSync(path.join(dir, "project", "first.md"), "# First plan\n\nHello.");
     const first = cli("publish", "first.md");
-    assert.match(first, /https:\/\/shared-plans.vercel.app\/p\/[A-Za-z0-9_-]+\//);
+    assert.match(first, /https:\/\/shared-plans.vercel.app\/first-plan\//);
     const clone = path.join(env.PLANLOFT_HOME, "hosting", "planloft-plans");
     const firstId = readManifest(clone).deploys[0]!.id;
     fs.writeFileSync(path.join(dir, "project", "second.md"), "# Second plan\n\nHello again.");
@@ -89,8 +101,12 @@ test("publication uses one whole-site Vercel project and stable IDs across hosts
     assert.equal(readManifest(clone).deploys.length, 2);
     assert.ok(fs.existsSync(path.join(clone, "public", "p", firstId, "index.html")));
     const again = cli("deploy", "first-plan", "--host", "github-pages");
-    assert.match(again, new RegExp(`https://test.github.io/planloft-plans/p/${firstId}/`));
+    assert.match(again, /https:\/\/test.github.io\/planloft-plans\/first-plan\//);
     assert.equal(readManifest(clone).deploys.length, 2);
+    const cloudflare = cli("deploy", "first-plan", "--host", "cloudflare");
+    assert.match(cloudflare, /https:\/\/shared-plans.example.workers.dev\/first-plan\//);
+    assert.equal(readManifest(clone).deploys[0]?.id === firstId || readManifest(clone).deploys[1]?.id === firstId, true);
+    assert.match(fs.readFileSync(path.join(dir, "wrangler-calls"), "utf8"), /deploy --config/);
     const calls = fs.readFileSync(path.join(dir, "vercel-calls"), "utf8");
     assert.match(calls, /link --yes --project shared-plans/);
     assert.match(calls, /deploy --prod --yes --json/);
@@ -104,7 +120,7 @@ test("publication uses one whole-site Vercel project and stable IDs across hosts
 test("new provider configuration validates and redacts tokens", () => {
   const cfg = validateConfig({ version: 1, theme: "minimal", defaultTtlDays: 30, projects: {}, host: "vercel", vercel: { token: "secret", project: "shared", scope: "team", url: "https://plans.example.test" } });
   assert.deepEqual(redactConfig(cfg).vercel, { token: "[redacted]", project: "shared", scope: "team", url: "https://plans.example.test" });
-  assert.throws(() => validateConfig({ ...cfg, host: "unknown" }), /host must be github-pages or vercel/);
+  assert.throws(() => validateConfig({ ...cfg, host: "unknown" }), /host must be github-pages, vercel or cloudflare/);
 });
 
 test("scheduled prune removes only expired public pages and signals a redeploy", () => {
@@ -129,6 +145,7 @@ test("scheduled prune removes only expired public pages and signals a redeploy",
     assert.match(result, /removed 1, kept 1/);
     assert.deepEqual(readManifest(dir).deploys, [entry]);
     assert.ok(!fs.existsSync(path.join(dir, "public", "p", "expired")));
+    assert.ok(!fs.existsSync(path.join(dir, "public", "expired")));
     assert.ok(fs.existsSync(path.join(dir, "public", "p", entry.id, "index.html")));
     assert.match(fs.readFileSync(output, "utf8"), /changed=true/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -149,4 +166,60 @@ test("host selection persists through targeted config updates", async () => {
       assert.equal(loadConfig().host, "github-pages");
     });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test("migration rejects sitewide slug conflicts before changing a v2 repository", () => {
+  for (const problem of ["duplicate", "path", "candidate"] as const) {
+    const dir = fixture();
+    try {
+      fs.mkdirSync(path.join(dir, ".planloft"));
+      fs.mkdirSync(path.join(dir, "public"));
+      fs.renameSync(path.join(dir, "p"), path.join(dir, "public", "p"));
+      fs.writeFileSync(path.join(dir, ".planloft", "layout.json"), '{"version":2}\n');
+      if (problem === "duplicate") fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ version: 1, deploys: [entry, { ...entry, id: "other", project: "other" }] }));
+      if (problem === "path") fs.writeFileSync(path.join(dir, "public", "proposal.html"), "keep");
+      const before = fs.readFileSync(path.join(dir, "public", "p", entry.id, "index.html"));
+      assert.throws(() => prepareHostingRepository(dir, problem === "candidate" ? { project: "other", slug: "proposal", id: "new" } : undefined), /PLANLOFT_HOSTING_INVALID/);
+      assert.deepEqual(fs.readFileSync(path.join(dir, "public", "p", entry.id, "index.html")), before);
+      assert.equal(fs.readFileSync(path.join(dir, ".planloft", "layout.json"), "utf8"), '{"version":2}\n');
+      assert.ok(!fs.existsSync(path.join(dir, "public", "proposal")));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test("Cloudflare settings require an account and matching workers.dev origin", () => {
+  const cfg = validateConfig({ version: 1, theme: "minimal", defaultTtlDays: 30, projects: {}, host: "cloudflare", cloudflare: { worker: "plans", accountId: "a".repeat(32), url: "https://plans.example.workers.dev" } });
+  assert.equal(cloudflareSettings(cfg).origin, "https://plans.example.workers.dev");
+  assert.throws(() => cloudflareSettings({ ...cfg, cloudflare: { ...cfg.cloudflare, url: "https://other.example.workers.dev" } }), /PLANLOFT_CLOUDFLARE_CONFIG_INVALID/);
+  assert.throws(() => validateConfig({ ...cfg, cloudflare: { ...cfg.cloudflare, token: "secret" } }), /cloudflare/);
+});
+
+
+test("legacy landing preserves the base for sibling links, assets and script URLs", () => {
+  const dir = fixture();
+  try {
+    const html = '<a href="../other/">Other</a><img src="../shared/a.svg"><script src="./app.js"></script>';
+    fs.writeFileSync(path.join(dir, "p", entry.id, "index.html"), html);
+    prepareHostingRepository(dir);
+    assert.equal(fs.readFileSync(path.join(dir, "public", "p", entry.id, "index.html"), "utf8"), html);
+    const landing = fs.readFileSync(path.join(dir, "public", entry.slug, "index.html"), "utf8");
+    const destination = /url=([^"<]+)/.exec(landing)![1]!;
+    for (const prefix of ["https://example.test", "https://example.test/repo"]) {
+      const oldUrl = `${prefix}/p/${entry.id}/`;
+      const finalUrl = new URL(destination, `${prefix}/${entry.slug}/`).href;
+      assert.equal(finalUrl, oldUrl);
+      for (const relative of ["../other/", "../shared/a.svg", "./app.js", "#section"]) {
+        assert.equal(new URL(relative, finalUrl).href, new URL(relative, oldUrl).href);
+      }
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("Cloudflare success requires the authoritative deployment target", () => {
+  const result = { type: "deploy", version: 1, worker_name: "plans", targets: ["https://plans.actual.workers.dev"] };
+  verifyCloudflareDeployment(JSON.stringify(result), "plans", "https://plans.actual.workers.dev");
+  for (const output of [JSON.stringify(result), "", "bad json", JSON.stringify({...result, worker_name: "other"}), JSON.stringify({...result, targets: []})]) {
+    assert.throws(() => verifyCloudflareDeployment(output, "plans", "https://plans.someone-else.workers.dev"), /did not confirm/);
+  }
 });
