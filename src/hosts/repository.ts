@@ -6,6 +6,7 @@ import { hostingDir } from "../core/paths.js";
 import { githubApi, GithubCliApiError, runGhCommand } from "../github-cli.js";
 import type { DeployInput } from "./adapter.js";
 import { prepareHostingRepository, readManifest, writeManifest } from "./layout.js";
+import { legacyRedirect } from "./urls.js";
 
 const DEFAULT_REPO = "planloft-plans";
 
@@ -165,17 +166,20 @@ export async function publishRepository(input: DeployInput, siteUrl?: string): P
   await ensureRepo(token, user, repo);
   const dir = path.join(hostingDir(), repo);
   syncClone(dir, user, repo, token);
-  prepareHostingRepository(dir);
+  prepareHostingRepository(dir, { ...input.doc, id: input.id });
   const pagesWarning = await upgradeExistingPages(token, user, repo);
   const manifest = readManifest(dir);
   const existing = manifest.deploys.find(entry => entry.project === input.doc.project && entry.slug === input.doc.slug);
   const id = existing?.id ?? input.id;
   if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error("PLANLOFT_HOSTING_INVALID: unsafe publication id.");
-  const dest = path.join(dir, "public", "p", id);
+  const dest = path.join(dir, "public", input.doc.slug);
   const dist = input.render(id);
   fs.rmSync(dest, { recursive: true, force: true });
   fs.mkdirSync(dest, { recursive: true });
   fs.cpSync(dist, dest, { recursive: true });
+  const legacy = path.join(dir, "public", "p", id);
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.writeFileSync(path.join(legacy, "index.html"), legacyRedirect(input.doc.slug));
   const expiresAt = input.updateManifest(manifest, id);
   writeManifest(dir, manifest);
   const url = siteUrl ?? `https://${user}.github.io/${repo}`;
