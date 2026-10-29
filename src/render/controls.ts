@@ -34,6 +34,8 @@ const layoutButtons = LAYOUT_OPTIONS.map(
 // scripting that title is the native tooltip and the accessible name. With it, the
 // title moves to aria-label (so hover does not show two tooltips) and one shared
 // element follows hover, touch and focus. Content is set with textContent only.
+// Each drawing is one tab stop; arrow keys, Home and End move focus between its hits
+// and the tabindex="0" with it, so Tab returns to the last hit visited.
 export const CHART_TOOLTIP_SCRIPT = `(() => {
   const HIT = ".pl-chart__hits > *";
   let tip = null;
@@ -75,6 +77,9 @@ export const CHART_TOOLTIP_SCRIPT = `(() => {
     if (color) tip.style.setProperty("--pl-tip-color", color);
     tip.hidden = false;
     current = hit;
+    place(hit, pointerY);
+  };
+  const place = (hit, pointerY) => {
     // Above the mark, centred, kept inside the viewport; below it when the top is cut off.
     // A column spans the whole plot, so it anchors to the pointer instead of its top.
     const box = hit.getBoundingClientRect();
@@ -117,10 +122,26 @@ export const CHART_TOOLTIP_SCRIPT = `(() => {
     document.addEventListener("focusout", (event) => {
       if (hitOf(event) === current) hide();
     });
+    const STEPS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") hide();
+      if (event.key === "Escape") return hide();
+      const hit = hitOf(event);
+      const step = STEPS[event.key];
+      if (!hit || event.altKey || event.ctrlKey || event.metaKey || (!step && event.key !== "Home" && event.key !== "End")) return;
+      event.preventDefault();
+      const hits = Array.from(hit.parentNode.children);
+      const next = event.key === "Home" ? hits[0] : event.key === "End" ? hits[hits.length - 1] : hits[hits.indexOf(hit) + step];
+      if (!next || next === hit) return;
+      hit.setAttribute("tabindex", "-1");
+      next.setAttribute("tabindex", "0");
+      next.focus();
     });
-    window.addEventListener("scroll", hide, { passive: true });
+    // Focusing a hit can scroll it into view, so a focused hit keeps its tooltip and
+    // the tooltip moves with it. Hover tooltips close on scroll.
+    window.addEventListener("scroll", () => {
+      if (current && current === document.activeElement) place(current);
+      else hide();
+    }, { passive: true });
     window.addEventListener("resize", hide);
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });

@@ -1,16 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
-import { migrate } from './database.mjs';
+import { migrate, sqliteDatabase } from './database.mjs';
 import { createCollaborationService, MAX_BODY_BYTES } from './service.mjs';
 const sqlite = new DatabaseSync(process.env.PLANLOFT_DB ?? 'collaboration.sqlite');
 sqlite.exec('PRAGMA foreign_keys = ON');
-const execute = ({sql,args=[]}) => {
-  const statement = sqlite.prepare(sql);
-  if (/^\s*SELECT/i.test(sql) || /\bRETURNING\b/i.test(sql)) return { rows: statement.all(...args), changes: 0 };
-  const result = statement.run(...args);
-  return { rows: [], changes: Number(result.changes) };
-};
-const db = { execute: async statement => execute(statement), batch: async statements => { sqlite.exec('BEGIN'); try { const results = statements.map(execute); sqlite.exec('COMMIT'); return results; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } } };
+const db = sqliteDatabase(sqlite);
 await migrate(db);
 const handler = createCollaborationService(db, process.env.ADMIN_TOKEN);
 const port = Number(process.env.PORT ?? 8787);

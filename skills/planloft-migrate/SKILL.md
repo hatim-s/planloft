@@ -59,7 +59,9 @@ without writing. A write creates the backup alongside the source and refuses to
 replace different destination or backup contents. If the destination already matches
 but its backup is missing, a dry run reports `dry-run-backup` and a write creates the
 backup and reports `backup-created`. A repeat with both files matching is unchanged.
-Markdown conversion retains frontmatter, code, links and GFM syntax. The MDX renderer
+Markdown conversion retains frontmatter, code, links and GFM syntax. Indented code
+becomes fenced code. If tabs or trailing whitespace in list-contained code make an indented block ambiguous, the command reports its
+line and column without writing; fence that block by hand and rerun. The MDX renderer
 must support GFM. The migration checks syntax without executing MDX.
 
 If a diagnostic identifies raw HTML, inspect the indicated source location. Preserve
@@ -85,4 +87,5 @@ identity. GFM task lists are static; for shared state, replace them deliberately
 from task text.
 Keep service credentials on the server. MDX and compiled snapshots execute code;
 use `--trusted-mdx` only for sources, dependencies, registries and snapshots the user
-trusts. Re-hoist edited stored MDX from its original dependency context.
+trusts. Stored MDX renders from its pinned snapshot; hoist it again from its source
+to pick up edits or a Planloft upgrade.

@@ -19,7 +19,7 @@ test("untrusted Markdown escapes raw HTML and removes unsafe links", () => {
   assert.match(html, /href="https:\/\/example.com"/);
 });
 
-test("stored HTML receives theme support", () => {
+test("stored HTML receives theme support", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-legacy-html-test-"));
   const source = path.join(directory, "legacy.html");
   fs.writeFileSync(source, '<section data-legacy="true"><h1>Stored HTML</h1></section>');
@@ -35,7 +35,7 @@ test("stored HTML receives theme support", () => {
   };
   let site: string | undefined;
   try {
-    site = buildSite({ doc: meta, theme: "minimal", base: "/" });
+    site = await buildSite({ doc: meta, theme: "minimal" });
     const html = fs.readFileSync(path.join(site, "index.html"), "utf8");
     assert.match(html, /planloft-render:head:start/);
     assert.match(html, /<section data-legacy="true"><h1>Stored HTML<\/h1><\/section>/);
@@ -180,6 +180,7 @@ test("Markdown output recompiles unchanged and edited generated CSS is rejected"
 function document(overrides: Partial<CanonicalDocument>): CanonicalDocument {
   return {
     version: 1,
+    sourceLineOffset: null,
     title: "Test",
     slug: "test",
     kind: "plan",

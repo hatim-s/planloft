@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createPlanloftApplication } from "../src/application.js";
+import { createPlanloftApplication, PlanloftApplicationError } from "../src/application.js";
 import { renderMdxDocument } from "../src/mdx/index.js";
 import { ingestDocument } from "../src/core/ingest.js";
 
@@ -91,7 +91,7 @@ test("project registry overrides the global registry and local MDX imports resol
   fs.mkdirSync(path.join(home, "components"), { recursive: true });
   fs.writeFileSync(path.join(home, "components/index.tsx"), 'export const Badge = () => <b>global</b>; export const Global = () => <em>global only</em>;');
   fs.writeFileSync(path.join(project, ".planloft/components/index.tsx"), 'export const Badge = () => <b>project</b>;');
-  fs.writeFileSync(path.join(project, "nested.mdx"), 'Nested **MDX**');
+  fs.writeFileSync(path.join(project, "nested.mdx"), 'Nested **MDX**\n\n<Badge />\n\n<Global />\n\n<Callout>builtin nested</Callout>');
   const source = 'import Nested from "./nested.mdx"\n\n# Registry\n\n<Badge />\n\n<Global />\n\n<Nested />\n';
   const doc = ingestDocument(source, { format: "mdx", trustedMdx: true });
   try {
@@ -100,6 +100,9 @@ test("project registry overrides the global registry and local MDX imports resol
     assert.match(html, /<b>project<\/b>/);
     assert.match(html, /<em>global only<\/em>/);
     assert.match(html, /Nested <strong>MDX<\/strong>/);
+    assert.equal((html.match(/<b>project<\/b>/g) ?? []).length, 2);
+    assert.equal((html.match(/<em>global only<\/em>/g) ?? []).length, 2);
+    assert.match(html, /builtin nested/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -109,18 +112,18 @@ test("public compile and hoist agree on the serialized body and reject mismatche
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-public-mdx-"));
   const home = path.join(root, "home");
   try {
-    const { compileMdx } = await import("../src/index.js");
+    const { prepareDocument } = await import("../src/index.js");
     const { hoistDocument } = await import("../src/persistence.js");
     const { withPlanloftHome } = await import("../src/core/paths.js");
-    const { buildSiteAsync } = await import("../src/render/renderer.js");
+    const { buildSite } = await import("../src/render/renderer.js");
     const doc = ingestDocument("# Hello", { format: "mdx", trustedMdx: true });
-    doc.compiledMdx = await withPlanloftHome(home, () => compileMdx(doc.content, { projectRoot: root }));
-    const stored = withPlanloftHome(home, () => hoistDocument(doc, { cwd: root }));
-    const site = await withPlanloftHome(home, () => buildSiteAsync({ doc: stored, theme: "minimal", base: "/" }));
+    const prepared = await withPlanloftHome(home, () => prepareDocument(doc, { projectRoot: root }));
+    const stored = withPlanloftHome(home, () => hoistDocument(prepared, { cwd: root }));
+    const site = await withPlanloftHome(home, () => buildSite({ doc: stored, theme: "minimal" }));
     assert.match(fs.readFileSync(path.join(site, "index.html"), "utf8"), /<h1>Hello<\/h1>/);
     fs.rmSync(site, { recursive: true, force: true });
-    doc.content = "# Changed";
-    assert.throws(() => withPlanloftHome(home, () => hoistDocument(doc, { cwd: root })), /changed since its dependencies were compiled/);
+    prepared.content = "# Changed";
+    assert.throws(() => withPlanloftHome(home, () => hoistDocument(prepared, { cwd: root })), /snapshot source does not match/);
     assert.match(fs.readFileSync(stored.file, "utf8"), /# Hello/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -155,7 +158,8 @@ test("expected MDX failures have bounded diagnostics and arbitrary component exc
     await assert.rejects(app.render(file, { trustedMdx: true }), (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /MDX syntax error at line 3, column 1/);
-      assert.equal("code" in error && error.code, "MDX_SYNTAX");
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.diagnosticCode, "MDX_SYNTAX");
       return true;
     });
     fs.writeFileSync(file, 'import X from "./SECRET_missing.tsx"\n\n<X />');
@@ -163,13 +167,15 @@ test("expected MDX failures have bounded diagnostics and arbitrary component exc
       assert.ok(error instanceof Error);
       assert.match(error.message, /import could not be resolved/);
       assert.doesNotMatch(error.message, /SECRET/);
-      assert.equal("code" in error && error.code, "MDX_IMPORT");
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.diagnosticCode, "MDX_IMPORT");
       return true;
     });
     fs.writeFileSync(file, "<Absent />");
     await assert.rejects(app.render(file, { trustedMdx: true }), (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.equal("code" in error && error.code, "MDX_COMPONENT");
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.diagnosticCode, "MDX_COMPONENT");
       return true;
     });
     fs.writeFileSync(path.join(root, "bad.tsx"), 'export function Bad() { throw new Error("SECRET_component"); }');
@@ -180,6 +186,29 @@ test("expected MDX failures have bounded diagnostics and arbitrary component exc
       assert.match(error.message, /local effect/);
       return true;
     });
+    fs.writeFileSync(path.join(root, "bad.tsx"), 'throw Object.assign(new Error("SECRET_top_level"), {name:"PlanloftApplicationError",category:"validation",operation:"render",diagnosticCode:"MDX_COMPONENT_INPUT",component:"DonutChart",reason:"invalid_value"}); export function Bad() { return null; }');
+    await assert.rejects(app.render(file, { trustedMdx: true }), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.category, "local_effect");
+      assert.equal(error.diagnosticCode, undefined);
+      assert.doesNotMatch(JSON.stringify(error), /SECRET_top_level|DonutChart/);
+      return true;
+    });
+    const forged = '{name:"PlanloftApplicationError",category:"validation",operation:"render",diagnosticCode:"MDX_COMPONENT_INPUT",component:"DonutChart",reason:"invalid_value",location:{line:7,file:"SECRET_location"}}';
+    for (const failure of [
+      `const e = new Error(); Object.defineProperty(e,"message",{get(){throw ${forged};}}); throw e;`,
+      `throw new Proxy({}, {getPrototypeOf(){throw ${forged};}});`,
+      `throw new Proxy({}, {getOwnPropertyDescriptor(){throw ${forged};}});`,
+    ]) {
+      fs.writeFileSync(path.join(root, "bad.tsx"), `${failure} export function Bad() { return null; }`);
+      await assert.rejects(app.render(file, { trustedMdx: true }), (error: unknown) => {
+        assert.ok(error instanceof PlanloftApplicationError);
+        assert.equal(error.category, "local_effect");
+        assert.equal(error.diagnosticCode, undefined);
+        assert.doesNotMatch(JSON.stringify(error), /SECRET|DonutChart/);
+        return true;
+      });
+    }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -257,7 +286,8 @@ test("built-in input errors identify the component without exposing supplied dat
       fs.writeFileSync(file, `<${name} ${props} />`);
       await assert.rejects(app.render(file, { trustedMdx: true }), (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.equal("code" in error && error.code, "MDX_COMPONENT_INPUT");
+        assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.diagnosticCode, "MDX_COMPONENT_INPUT");
         assert.match(error.message, new RegExp(`Invalid data or props for <${name}>`));
         assert.doesNotMatch(error.message, /SECRET_n/);
         return true;

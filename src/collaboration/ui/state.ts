@@ -1,19 +1,45 @@
 import type { Note, Task, TextAnchor, Thread } from '../contracts.js';
-import type { Failure } from './api.js';
+import { mayHaveSaved, type Failure, type Result } from './api.js';
 
-/** A local change on its way to the server, or one that did not make it. */
-export type Delivery = { status: 'sending' } | { status: 'failed'; failure: Failure<unknown> };
+/**
+ * A creation on its way to the server. `failed` means the server did not save it, so its
+ * text can go back to a composer. `unknown` means some attempt may have been saved; only
+ * a retry with the original key and text can settle that, so the text stays as it is.
+ */
+export type Delivery =
+  | { status: 'sending' }
+  | { status: 'failed'; failure: Failure<unknown> }
+  | { status: 'unknown'; failure: Failure<unknown> };
 
-export interface PendingThread { key: string; body: string; anchor: TextAnchor | null; delivery: Delivery }
-export interface PendingReply { key: string; threadId: string; body: string; delivery: Delivery }
-export interface PendingNote { key: string; body: string; delivery: Delivery }
+// The key and text are fixed for the creation's lifetime: the server matches a retry by both.
+export interface PendingThread { readonly key: string; readonly body: string; readonly anchor: TextAnchor | null; delivery: Delivery }
+export interface PendingReply { readonly key: string; readonly threadId: string; readonly body: string; delivery: Delivery }
+export interface PendingNote { readonly key: string; readonly body: string; delivery: Delivery }
+
+/**
+ * Sends or resends a creation and records the outcome on it. Once an attempt may have
+ * been saved, the outcome stays unknown until the server itself answers; an unsent retry
+ * while offline does not make it certain.
+ */
+export async function deliver<T>(pending: { delivery: Delivery }, send: () => Promise<Result<T>>): Promise<T | null> {
+  const uncertain = pending.delivery.status === 'unknown';
+  pending.delivery = { status: 'sending' };
+  const result = await send();
+  if (result.ok) return result.value;
+  const { failure } = result;
+  pending.delivery = { status: mayHaveSaved(failure) || (uncertain && failure.kind === 'offline') ? 'unknown' : 'failed', failure };
+  return null;
+}
+
+/** A blank draft never reaches the server; the editor says so instead. */
+export type NoteEditProblem = Failure<unknown> | { kind: 'blank' };
 
 export interface NoteEdit {
   draft: string;
   /** The version the draft started from, or the newer one the reader chose to overwrite. */
   base: Note;
   saving: boolean;
-  failure: Failure<unknown> | null;
+  failure: NoteEditProblem | null;
   /** A newer saved version that arrived while this draft was open. */
   conflict: Note | null;
 }
@@ -50,6 +76,14 @@ export interface State {
   activeThread: string | null;
   /** Thread waiting for the reader to select its new text. */
   reattaching: string | null;
+}
+
+/**
+ * A thread update or deletion waits for the thread's replies to send. Its response
+ * carries the full reply list, which is then current, so it can replace the one shown.
+ */
+export function replySending(state: Pick<State, 'pendingReplies'>, threadId: string): boolean {
+  return state.pendingReplies.some(reply => reply.threadId === threadId && reply.delivery.status === 'sending');
 }
 
 export function initialState(): State {

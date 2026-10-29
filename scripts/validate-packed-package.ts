@@ -21,11 +21,10 @@ const REQUIRED_FILES = [
   "dist/components/index.js",
   "dist/components/index.d.ts",
   "dist/components/styles.js",
-  "src/collaboration/client.ts",
-  "src/collaboration/client.css",
-  "src/collaboration/anchors.ts",
-  "src/collaboration/ui/notes.ts",
-  "src/collaboration/ui/task-saves.ts",
+  "dist/collaboration/client.js",
+  "dist/collaboration/client.css",
+  "dist/collaboration/service.js",
+  "dist/collaboration/database.js",
   "templates/collaboration/local.mjs",
   "templates/collaboration/cloudflare.ts",
   "templates/collaboration/vercel.ts",
@@ -44,7 +43,7 @@ const REQUIRED_FILES = [
   "templates/hosting/prune.mjs",
 ] as const;
 const RETIRED_PATHS = [
-  "bin", "hooks", ".agents", ".codex-plugin", ".claude-plugin",
+  "src", "bin", "hooks", ".agents", ".codex-plugin", ".claude-plugin",
   ...["minimal", "detailed", "editorial", "decision", "research", "briefing"].flatMap(
     (theme) => ["template.md", "template.mdx", "layout.html"].map((asset) => `themes/${theme}/${asset}`),
   ),
@@ -56,18 +55,14 @@ interface PackageJson {
 
 function run(command: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): string {
   const result = spawnSync(command, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, 0, [result.error?.message, result.stderr, result.stdout].filter(Boolean).join("\n"));
   return result.stdout.trim();
 }
 
-/** Imports the extracted package through Node's normal package resolution. */
-function validateConsumer(root: string, packageRoot: string): void {
+/** Imports the installed package through Node's normal package resolution. */
+function validateConsumer(root: string): void {
   const callerRoot = path.join(root, "consumer");
-  const nodeModules = path.join(root, "node_modules");
   fs.mkdirSync(callerRoot);
-  fs.mkdirSync(nodeModules, { recursive: true });
-  fs.symlinkSync(packageRoot, path.join(nodeModules, "planloft"), "dir");
-
   const consumer = path.join(callerRoot, "consumer.mjs");
   fs.writeFileSync(consumer, `
 import assert from "node:assert/strict";
@@ -93,11 +88,45 @@ const html = await renderMdxDocument(doc, "minimal", { sourcePath: process.cwd()
 assert.ok(html.includes("Installed component"));
 `);
 
-  run("node", [consumer], callerRoot, { PLANLOFT_HOME: path.join(root, "consumer-home") });
+  run("node", [consumer], callerRoot, { PLANLOFT_HOME: path.join(root, "consumer-home"), NODE_PATH: "" });
+
+  // The compiler is separate tooling. The consumer resolves types only from the
+  // installed tarball and its production dependencies, with no checkout symlinks.
+  const tooling = path.join(root, "typescript-tooling");
+  fs.mkdirSync(tooling);
+  fs.writeFileSync(path.join(tooling, "package.json"), JSON.stringify({ private: true }));
+  const typescriptVersion = JSON.parse(fs.readFileSync(path.join(ROOT, "node_modules/typescript/package.json"), "utf8")).version;
+  run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", `typescript@${typescriptVersion}`], tooling, installEnvironment(root));
+  const typed = path.join(callerRoot, "consumer.tsx");
+  fs.writeFileSync(typed, `
+import { attachCollaboration, compileMdx, createPlanloftApplication, prepareDocument, type PreparedDocument } from "planloft";
+import { Callout, Todo, type TodoProps } from "planloft/components";
+const props: TodoProps = { task: "release-check", label: "Installed types" };
+const content = <Callout><Todo {...props} /></Callout>;
+const app = createPlanloftApplication({ cwd: "." });
+const attach: typeof attachCollaboration = async (html, config) => attachCollaboration(html, config);
+const prepare: typeof prepareDocument = prepareDocument;
+const compile: typeof compileMdx = compileMdx;
+const accept = (document: PreparedDocument) => document;
+void [content, app, attach, prepare, compile, accept];
+`);
+  run("node", [path.join(tooling, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--jsx", "react-jsx", "--skipLibCheck", "false", typed], callerRoot, { NODE_PATH: "" });
+}
+
+function installEnvironment(root: string): NodeJS.ProcessEnv {
+  return { HOME: path.join(root, "home"), npm_config_userconfig: path.join(root, "npm-user.conf"), npm_config_globalconfig: path.join(root, "npm-global.conf"), npm_config_engine_strict: "true", NODE_PATH: "" };
 }
 
 /** Checks package contents, executables, CLI behavior, and Node consumption. */
-function validatePackedPackage(tarball: string): void {
+function validatePackedPackage(tarball: string, minimumNode: boolean): void {
+  const runtime = run("node", ["--version"], ROOT);
+  const version = /^v(\d+)\.(\d+)\.(\d+)$/.exec(runtime);
+  assert.ok(version, `Unrecognized Node version: ${runtime}`);
+  const major = Number(version[1]);
+  const minor = Number(version[2]);
+  assert.ok(major > 22 || (major === 22 && minor >= 15), `Node >=22.15.0 is required; found ${runtime}.`);
+  if (minimumNode) assert.equal(runtime, "v22.15.0", `Minimum-runtime verification requires Node v22.15.0 on PATH; found ${runtime}.`);
+  console.log(`packed package runtime: ${runtime}${minimumNode ? " (declared minimum)" : " (supported runtime)"}`);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-packed-package-"));
   try {
     run("tar", ["-xzf", path.resolve(tarball), "-C", root], root);
@@ -105,19 +134,18 @@ function validatePackedPackage(tarball: string): void {
     for (const required of REQUIRED_FILES) {
       assert.ok(fs.existsSync(path.join(packageRoot, required)), `packed package is missing ${required}`);
     }
-    // The extracted archive uses the checkout's installed dependency versions, without modifying it.
-    const dependencies = path.join(root, "node_modules");
-    fs.mkdirSync(dependencies);
-    for (const entry of fs.readdirSync(path.join(ROOT, "node_modules"))) {
-      if (entry === "planloft") continue;
-      fs.symlinkSync(path.join(ROOT, "node_modules", entry), path.join(dependencies, entry));
-    }
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ private: true, type: "module" }));
+    fs.writeFileSync(path.join(root, "npm-user.conf"), "");
+    fs.writeFileSync(path.join(root, "npm-global.conf"), "");
+    run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", path.resolve(tarball)], root, installEnvironment(root));
+    assert.equal(fs.lstatSync(path.join(root, "node_modules/planloft")).isSymbolicLink(), false);
     for (const retired of RETIRED_PATHS) {
       assert.ok(!fs.existsSync(path.join(packageRoot, retired)), `packed package contains retired ${retired} assets`);
     }
 
-    const cli = path.join(packageRoot, "dist", "cli.js");
-    const resolver = path.join(packageRoot, "skills", "planloft-write-doc", "scripts", "resolve-planloft-command.sh");
+    const installedRoot = path.join(root, "node_modules", "planloft");
+    const cli = path.join(installedRoot, "dist", "cli.js");
+    const resolver = path.join(installedRoot, "skills", "planloft-write-doc", "scripts", "resolve-planloft-command.sh");
     assert.ok(fs.statSync(cli).mode & 0o111, "packed dist/cli.js is not executable");
     assert.ok(fs.statSync(resolver).mode & 0o111, "packed skill resolver is not executable");
 
@@ -157,15 +185,16 @@ function validatePackedPackage(tarball: string): void {
       assert.ok(fs.existsSync(path.join(out, "migration.sql")));
       const entry = provider === "local" ? "local.mjs" : provider === "cloudflare" ? "worker.mjs" : "api/index.mjs";
       assert.ok(fs.existsSync(path.join(out, entry)));
-      if (provider !== "local") run("node", ["--input-type=module", "-e", "await import(process.argv[1])", new URL(`file://${path.join(out, entry)}`).href], root, env);
+      if (provider !== "local") run("node", ["--input-type=module", "-e", "await import(process.argv[1])", new URL(`file://${path.join(out, entry)}`).href], root, { ...env, TURSO_DATABASE_URL: "https://database.example.test" });
     }
-    validateConsumer(root, packageRoot);
-    console.log("packed package: files, gallery, attachment, service bundles, CLI, and Node consumer PASS");
+    validateConsumer(root);
+    console.log("packed package: isolated production install, files, gallery, attachment, service bundles, CLI, JS and TypeScript consumer PASS");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
 
-const tarball = process.argv[2];
-if (!tarball) throw new Error("Usage: bun scripts/validate-packed-package.ts <planloft.tgz>");
-validatePackedPackage(tarball);
+const args = process.argv.slice(2);
+const tarball = args.find(argument => !argument.startsWith("--"));
+if (!tarball || args.some(argument => argument !== tarball && argument !== "--minimum-node")) throw new Error("Usage: bun scripts/validate-packed-package.ts <planloft.tgz> [--minimum-node]");
+validatePackedPackage(tarball, args.includes("--minimum-node"));

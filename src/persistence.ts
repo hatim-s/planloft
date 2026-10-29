@@ -1,17 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createPlanloftConfiguration, type PlanloftConfiguration } from "./configuration.js";
-import { assertMdxSnapshot } from "./mdx/index.js";
+import { assertMdxSnapshot, type PreparedDocument } from "./mdx/compiler.js";
+import { assertHtmlSupported } from "./render/renderer.js";
 import { docDir, docFile } from "./core/doc.js";
 import * as fm from "./core/frontmatter.js";
-import { normalizeDocumentMetadata } from "./core/ingest.js";
 import { indexPath } from "./core/paths.js";
 import { gitRoot, projectKey } from "./core/project.js";
 import type {
   CanonicalDocument,
   DocMeta,
   IndexFile,
-  Kind,
   ProjectEntry,
 } from "./core/types.js";
 
@@ -62,8 +61,7 @@ export interface DocumentPersistence {
   ensureProject(): ProjectEntry;
   list(): IndexFile;
   find(slug?: string): DocMeta | undefined;
-  hoist(document: CanonicalDocument, now?: Date): DocMeta;
-  capture(file: string, now?: Date): DocMeta | null;
+  hoist(document: PreparedDocument, now?: Date): DocMeta;
   copy(slug?: string, options?: { force?: boolean }): CopyStoredDocumentResult | undefined;
   remove(slug: string): RemoveStoredDocumentResult | undefined;
 }
@@ -87,7 +85,7 @@ const nativeFileSystem: PersistenceFileSystem = {
 };
 
 /**
- * The single persistence interface for canonical hoisting, write-direct capture,
+ * The single persistence interface for canonical hoisting,
  * index mutation, lookup, repository copy, replacement, and removal.
  */
 export function createDocumentPersistence(
@@ -132,10 +130,10 @@ export function createDocumentPersistence(
 
     hoist(document, now = clock()) {
       if (document.contentFormat === "mdx") {
-        if (!document.compiledMdx) throw new Error("MDX must be compiled before storing.");
         const storedBody = fm.parse(serializeCanonicalDocument(document)).content;
         assertMdxSnapshot(storedBody, document.compiledMdx);
       }
+      if (document.contentFormat === "html") assertHtmlSupported(document.content);
       const project = identity();
       configuration.resolveProject(project.key, document.theme);
       configuration.ensure();
@@ -146,7 +144,7 @@ export function createDocumentPersistence(
       files.makeDirectory(docDir(project.label));
       files.writeText(file, source);
       if (document.contentFormat === "mdx") {
-        files.writeText(`${file}.bundle.js`, document.compiledMdx!);
+        files.writeText(`${file}.bundle.js`, document.compiledMdx);
       }
 
       const meta: DocMeta = {
@@ -163,68 +161,6 @@ export function createDocumentPersistence(
       };
       upsert(meta);
       removeReplacedFormat(files, previous, file);
-      return meta;
-    },
-
-    capture(file, now = clock()) {
-      if (!files.exists(file)) return null;
-      if (file.endsWith(".mdx")) throw new Error("MDX requires explicit trust and compilation. Use hoist --trusted-mdx.");
-      const project = identity();
-      const format = file.endsWith(".html") ? "html" : "md";
-      const slug = path.basename(file).replace(/\.(md|html)$/, "");
-      const existing = find(slug);
-
-      if (format === "md") {
-        const { data, content } = fm.parse(files.readText(file));
-        // Write-direct capture shares the same validation and trimming contract as
-        // every ingestion surface. Validate before configuration or store mutation.
-        const metadata = normalizeDocumentMetadata(data, "Markdown frontmatter");
-        const kind: Kind = metadata.kind ?? existing?.kind ?? "note";
-        const title = metadata.title ?? existing?.title ?? slug;
-        const status = metadata.status ?? existing?.status ?? "active";
-        const preserved: fm.Frontmatter = {
-          ...data,
-          title,
-          slug,
-          kind,
-          status,
-        };
-        const theme = metadata.theme ?? existing?.theme;
-        if (theme === undefined) delete preserved.theme;
-        else preserved.theme = theme;
-        configuration.resolveProject(project.key, theme);
-        files.writeText(file, fm.stringify(content, preserved));
-        const meta: DocMeta = {
-          slug,
-          title,
-          kind,
-          project: project.key,
-          theme,
-          status,
-          format,
-          trustedHtml: existing?.trustedHtml,
-          file: path.resolve(file),
-          updatedAt: now.toISOString(),
-        };
-        upsert(meta);
-        removeReplacedFormat(files, existing, file);
-        return meta;
-      }
-
-      const meta: DocMeta = {
-        slug,
-        title: existing?.title ?? slug,
-        kind: existing?.kind ?? "note",
-        project: project.key,
-        theme: existing?.theme,
-        status: existing?.status ?? "active",
-        format,
-        trustedHtml: existing?.trustedHtml,
-        file: path.resolve(file),
-        updatedAt: now.toISOString(),
-      };
-      upsert(meta);
-      removeReplacedFormat(files, existing, file);
       return meta;
     },
 
@@ -272,8 +208,8 @@ export function createDocumentPersistence(
   };
 }
 
-/** Compatibility compiler export backed by the shared persistence implementation. */
-export function hoistDocument(document: CanonicalDocument, options: HoistOptions = {}): DocMeta {
+/** Store a prepared document through the same validation boundary as the application. */
+export function hoistDocument(document: PreparedDocument, options: HoistOptions = {}): DocMeta {
   return createDocumentPersistence({ cwd: options.cwd }).hoist(document, options.now);
 }
 

@@ -6,13 +6,14 @@ import { marked, Renderer } from "marked";
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { PROSE_CSS } from "./prose.js";
 import { componentStyles } from "../components/styles.js";
+import { prepareDocument, renderMdxBody, type MdxCompileOptions, type PreparedDocument, type RenderedMdxBody } from "../mdx/compiler.js";
 import { ingestDocument } from "../core/ingest.js";
 import { CONTROLS_CSS, CONTROLS_MARKUP, LAYOUT_CSS } from "./controls.js";
 import { readStyle, validateTheme } from "./themes.js";
 import { validateGiscusConfig } from "../core/giscus.js";
 import type { CanonicalDocument, DocMeta, GiscusConfig } from "../core/types.js";
 
-class RenderSupportError extends Error {
+export class RenderSupportError extends Error {
   readonly code = "PLANLOFT_RENDER_SUPPORT_CONFLICT";
   constructor(detail: string) {
     super(`PLANLOFT_RENDER_SUPPORT_CONFLICT: ${detail} Regenerate from the original source, or review legacy generated support in a separate candidate before migrating.`);
@@ -20,7 +21,7 @@ class RenderSupportError extends Error {
   }
 }
 
-class UnsupportedHtmlStructureError extends Error {
+export class UnsupportedHtmlStructureError extends Error {
   readonly code = "PLANLOFT_HTML_FRAMESET_UNSUPPORTED";
   constructor() {
     super("PLANLOFT_HTML_FRAMESET_UNSUPPORTED: Frameset HTML is not supported. Convert it to a document with an ordinary body, or keep the original externally.");
@@ -31,15 +32,13 @@ class UnsupportedHtmlStructureError extends Error {
 export interface RenderOptions {
   comments?: GiscusConfig;
   noindex?: boolean;
-  /** Pre-rendered trusted body, used by the MDX compiler. */
-  bodyHtml?: string;
-  extraStyles?: string;
 }
+
+export interface MdxRenderOptions extends MdxCompileOptions, RenderOptions {}
 
 export interface BuildOpts extends RenderOptions {
   doc: DocMeta;
   theme: string;
-  base: string; // kept for interface compatibility; the artifact is self-contained
 }
 
 /** Render a canonical document into a self-contained HTML artifact (ADR-0007). */
@@ -53,8 +52,13 @@ export function renderDocument(
     if (options.comments) throw new Error("Comments cannot be added to authored HTML.");
     return injectSupport(doc.content, `${readStyle(theme)}\n${PROSE_CSS}\n${componentStyles}`, options.noindex);
   }
-  if (doc.contentFormat === "mdx" && options.bodyHtml === undefined) throw new Error("MDX requires renderMdxDocument.");
-  const body = options.bodyHtml ?? renderMarkdown(doc.content, doc.trustedHtml);
+  if (doc.contentFormat === "mdx") throw new Error("MDX requires renderMdxDocument.");
+  return renderShell(doc, theme, { body: renderMarkdown(doc.content, doc.trustedHtml), styles: componentStyles }, options);
+}
+
+function renderShell(doc: CanonicalDocument, theme: string, rendered: RenderedMdxBody, options: RenderOptions): string {
+  validateTheme(theme);
+  const body = rendered.body;
   const comments = options.comments ? renderGiscus(options.comments) : "";
   const shell = `<!doctype html>
 <html lang="en">
@@ -70,7 +74,7 @@ export function renderDocument(
 </body>
 </html>
 `;
-  return injectSupport(shell, `${readStyle(theme)}\n${PROSE_CSS}\n${options.extraStyles ?? componentStyles}`, options.noindex);
+  return injectSupport(shell, `${readStyle(theme)}\n${PROSE_CSS}\n${rendered.styles}`, options.noindex);
 
 }
 
@@ -99,7 +103,7 @@ function renderGiscus(config: GiscusConfig): string {
 }
 
 /** Render an indexed store document to a temporary directory for preview/deploy. */
-export function buildSite(opts: BuildOpts): string {
+export async function buildSite(opts: BuildOpts): Promise<string> {
   const bytes = fs.readFileSync(opts.doc.file);
   const raw = opts.doc.format === "html"
     ? new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)
@@ -108,6 +112,7 @@ export function buildSite(opts: BuildOpts): string {
     format: opts.doc.format,
     sourceName: opts.doc.file,
     trustedHtml: opts.doc.trustedHtml ?? true,
+    trustedMdx: true,
     overrides: {
       title: opts.doc.title,
       slug: opts.doc.slug,
@@ -116,7 +121,13 @@ export function buildSite(opts: BuildOpts): string {
       status: opts.doc.status,
     },
   });
-  const html = renderDocument(canonical, opts.theme, opts);
+  const html = canonical.contentFormat === "mdx"
+    ? await renderCompiledMdx(canonical, opts.theme, fs.readFileSync(`${opts.doc.file}.bundle.js`, "utf8"), opts)
+    : renderDocument(canonical, opts.theme, opts);
+  return writeRenderedSite(html);
+}
+
+export function writeRenderedSite(html: string): string {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-build-"));
   fs.writeFileSync(path.join(outDir, "index.html"), html);
   return outDir;
@@ -143,66 +154,71 @@ function renderMarkdown(content: string, trustedHtml: boolean): string {
 type HtmlNode = DefaultTreeAdapterTypes.Node;
 type HtmlComment = DefaultTreeAdapterTypes.CommentNode;
 
+function inspectHtml(html: string) {
+  const document = parse(html, { sourceCodeLocationInfo: true });
+  const markers: HtmlComment[] = [];
+  const elements: DefaultTreeAdapterTypes.Element[] = [];
+  const visit = (node: HtmlNode) => {
+    if ("tagName" in node) {
+      elements.push(node);
+      if ("content" in node) visit(node.content);
+    }
+    if ("data" in node && node.data.trim().startsWith("planloft-render:")) markers.push(node);
+    if ("childNodes" in node) for (const child of node.childNodes) visit(child);
+  };
+  visit(document);
+  return { markers, elements, document };
+}
+function ownedSupportRanges(input: string) {
+  const found = inspectHtml(input);
+  if (found.elements.some((element) => element.tagName === "frameset")) throw new UnsupportedHtmlStructureError();
+  const ranges: { start: number; end: number }[] = [];
+  for (const name of ["head", "controls"] as const) {
+    const markers = found.markers.filter((node) => node.data.trim().startsWith(`planloft-render:${name}`));
+    if (markers.length === 0) continue;
+    if (markers.length !== 2) throw new RenderSupportError("Invalid Planloft render markers.");
+    const [start, end] = markers.sort((a, b) => (a.sourceCodeLocation?.startOffset ?? 0) - (b.sourceCodeLocation?.startOffset ?? 0));
+    if (!start?.sourceCodeLocation || !end?.sourceCodeLocation || input.slice(start.sourceCodeLocation.startOffset, start.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:start -->` ||
+        input.slice(end.sourceCodeLocation.startOffset, end.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:end -->` ||
+        start.data !== ` planloft-render:${name}:start ` || end.data !== ` planloft-render:${name}:end `) throw new RenderSupportError("Invalid Planloft render markers.");
+    const content = input.slice(start.sourceCodeLocation.endOffset, end.sourceCodeLocation.startOffset);
+    const headMatch = name === "head" ? /^\n<style data-planloft-render data-planloft-sha256="([a-f0-9]{64})">((?:(?!<\/style)[\s\S])*)<\/style>\n(<meta name="robots" content="noindex, nofollow" \/>\n)?$/.exec(content) : null;
+    const headStyle = name === "head" && found.elements.find((element) =>
+      element.tagName === "style" && element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 &&
+      element.parentNode && "tagName" in element.parentNode && element.parentNode.tagName === "head",
+    );
+    const controlsParent = end.parentNode;
+    const controlsBody = controlsParent && "tagName" in controlsParent && controlsParent.tagName === "body";
+    const implicitBody = controlsBody && !controlsParent.sourceCodeLocation?.startTag;
+    const startParent = start.parentNode;
+    const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
+    const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
+    const validControls = content === `\n${CONTROLS_MARKUP}\n` && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
+    const validHead = headMatch && headStyle && hashSupport(`${headMatch[2]}\n${headMatch[3] ?? ""}`) === headMatch[1];
+    if (name === "controls" ? !validControls : !validHead) throw new RenderSupportError("Invalid Planloft render block.");
+    ranges.push({ start: start.sourceCodeLocation.startOffset, end: end.sourceCodeLocation.endOffset });
+  }
+  if (found.markers.length !== ranges.length * 2 || (ranges.length !== 0 && ranges.length !== 2)) throw new RenderSupportError("Invalid Planloft render markers.");
+  if (ranges.length === 2 && ranges[0]!.start < ranges[1]!.end && ranges[1]!.start < ranges[0]!.end) throw new RenderSupportError("Invalid Planloft render markers.");
+  for (const element of found.elements) {
+    const loc = element.sourceCodeLocation;
+    if (!loc || ranges.some((range) => loc.startOffset >= range.start && loc.endOffset <= range.end)) continue;
+    if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
+  }
+  return { ranges, ...found };
+}
+export function assertHtmlSupported(html: string): void {
+  // Hoist must prove insertion works before replacing durable source.
+  injectSupport(html, "");
+}
+
 // Only replace complete blocks that the compiler owns. Parsing supplies real tag
 // offsets, so strings in scripts and comments cannot become insertion points.
 function injectSupport(input: string, css: string, noindex = false): string {
-  const inspect = (html: string) => {
-    const document = parse(html, { sourceCodeLocationInfo: true });
-    const markers: HtmlComment[] = [];
-    const elements: DefaultTreeAdapterTypes.Element[] = [];
-    const visit = (node: HtmlNode) => {
-      if ("tagName" in node) {
-        elements.push(node);
-        if ("content" in node) visit(node.content);
-      }
-      if ("data" in node && node.data.trim().startsWith("planloft-render:")) markers.push(node);
-      if ("childNodes" in node) for (const child of node.childNodes) visit(child);
-    };
-    visit(document);
-    return { markers, elements, document };
-  };
-  const ownedRanges = (input: string) => {
-    const found = inspect(input);
-    if (found.elements.some((element) => element.tagName === "frameset")) throw new UnsupportedHtmlStructureError();
-    const ranges: { start: number; end: number }[] = [];
-    for (const name of ["head", "controls"] as const) {
-      const markers = found.markers.filter((node) => node.data.trim().startsWith(`planloft-render:${name}`));
-      if (markers.length === 0) continue;
-      if (markers.length !== 2) throw new RenderSupportError("Invalid Planloft render markers.");
-      const [start, end] = markers.sort((a, b) => (a.sourceCodeLocation?.startOffset ?? 0) - (b.sourceCodeLocation?.startOffset ?? 0));
-      if (!start?.sourceCodeLocation || !end?.sourceCodeLocation || input.slice(start.sourceCodeLocation.startOffset, start.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:start -->` ||
-          input.slice(end.sourceCodeLocation.startOffset, end.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:end -->` ||
-          start.data !== ` planloft-render:${name}:start ` || end.data !== ` planloft-render:${name}:end `) throw new RenderSupportError("Invalid Planloft render markers.");
-      const content = input.slice(start.sourceCodeLocation.endOffset, end.sourceCodeLocation.startOffset);
-      const headMatch = name === "head" ? /^\n<style data-planloft-render data-planloft-sha256="([a-f0-9]{64})">((?:(?!<\/style)[\s\S])*)<\/style>\n(<meta name="robots" content="noindex, nofollow" \/>\n)?$/.exec(content) : null;
-      const headStyle = name === "head" && found.elements.find((element) =>
-        element.tagName === "style" && element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 &&
-        element.parentNode && "tagName" in element.parentNode && element.parentNode.tagName === "head",
-      );
-      const controlsParent = end.parentNode;
-      const controlsBody = controlsParent && "tagName" in controlsParent && controlsParent.tagName === "body";
-      const implicitBody = controlsBody && !controlsParent.sourceCodeLocation?.startTag;
-      const startParent = start.parentNode;
-      const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
-      const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
-      const validControls = content === `\n${CONTROLS_MARKUP}\n` && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
-      const validHead = headMatch && headStyle && hashSupport(`${headMatch[2]}\n${headMatch[3] ?? ""}`) === headMatch[1];
-      if (name === "controls" ? !validControls : !validHead) throw new RenderSupportError("Invalid Planloft render block.");
-      ranges.push({ start: start.sourceCodeLocation.startOffset, end: end.sourceCodeLocation.endOffset });
-    }
-    if (found.markers.length !== ranges.length * 2 || (ranges.length !== 0 && ranges.length !== 2)) throw new RenderSupportError("Invalid Planloft render markers.");
-    if (ranges.length === 2 && ranges[0]!.start < ranges[1]!.end && ranges[1]!.start < ranges[0]!.end) throw new RenderSupportError("Invalid Planloft render markers.");
-    for (const element of found.elements) {
-      const loc = element.sourceCodeLocation;
-      if (!loc || ranges.some((range) => loc.startOffset >= range.start && loc.endOffset <= range.end)) continue;
-      if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
-    }
-    return { ranges, ...found };
-  };
-  const { ranges } = ownedRanges(input);
+  const { ranges } = ownedSupportRanges(input);
   let html = input;
   for (const range of ranges.sort((a, b) => b.start - a.start)) html = html.slice(0, range.start) + html.slice(range.end);
-  const { elements, document } = inspect(html);
+  const { elements, document } = inspectHtml(html);
   const head = elements.find((node) => node.tagName === "head" && node.sourceCodeLocation?.startTag);
   const body = elements.find((node) => node.tagName === "body" && node.sourceCodeLocation?.startTag);
   const root = elements.find((node) => node.tagName === "html" && node.sourceCodeLocation?.startTag);
@@ -218,7 +234,7 @@ function injectSupport(input: string, css: string, noindex = false): string {
   const controlsBlock = `<!-- planloft-render:controls:start -->\n${CONTROLS_MARKUP}\n<!-- planloft-render:controls:end -->`;
   const inserts = [{ offset: bodyOffset, text: controlsBlock }, { offset: headOffset, text: headBlock }].sort((a, b) => b.offset - a.offset);
   for (const insertion of inserts) html = html.slice(0, insertion.offset) + insertion.text + html.slice(insertion.offset);
-  if (ownedRanges(html).ranges.length !== 2) throw new RenderSupportError("Cannot inject Planloft support into this HTML structure.");
+  if (ownedSupportRanges(html).ranges.length !== 2) throw new RenderSupportError("Cannot inject Planloft support into this HTML structure.");
   return html;
 }
 
@@ -251,17 +267,16 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ESCAPES[character] ?? character);
 }
 
-/** Build stored MDX from its pinned bundle, keeping imports independent of the store path. */
-export async function buildSiteAsync(opts: BuildOpts): Promise<string> {
-  if (opts.doc.format !== "mdx") return buildSite(opts);
-  const raw = fs.readFileSync(opts.doc.file, "utf8");
-  const canonical = ingestDocument(raw, {
-    format: "mdx", sourceName: opts.doc.file, trustedMdx: true,
-    overrides: { title: opts.doc.title, slug: opts.doc.slug, kind: opts.doc.kind, theme: opts.doc.theme, status: opts.doc.status },
-  });
-  const { renderCompiledMdx } = await import("../mdx/index.js");
-  const html = await renderCompiledMdx(canonical, opts.theme, fs.readFileSync(`${opts.doc.file}.bundle.js`, "utf8"), opts);
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-build-"));
-  fs.writeFileSync(path.join(outDir, "index.html"), html);
-  return outDir;
+/** Render only code the caller trusts. MDX expressions execute during preparation. */
+export async function renderMdxDocument(doc: CanonicalDocument, theme: string, options: MdxRenderOptions = {}): Promise<string> {
+  if (doc.contentFormat !== "mdx") throw new Error("renderMdxDocument requires an MDX document.");
+  return renderPreparedDocument(await prepareDocument(doc, options), theme, options);
+}
+
+export function renderPreparedDocument(doc: PreparedDocument, theme: string, options: RenderOptions = {}): string {
+  return doc.contentFormat === "mdx" ? renderShell(doc, theme, doc.mdxBody, options) : renderDocument(doc, theme, options);
+}
+
+export async function renderCompiledMdx(doc: CanonicalDocument, theme: string, code: string, options: RenderOptions = {}): Promise<string> {
+  return renderShell(doc, theme, await renderMdxBody(doc.content, code), options);
 }

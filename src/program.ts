@@ -3,7 +3,6 @@ import pc from "picocolors";
 import {
   canonicalizePlanloftApplicationError,
   createPlanloftApplication,
-  isSafeMigrationError,
   type ConfigResult,
   type CopyResult,
   type DeployResult,
@@ -18,7 +17,7 @@ import {
   type ResolveResult,
   type ApplicationOperation,
 } from "./application.js";
-import { isMdxAuthoringError } from "./mdx/index.js";
+import { COLLABORATION_PROVIDERS, type CollaborationProvider } from "./collaboration/contracts.js";
 import type { SourceFlags } from "./commands/source.js";
 import { parseTtlDays, TTL_RULE } from "./core/ttl.js";
 import {
@@ -51,16 +50,6 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       const output = present(await operation());
       if (output) writeOut(output);
     } catch (error) {
-      if (isMdxAuthoringError(error)) {
-        writeErr(`${pc.red(operationLabel(operationName) + " failed: ")}[${error.code}] ${error.message}\n`);
-        setExitCode(1);
-        return;
-      }
-      if (operationName === "migrate" && isSafeMigrationError(error)) {
-        writeErr(`${pc.red("Migrate failed: ")}${error.message}\n`);
-        setExitCode(1);
-        return;
-      }
       const failure = canonicalizePlanloftApplicationError(error, operationName);
       writeErr(`${pc.red(operationLabel(failure.operation) + " failed: ")}${failure.message}\n`);
       setExitCode(1);
@@ -217,9 +206,10 @@ function withKnowledge(command: Command, name: string): Command {
     .addHelpText("after", `\n${formatCommandHelp(name)}\n`);
 }
 
-function parseCollaborationProvider(value: string): "local" | "cloudflare" | "vercel" {
-  if (value !== "local" && value !== "cloudflare" && value !== "vercel") throw new InvalidArgumentError("Choose local, cloudflare, or vercel.");
-  return value;
+function parseCollaborationProvider(value: string): CollaborationProvider {
+  const provider = COLLABORATION_PROVIDERS.find(provider => provider === value);
+  if (provider === undefined) throw new InvalidArgumentError("Choose local, cloudflare, or vercel.");
+  return provider;
 }
 
 function positiveInteger(value: string): number {

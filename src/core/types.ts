@@ -24,20 +24,18 @@ export interface DocMeta {
 }
 
 /** Format-independent document produced by every ingestion adapter (ADR-0007). */
-export interface CanonicalDocument {
+export interface CanonicalDocument<Format extends PlanFormat = PlanFormat> {
   version: 1;
   title: string;
   slug: string;
   kind: Kind;
   theme?: string;
   status: string;
-  contentFormat: PlanFormat;
+  contentFormat: Format;
   content: string;
   /** Lines removed before the MDX body, or null when no source mapping exists. */
-  sourceLineOffset?: number | null;
+  sourceLineOffset: number | null;
   trustedHtml: boolean;
-  /** Compiled snapshot for a trusted MDX document and its dependencies. */
-  compiledMdx?: string;
 }
 
 /** Stable JSON document envelope accepted by the JSON ingestion adapter. */

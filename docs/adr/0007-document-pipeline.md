@@ -1,6 +1,6 @@
 # ADR-0007 — canonical document pipeline and constrained theme layouts
 
-- **Status**: Accepted
+- **Status**: Accepted (amended by ADR-0011 and ADR-0018; §F2 amended and §F3 superseded by ADR-0019)
 - **Date**: 2026-08-05
 - **Amends**: ADR-0001 §D7, §D9, §D16, §D24; ADR-0002 §E4.
 - **Supersedes in part**: ADR-0003's fixed renderer input and fixed HTML wrapper.

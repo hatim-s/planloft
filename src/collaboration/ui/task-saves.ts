@@ -1,5 +1,5 @@
 import type { Task } from '../contracts.js';
-import { describeFailure, type Api } from './api.js';
+import { describeFailure, mayHaveSaved, type Api } from './api.js';
 import type { Notice, State } from './state.js';
 
 type Host = {
@@ -60,7 +60,7 @@ export class TaskSaves {
       const failure = result.failure;
       const id = this.host.notify({
         tone: 'error',
-        message: failure.kind === 'network'
+        message: mayHaveSaved(failure)
           ? `“${name}” may not have saved. ${describeFailure(failure)} The box shows the last confirmed state.`
           : `“${name}” was not saved. ${describeFailure(failure)}`,
         action: {

@@ -78,8 +78,9 @@ other short tags such as versions, owners, or categories, in prose or table cell
 badge colours by grouping, keep the label meaningful without colour, and skip badges
 on labels that plain text already makes clear.
 
-For a shared checkbox use `<Todo task="ship-api" label="Ship the API" />`. Give each task
-a unique, stable key within the document. Keys start with a letter or digit, contain
+For a shared checkbox use `<Todo task="ship-api" label="Ship the API" />`. Give each
+separate task its own stable key; two `Todo`s with the same key share one checked
+state. Keys start with a letter or digit, contain
 only letters, digits, `.`, `_`, `:`, or `-`, and are at most 80 characters. Retain a
 key when wording changes. The checkbox is disabled until collaboration state loads;
 ordinary Markdown task lists do not become shared tasks. Do not invent keys by matching
@@ -114,7 +115,7 @@ Common next actions:
 - `"$PLANLOFT_COMMAND" preview [slug]` opens a stored plan locally.
 - `"$PLANLOFT_COMMAND" copy [slug]` copies raw source into the repository.
 - `"$PLANLOFT_COMMAND" deploy [slug]` explicitly publishes a stored plan.
-- `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, JSON, or trusted HTML document.
+- `"$PLANLOFT_COMMAND" hoist <input>` stores another Markdown, trusted MDX, JSON, or trusted HTML document.
 - `"$PLANLOFT_COMMAND" publish page.html --trusted-html` deploys trusted HTML with theme tokens and reader controls, preserving its structure.
 <!-- planloft:command-knowledge:end -->
 

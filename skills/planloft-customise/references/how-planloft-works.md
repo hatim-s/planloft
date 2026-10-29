@@ -85,12 +85,16 @@ sensitive documents local.
 ## MDX and collaboration
 
 MDX imports and expressions execute code. Use `--trusted-mdx` only for trusted
-source, imports, registries, and stored or copied bundles. Hoist compiles a snapshot;
-a changed stored source needs to be hoisted again from its dependency context.
+source, imports, registries, and stored or copied bundles. Hoist compiles a minified,
+self-contained snapshot that includes the component runtime. Stored documents render
+from that pinned snapshot; hoist again from source to pick up edits, component fixes,
+or a Planloft upgrade. Rendering or hoisting a source path compiles from source first
+and uses an adjacent snapshot only when an import is missing.
 Components imported from `planloft/components` and local files render static HTML.
 Project `.planloft/components/index.tsx` overrides the global
 `~/.planloft/components/index.tsx`, which overrides built-ins.
 
-Collaboration is opt-in. Viewers can comment and edit shared notes. State loads once;
+Collaboration is opt-in. Access is public and anonymous: any viewer can comment,
+delete any comment or thread, create and edit notes, and tick shared tasks. State loads once;
 local changes update the view and a reload fetches other readers' changes. Checkbox
-state uses explicit stable task keys. Credentials belong on the server, never in HTML.
+state uses explicit stable task keys; `Todo`s with the same key share one state. Credentials belong on the server, never in HTML.

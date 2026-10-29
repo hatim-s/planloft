@@ -1,5 +1,5 @@
 import type { Note } from '../contracts.js';
-import { describeFailure, type Api } from './api.js';
+import { describeFailure, mayHaveSaved, type Api } from './api.js';
 import type { Notice, State } from './state.js';
 
 type Host = {
@@ -41,6 +41,11 @@ export class NoteEditing {
   async save(id: string): Promise<void> {
     const edit = this.host.state.noteEdits.get(id);
     if (!edit || edit.saving) return;
+    if (!edit.draft.trim()) {
+      edit.failure = { kind: 'blank' };
+      this.host.announce('A note needs some text.');
+      return this.host.render();
+    }
     Object.assign(edit, { saving: true, failure: null });
     this.host.render();
     const draft = edit.draft;
@@ -68,7 +73,7 @@ export class NoteEditing {
         this.host.announce(`Note not saved. ${describeFailure(result.failure)}`);
       } else {
         // The reader closed this editor while it was saving, so the panel can no longer show the failure.
-        const outcome = result.failure.kind === 'network' ? 'may not have saved' : 'was not saved';
+        const outcome = mayHaveSaved(result.failure) ? 'may not have saved' : 'was not saved';
         this.host.notify({ tone: 'error', message: `A note edit you closed while saving ${outcome}. ${describeFailure(result.failure)}` });
       }
     }

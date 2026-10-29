@@ -1,12 +1,12 @@
 import { captureAnchor, resolveAnchor, type AnchorResolution } from '../anchors.js';
 import type { CollaborationConfig, TextAnchor, Thread } from '../contracts.js';
-import { createApi, describeFailure, idempotencyKey, type Api } from './api.js';
-import { DocumentText } from './dom-text.js';
+import { createApi, describeFailure, idempotencyKey, mayHaveSaved, type Api } from './api.js';
+import { changesContent, DocumentText } from './dom-text.js';
 import { h, icon, ICONS } from './dom.js';
 import { paintHighlights, pointFromCoordinates } from './highlights.js';
 import { positionPopup } from './popup-position.js';
-import { renderPanel, type Actions } from './panel.js';
-import { initialState, type Delivery, type Notice, type PendingNote, type PendingReply, type PendingThread, type Placement, type State } from './state.js';
+import { deleteFocusKey, renderPanel, type Actions } from './panel.js';
+import { deliver, initialState, replySending, type Delivery, type Notice, type PendingNote, type PendingReply, type PendingThread, type Placement, type State } from './state.js';
 import { NoteEditing } from './notes.js';
 import { TaskBinder } from './tasks.js';
 import { SelectionToolbar, type Offsets } from './toolbar.js';
@@ -52,10 +52,10 @@ export class Collaboration implements Actions {
     this.launcher = h('button', { type: 'button', class: 'plc-launcher', 'aria-expanded': 'false', 'aria-controls': 'plc-panel', onclick: () => this.togglePanel() });
     this.panel = h('section', { id: 'plc-panel', class: 'plc-panel', role: 'dialog', 'aria-modal': 'false', 'aria-label': 'Comments and notes', hidden: true });
     this.panel.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        this.closePanel();
-      }
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (this.state.deleting) this.cancelDelete();
+      else this.closePanel();
     });
     this.notices = h('div', { class: 'plc-notices', role: 'region', 'aria-label': 'Comment messages' });
     this.announcer = h('div', { class: 'plc-visually-hidden', role: 'status', 'aria-live': 'polite' });
@@ -73,7 +73,7 @@ export class Collaboration implements Actions {
     });
 
     new MutationObserver(records => {
-      if (records.some(record => !this.ui.contains(record.target))) this.scheduleLayout();
+      if (records.some(changesContent)) this.scheduleLayout();
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
     document.addEventListener('click', this.onDocumentClick);
     document.addEventListener('keydown', this.onShortcut);
@@ -168,12 +168,14 @@ export class Collaboration implements Actions {
     this.state.online = online;
     if (online) {
       if (this.state.load.status === 'failed') void this.load();
-      // Retry what failed only because the reader was offline. Creation keys make this safe.
-      const offline = ({ delivery }: { delivery: Delivery }) => delivery.status === 'failed' && delivery.failure.kind === 'offline';
-      for (const item of this.state.pendingThreads.filter(offline)) void this.deliverThread(item);
-      for (const item of this.state.pendingReplies.filter(offline)) void this.deliverReply(item);
-      for (const item of this.state.pendingNotes.filter(offline)) void this.deliverNote(item);
-      for (const [id, edit] of this.state.noteEdits) if (edit.failure?.kind === 'offline') void this.saveNote(id);
+      // Resend what was never sent and settle what may have been saved. Each resend keeps
+      // its original key and text, so the server returns an earlier save instead of a copy.
+      const resend = ({ delivery }: { delivery: Delivery }) => delivery.status === 'unknown' || (delivery.status === 'failed' && delivery.failure.kind === 'offline');
+      for (const item of this.state.pendingThreads.filter(resend)) void this.deliverThread(item);
+      for (const item of this.state.pendingReplies.filter(resend)) if (!this.state.busyThreads.has(item.threadId)) void this.deliverReply(item);
+      for (const item of this.state.pendingNotes.filter(resend)) void this.deliverNote(item);
+      // A note save carries its base version, so resending one that landed meets that save, not a copy.
+      for (const [id, { failure }] of this.state.noteEdits) if (failure && failure.kind !== 'blank' && (failure.kind === 'offline' || mayHaveSaved(failure))) void this.saveNote(id);
     }
     this.render();
   }
@@ -365,7 +367,8 @@ export class Collaboration implements Actions {
   }
 
   private onShortcut = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && this.state.panel.open) {
+    // The panel's own Escape handler runs first and may only have cancelled a deletion.
+    if (event.key === 'Escape' && this.state.panel.open && !event.defaultPrevented) {
       event.preventDefault();
       this.closePanel();
       return;
@@ -444,32 +447,41 @@ export class Collaboration implements Actions {
     void this.deliverThread(pending);
   }
 
-  async deliverThread(pending: PendingThread): Promise<void> {
-    pending.delivery = { status: 'sending' };
+  private async deliverThread(pending: PendingThread): Promise<void> {
+    const delivered = deliver(pending, () => this.api.createThread(pending.body, pending.anchor, pending.key));
     this.render();
-    const result = await this.api.createThread(pending.body, pending.anchor, pending.key);
-    if (result.ok) {
+    const thread = await delivered;
+    if (thread) {
       this.state.pendingThreads = this.state.pendingThreads.filter(item => item !== pending);
-      this.upsertThread(result.value);
-      if (this.state.panel.open && this.state.panel.tab === 'comments' && this.state.panel.view === 'browse' && !this.state.activeThread) this.openThread(result.value.id);
+      // A settled retry answers with the thread as first saved. One loaded since is newer.
+      if (!this.state.threads.some(item => item.id === thread.id)) this.upsertThread(thread);
+      if (this.state.panel.open && this.state.panel.tab === 'comments' && this.state.panel.view === 'browse' && !this.state.activeThread) this.openThread(thread.id);
       this.announce('Comment posted.');
     } else {
-      pending.delivery = { status: 'failed', failure: result.failure };
-      this.announce(`Comment not posted. ${describeFailure(result.failure)}`);
+      this.announceUndelivered(pending.delivery, 'Comment');
     }
     this.paint();
     this.render();
   }
 
-  retryThread(key: string): void {
-    const pending = this.state.pendingThreads.find(item => item.key === key);
-    if (pending) void this.deliverThread(pending);
+  private announceUndelivered(delivery: Delivery, noun: 'Comment' | 'Reply' | 'Note'): void {
+    if (delivery.status === 'sending') return;
+    const outcome = delivery.status === 'unknown' ? 'not confirmed' : noun === 'Note' ? 'not saved' : 'not posted';
+    this.announce(`${noun} ${outcome}. ${describeFailure(delivery.failure)}`);
   }
 
-  /** Moves an unsent comment back into the composer. Sending it again uses a new key. */
+  retryThread(key: string): void {
+    const pending = this.state.pendingThreads.find(item => item.key === key);
+    if (pending && pending.delivery.status !== 'sending') void this.deliverThread(pending);
+  }
+
+  /**
+   * Moves a comment the server refused back into the composer; sending it again uses a new
+   * key. One that may have been saved can only be retried, or the edit would post a copy.
+   */
   editThread(key: string): void {
     const pending = this.state.pendingThreads.find(item => item.key === key);
-    if (!pending || pending.delivery.status === 'sending') return;
+    if (pending?.delivery.status !== 'failed') return;
     this.state.pendingThreads = this.state.pendingThreads.filter(item => item !== pending);
     const existing = this.state.composer.body.trim();
     this.state.composer = { body: existing ? `${existing}\n\n${pending.body}` : pending.body, anchor: pending.anchor };
@@ -478,14 +490,11 @@ export class Collaboration implements Actions {
     this.composeComment();
   }
 
+  /** Takes the server's copy of a thread, replies included. See `replySending` for why that list is current. */
   private upsertThread(thread: Thread): void {
     const index = this.state.threads.findIndex(item => item.id === thread.id);
     if (index < 0) this.state.threads.push(thread);
-    else {
-      // PATCH responses carry no replies; keep the ones already loaded.
-      const existing = this.state.threads[index]!;
-      this.state.threads[index] = { ...thread, comments: thread.comments.length ? thread.comments : existing.comments };
-    }
+    else this.state.threads[index] = thread;
     this.state.placements.set(thread.id, this.place(thread.anchor));
   }
 
@@ -503,30 +512,29 @@ export class Collaboration implements Actions {
     void this.deliverReply(pending);
   }
 
-  async deliverReply(pending: PendingReply): Promise<void> {
-    pending.delivery = { status: 'sending' };
+  private async deliverReply(pending: PendingReply): Promise<void> {
+    const delivered = deliver(pending, () => this.api.reply(pending.threadId, pending.body, pending.key));
     this.render();
-    const result = await this.api.reply(pending.threadId, pending.body, pending.key);
-    if (result.ok) {
+    const reply = await delivered;
+    if (reply) {
       this.state.pendingReplies = this.state.pendingReplies.filter(item => item !== pending);
       const thread = this.state.threads.find(item => item.id === pending.threadId);
-      if (thread && !thread.comments.some(comment => comment.id === result.value.id)) thread.comments.push(result.value);
+      if (thread && !thread.comments.some(comment => comment.id === reply.id)) thread.comments.push(reply);
       this.announce('Reply posted.');
     } else {
-      pending.delivery = { status: 'failed', failure: result.failure };
-      this.announce(`Reply not posted. ${describeFailure(result.failure)}`);
+      this.announceUndelivered(pending.delivery, 'Reply');
     }
     this.render();
   }
 
   retryReply(key: string): void {
     const pending = this.state.pendingReplies.find(item => item.key === key);
-    if (pending) void this.deliverReply(pending);
+    if (pending && pending.delivery.status !== 'sending' && !this.state.busyThreads.has(pending.threadId)) void this.deliverReply(pending);
   }
 
   editReply(key: string): void {
     const pending = this.state.pendingReplies.find(item => item.key === key);
-    if (!pending || pending.delivery.status === 'sending') return;
+    if (pending?.delivery.status !== 'failed') return;
     this.state.pendingReplies = this.state.pendingReplies.filter(item => item !== pending);
     const existing = (this.state.replyDrafts.get(pending.threadId) ?? '').trim();
     this.state.replyDrafts.set(pending.threadId, existing ? `${existing}\n\n${pending.body}` : pending.body);
@@ -536,6 +544,10 @@ export class Collaboration implements Actions {
 
   private async updateThread(id: string, change: { resolved: boolean } | { anchor: TextAnchor | null }, done: string): Promise<boolean> {
     if (this.state.busyThreads.has(id)) return false;
+    if (replySending(this.state, id)) {
+      this.notify({ tone: 'info', message: 'Wait for the reply to finish sending, then try again.' });
+      return false;
+    }
     this.state.busyThreads.add(id);
     this.render();
     const result = await this.api.updateThread(id, change);
@@ -544,7 +556,7 @@ export class Collaboration implements Actions {
       this.upsertThread(result.value);
       this.announce(done);
     } else {
-      const uncertain = result.failure.kind === 'network' ? ' It may not have saved; reload to check.' : '';
+      const uncertain = mayHaveSaved(result.failure) ? ' It may not have saved; reload to check.' : '';
       this.notify({ tone: 'error', message: `${describeFailure(result.failure)}${uncertain}` });
     }
     this.paint();
@@ -556,18 +568,22 @@ export class Collaboration implements Actions {
     if (this.state.busyThreads.has(threadId)) return;
     this.state.deleting = { threadId, commentId };
     this.render();
-    this.focus('confirm-delete');
+    // Cancel is the default, so a second Enter does not delete.
+    this.focus(deleteFocusKey(threadId, commentId));
   }
 
   cancelDelete(): void {
+    const target = this.state.deleting;
+    if (!target || this.state.busyThreads.has(target.threadId)) return;
     this.state.deleting = null;
     this.render();
+    this.focus(deleteFocusKey(target.threadId, target.commentId));
   }
 
   async confirmDelete(): Promise<void> {
     const target = this.state.deleting;
     if (!target || this.state.busyThreads.has(target.threadId)) return;
-    if (this.state.pendingReplies.some(reply => reply.threadId === target.threadId && reply.delivery.status === 'sending')) {
+    if (replySending(this.state, target.threadId)) {
       this.notify({ tone: 'info', message: 'Wait for the reply to finish sending, then delete.' });
       return;
     }
@@ -578,6 +594,8 @@ export class Collaboration implements Actions {
       : await this.api.deleteComment(target.threadId, target.commentId);
     this.state.busyThreads.delete(target.threadId);
     if (result.ok) {
+      // The rendered list still holds the deleted row, so its neighbours are known.
+      const after = target.commentId !== null ? `thread-${target.threadId}` : this.neighbourSummary(target.threadId) ?? 'new-comment';
       if (target.commentId === null) {
         this.state.threads = this.state.threads.filter(thread => thread.id !== target.threadId);
         this.state.placements.delete(target.threadId);
@@ -585,17 +603,28 @@ export class Collaboration implements Actions {
         this.state.replyDrafts.delete(target.threadId);
         if (this.state.reattaching === target.threadId) this.cancelReattach();
         if (this.state.activeThread === target.threadId) this.browseComments();
+        else this.focus(after);
       } else {
         const thread = this.state.threads.find(thread => thread.id === target.threadId);
         if (thread) thread.comments = thread.comments.filter(comment => comment.id !== target.commentId);
+        this.focus(after);
       }
       if (this.state.deleting === target) this.state.deleting = null;
       this.announce(target.commentId === null ? 'Thread deleted.' : 'Reply deleted.');
     } else {
       this.notify({ tone: 'error', message: `Deletion was not confirmed. ${describeFailure(result.failure)} Try deleting again to confirm it.` });
+      if (this.state.deleting === target) this.focus('confirm-delete');
     }
     this.paint();
     this.render();
+  }
+
+  /** The focus key of the list row after a thread's row, or before it when it is last. */
+  private neighbourSummary(threadId: string): string | null {
+    const rows = Array.from(this.panel.querySelectorAll<HTMLElement>('[data-focus-key^="summary-"]'), row => row.dataset.focusKey);
+    const index = rows.indexOf(`summary-${threadId}`);
+    if (index < 0) return null;
+    return rows[index + 1] ?? rows[index - 1] ?? null;
   }
 
   setResolved(id: string, resolved: boolean): void {
@@ -611,6 +640,7 @@ export class Collaboration implements Actions {
   }
 
   startReattach(id: string): void {
+    if (this.state.busyThreads.has(id) || replySending(this.state, id)) return;
     this.state.reattaching = id;
     this.state.activeThread = id;
     this.paint();
@@ -629,6 +659,10 @@ export class Collaboration implements Actions {
   private async attach(offsets: Offsets): Promise<void> {
     const id = this.state.reattaching;
     if (!id || !this.text) return;
+    if (this.state.busyThreads.has(id) || replySending(this.state, id)) {
+      this.notify({ tone: 'info', message: 'Wait for the pending change to finish, then select the text and try again.' });
+      return;
+    }
     const anchor = captureAnchor(this.text.text, offsets.start, offsets.end, { revision: this.config.revision, documentId: this.config.documentId });
     this.state.reattaching = null;
     getSelection()?.removeAllRanges();
@@ -650,29 +684,28 @@ export class Collaboration implements Actions {
     void this.deliverNote(pending);
   }
 
-  async deliverNote(pending: PendingNote): Promise<void> {
-    pending.delivery = { status: 'sending' };
+  private async deliverNote(pending: PendingNote): Promise<void> {
+    const delivered = deliver(pending, () => this.api.createNote(pending.body, pending.key));
     this.render();
-    const result = await this.api.createNote(pending.body, pending.key);
-    if (result.ok) {
+    const note = await delivered;
+    if (note) {
       this.state.pendingNotes = this.state.pendingNotes.filter(item => item !== pending);
-      this.notes.adopt(result.value);
+      this.notes.adopt(note);
       this.announce('Note added.');
     } else {
-      pending.delivery = { status: 'failed', failure: result.failure };
-      this.announce(`Note not saved. ${describeFailure(result.failure)}`);
+      this.announceUndelivered(pending.delivery, 'Note');
     }
     this.render();
   }
 
   retryNote(key: string): void {
     const pending = this.state.pendingNotes.find(item => item.key === key);
-    if (pending) void this.deliverNote(pending);
+    if (pending && pending.delivery.status !== 'sending') void this.deliverNote(pending);
   }
 
   editPendingNote(key: string): void {
     const pending = this.state.pendingNotes.find(item => item.key === key);
-    if (!pending || pending.delivery.status === 'sending') return;
+    if (pending?.delivery.status !== 'failed') return;
     this.state.pendingNotes = this.state.pendingNotes.filter(item => item !== pending);
     const existing = this.state.noteDraft.trim();
     this.state.noteDraft = existing ? `${existing}\n\n${pending.body}` : pending.body;

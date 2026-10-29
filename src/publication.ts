@@ -14,7 +14,8 @@ import { getAdapter, type HostAdapter, type HostAuthentication, type Manifest } 
 import { assertPublicationSlug } from "./hosts/urls.js";
 import { cloudflareSettings } from "./hosts/cloudflare.js";
 import { vercelSettings } from "./hosts/vercel.js";
-import { buildSiteAsync } from "./render/renderer.js";
+import { isMdxAuthoringError, MdxSnapshotError } from "./mdx/compiler.js";
+import { buildSite, writeRenderedSite, RenderSupportError, UnsupportedHtmlStructureError } from "./render/renderer.js";
 
 export interface ApplicationPublicationInput {
   id: string;
@@ -51,8 +52,6 @@ export interface PreparedPublication {
   expiresAt: string;
   theme: string;
   comments?: GiscusConfig;
-  /** Candidate base path is needed only by the injected application adapter. */
-  basePath?: string;
   /** Internal validated configuration; never returned from the application interface. */
   config: Config;
   host: HostAdapter;
@@ -92,7 +91,7 @@ export interface PublicationModuleOptions {
 
 export interface PublicationModule {
   prepare(document: DocMeta, options?: PublicationOptions, now?: Date): PreparedPublication;
-  publish(document: DocMeta, prepared: PreparedPublication): Promise<PublicationResult>;
+  publish(document: DocMeta, prepared: PreparedPublication, renderedHtml?: string): Promise<PublicationResult>;
 }
 
 /**
@@ -129,13 +128,11 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
         ? resolveGiscusConfig(config, document.project)
         : undefined;
       const id = createId();
-      const basePath = options.applicationAdapter
-        ? externalPublicationValue("host", () => options.applicationAdapter!.basePath(id))
-        : undefined;
-      return { id, now, ttlDays, expiresAt, theme, comments, basePath, config, host };
+      if (options.applicationAdapter) externalPublicationValue("host", () => options.applicationAdapter!.basePath(id));
+      return { id, now, ttlDays, expiresAt, theme, comments, config, host };
     },
 
-    async publish(document, prepared) {
+    async publish(document, prepared, renderedHtml) {
       const host = prepared.host;
       const common = {
         id: prepared.id,
@@ -149,18 +146,18 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
         },
       };
       const artifacts: string[] = [];
-      const buildArtifact = async (base: string): Promise<string> => {
+      const buildArtifact = async (): Promise<string> => {
         try {
-          const dist = await buildSiteAsync({
+          const dist = renderedHtml === undefined ? await buildSite({
             doc: document,
             theme: prepared.theme,
-            base,
             comments: prepared.comments,
             noindex: true,
-          });
+          }) : writeRenderedSite(renderedHtml);
           artifacts.push(dist);
           return dist;
         } catch (error) {
+          if (isMdxAuthoringError(error) || error instanceof MdxSnapshotError || error instanceof RenderSupportError || error instanceof UnsupportedHtmlStructureError) throw error;
           throw publicationEffectError("local_effect", "render", error);
         }
       };
@@ -169,9 +166,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       try {
         let result: ApplicationPublicationAdapterResult;
         if (options.applicationAdapter) {
-          const dist = await buildArtifact(
-            prepared.basePath ?? options.applicationAdapter.basePath(prepared.id),
-          );
+          const dist = await buildArtifact();
           result = await externalPublicationEffect("host", () =>
             options.applicationAdapter!.deploy({ ...common, dist }),
           );
@@ -182,7 +177,8 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
               env: options.auth?.env ?? options.environment,
             }),
           );
-          const dist = await buildArtifact(host.basePath(document.slug, prepared.config));
+          host.basePath(document.slug, prepared.config);
+          const dist = await buildArtifact();
           result = await externalPublicationEffect("host", () =>
             host.deploy({
               ...common,

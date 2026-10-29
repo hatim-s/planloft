@@ -410,7 +410,7 @@ export function renderSkillDiscoveryReference(command = "planloft"): string {
     `- \`${command} preview [slug]\` opens a stored plan locally.`,
     `- \`${command} copy [slug]\` copies raw source into the repository.`,
     `- \`${command} deploy [slug]\` explicitly publishes a stored plan.`,
-    `- \`${command} hoist <input>\` stores another Markdown, JSON, or trusted HTML document.`,
+    `- \`${command} hoist <input>\` stores another Markdown, trusted MDX, JSON, or trusted HTML document.`,
     `- \`${command} publish page.html --trusted-html\` deploys trusted HTML with theme tokens and reader controls, preserving its structure.`,
   ].join("\n");
 }

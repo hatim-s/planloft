@@ -213,7 +213,7 @@ export function validateRepositoryContract(): { scenarios: number; skills: strin
   }
 
   const packageJson = readJson("package.json");
-  for (const asset of ["dist", "skills", "themes", "schemas", "templates"]) {
+  for (const asset of ["dist", "skills", "themes", "schemas", "templates/hosting", "templates/collaboration"]) {
     assert.ok(packageJson.files.includes(asset), `npm package must include ${asset}`);
   }
   for (const removed of ["bin", "hooks", ".agents", ".codex-plugin", ".claude-plugin"]) {
@@ -463,7 +463,7 @@ function assertInstalled(entry: InstallerScenario, context: InstallerContext, ex
   }
   if (entry.skill === "planloft-write-doc") {
     assert.match(expected, /scripts\/resolve-planloft-command\.sh/);
-  } else {
+  } else if (entry.skill === "planloft-customise") {
     assert.match(expected, /references\/how-planloft-works\.md/);
     assert.match(expected, /assets\/theme-starter/);
   }

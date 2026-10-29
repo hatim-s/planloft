@@ -4,11 +4,14 @@ Run releases from a clean, up-to-date `main` checkout:
 
 ```bash
 npm login
-bun run release 0.2.5
+bun run release 1.0.0
 ```
 
-Replace `0.2.5` with the version you want to publish. The command accepts stable
+Replace `1.0.0` with the version you want to publish. The command accepts stable
 `major.minor.patch` versions only.
+
+For 1.0.0, run the gates in the [1.0.0 release plan](./releases/1.0.0.md#release-plan)
+first, then `bun run release 1.0.0`. The checkout needs Node.js 22.15.0 or newer.
 
 ## What it checks
 
@@ -22,13 +25,13 @@ After the preflight, it updates `package.json` and runs:
 - TypeScript checks for `src`, release scripts, and their tests
 - one build followed by checks for the CLI version, public exports, application methods,
   and declarations
-- 12 local installer scenarios covering add, list, update, remove, and reinstall
+- 18 local installer scenarios covering add, list, update, remove, and reinstall
 - one npm pack, checks against the actual tarball, a Node consumer import, and an npm
   publish dry run
 
 After those checks pass, the command commits and pushes `main`, publishes the checked
 tarball, verifies its SHA-1, and pushes `v<version>`. It then runs
-12 remote installer scenarios across the latest branch and new tag with four workers.
+18 remote installer scenarios across the latest branch and new tag with four workers.
 
 The command stops before changing `package.json` if npm authentication or the release
 destinations are not ready. It also stops before publication if any test, build,

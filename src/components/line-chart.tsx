@@ -6,10 +6,8 @@ import { ChartFigure, columnHits, drawFrames, requireSeriesCount, seriesColor, u
 import {
   columnLabel,
   ComponentInputError,
-  exactCell,
-  exactNumberFormatter,
   keyList,
-  numberFormatter,
+  resolveFormatting,
   numericCell,
   requireKeys,
   requireRows,
@@ -48,14 +46,13 @@ export function LineChart({ data, x, y, title, caption, labels, area = true, ...
   requireSeriesCount("LineChart", series.length);
 
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
+  const { axis: format, exact } = resolveFormatting("LineChart", formatting);
   const points: Point[] = rows.flatMap((row) =>
     series.map((key) => ({ id: `${key}:${textCell(row, x)}`, x: textCell(row, x), series: key, value: numericCell(row, key) })),
   );
   const categories = rows.map((row) => textCell(row, x));
   if (new Set(categories).size !== categories.length) {
-    throw new ComponentInputError("LineChart", `needs unique categories in column "${x}". Combine repeated categories or give each point a distinct label.`);
+    throw new ComponentInputError("LineChart", `needs unique categories in column "${x}". Combine repeated categories or give each point a distinct label.`, "duplicate_category");
   }
   const hits = (scene: ChartScene) =>
     columnHits(scene, categories, (index) => {
@@ -64,7 +61,7 @@ export function LineChart({ data, x, y, title, caption, labels, area = true, ...
         title: category,
         rows: series.map((key) => {
           const value = points.find((point) => point.x === category && point.series === key)?.value ?? null;
-          return [columnLabel(key, labels), value === null ? "—" : exact(value)];
+          return [columnLabel(key, labels), exact(value)];
         }),
       };
     });
@@ -145,7 +142,7 @@ export function LineChart({ data, x, y, title, caption, labels, area = true, ...
       frames={frames}
       data={{
         columns: [columnLabel(x, labels), ...series.map((key) => columnLabel(key, labels))],
-        rows: rows.map((row) => [textCell(row, x), ...series.map((key) => exactCell(numericCell(row, key)))]),
+        rows: rows.map((row) => [textCell(row, x), ...series.map((key) => exact(numericCell(row, key)))]),
       }}
     />
   );

@@ -1,7 +1,7 @@
-import type { Note, Thread } from '../contracts.js';
-import { describeFailure } from './api.js';
+import { COLLABORATION_LIMITS, type Note, type Thread } from '../contracts.js';
+import { describeFailure, mayHaveSaved } from './api.js';
 import { h, icon, ICONS, time } from './dom.js';
-import type { Delivery, PendingNote, PendingReply, PendingThread, Placement, State } from './state.js';
+import { replySending, type Delivery, type PendingNote, type PendingReply, type PendingThread, type Placement, type State } from './state.js';
 
 /** What the panel can ask the controller to do. These are class methods, so always call them through `actions.`; never pass one as a bare callback. */
 export interface Actions {
@@ -57,6 +57,7 @@ function textarea(props: { key: string; label: string; value: string; placeholde
       class: 'plc-textarea',
       rows: props.rows,
       placeholder: props.placeholder,
+      maxlength: COLLABORATION_LIMITS.bodyCharacters,
       value: props.value,
       'data-focus-key': props.key,
       oninput: (event: Event) => props.onInput((event.target as HTMLTextAreaElement).value),
@@ -91,17 +92,20 @@ const field = (input: HTMLElement[], label: string) =>
   h('div', { class: 'plc-field' }, ...input,
     h('button', { type: 'submit', class: 'plc-send', 'aria-label': label, title: label }, icon(ICONS.send)));
 
-function deliveryLine(delivery: Delivery, noun: string, retry: () => void, edit: () => void): HTMLElement {
+// Edit is offered only for a refusal. Text that may already be saved must be settled by
+// Retry, which resends the same text under the same key.
+function deliveryLine(delivery: Delivery, noun: string, actions: { retry: () => void; edit: () => void; blocked?: boolean }): HTMLElement {
   if (delivery.status === 'sending') return h('p', { class: 'plc-delivery' }, 'Sending…');
   const { failure } = delivery;
-  const message = failure.kind === 'offline'
-    ? `Not ${noun}. You are offline; it will send when you reconnect.`
-    : failure.kind === 'network'
-      ? `Not confirmed. ${describeFailure(failure)} Retrying will not post it twice.`
+  const message = delivery.status === 'unknown'
+    ? `Not confirmed. ${describeFailure(failure)} It may already be ${noun}. Retry checks without ${noun === 'saved' ? 'saving' : 'posting'} it twice${failure.kind === 'offline' ? ', and runs when you reconnect' : ''}.`
+    : failure.kind === 'offline'
+      ? `Not ${noun}. You are offline; it will send when you reconnect.`
       : `Not ${noun}. ${describeFailure(failure)}`;
+  const retry = button('Retry', () => { if (!actions.blocked) actions.retry(); }, 'quiet', { 'aria-disabled': String(actions.blocked ?? false) });
   return h('div', { class: 'plc-delivery plc-delivery-failed' },
     h('p', {}, message),
-    h('div', { class: 'plc-actions' }, button('Retry', retry), button('Edit', edit)));
+    h('div', { class: 'plc-actions' }, retry, delivery.status === 'failed' && button('Edit', actions.edit)));
 }
 
 function banners({ state, actions }: View): HTMLElement[] {
@@ -251,61 +255,69 @@ function threadSummary(view: View, thread: Thread, placement: Placement): HTMLEl
   confirmation ?? h('button', {
     type: 'button', class: 'plc-icon-button plc-summary-delete',
     'aria-label': 'Delete thread', title: 'Delete thread',
-    'data-focus-key': `delete-${thread.id}-thread`, disabled: state.busyThreads.has(thread.id),
+    'data-focus-key': deleteFocusKey(thread.id, null), disabled: state.busyThreads.has(thread.id),
     onclick: () => actions.requestDelete(thread.id, null),
   }, icon(ICONS.trash)));
 }
+
+/** Shared by a Delete trigger and its confirmation's Cancel, so focus moves between them across renders. */
+export const deleteFocusKey = (threadId: string, commentId: string | null) => `delete-${threadId}-${commentId ?? 'thread'}`;
 
 function deleteConfirmation(view: View, threadId: string, commentId: string | null): HTMLElement | null {
   const { state, actions } = view;
   const confirming = state.deleting?.threadId === threadId && state.deleting.commentId === commentId;
   if (!confirming) return null;
   const busy = state.busyThreads.has(threadId);
-  // Cancel shares the trigger's focus key, so cancelling puts focus back on Delete.
-  const focusKey = `delete-${threadId}-${commentId ?? 'thread'}`;
+  const focusKey = deleteFocusKey(threadId, commentId);
   const titleId = `plc-delete-title-${threadId}-${commentId ?? 'thread'}`;
   return h('div', { class: 'plc-delete-confirm', role: 'group', 'aria-labelledby': titleId, 'aria-busy': String(busy) },
     h('div', { class: 'plc-delete-copy' },
       h('p', { id: titleId, class: 'plc-delete-title' }, commentId === null ? 'Delete this thread?' : 'Delete this reply?'),
       h('p', { class: 'plc-delete-description' }, commentId === null ? 'This comment and all replies will be removed.' : 'This reply will be removed.')),
+    // aria-disabled rather than disabled while deleting, so the focused button keeps focus.
     h('div', { class: 'plc-actions' },
-      h('button', { type: 'button', class: 'plc-button plc-button-quiet', disabled: busy, 'data-focus-key': focusKey, onclick: () => actions.cancelDelete() }, 'Cancel'),
-      h('button', { type: 'button', class: 'plc-button plc-button-danger', disabled: busy, 'data-focus-key': 'confirm-delete', onclick: () => actions.confirmDelete() }, busy ? 'Deleting…' : 'Delete')));
+      h('button', { type: 'button', class: 'plc-button plc-button-quiet', 'aria-disabled': String(busy), 'data-focus-key': focusKey, onclick: () => actions.cancelDelete() }, 'Cancel'),
+      h('button', { type: 'button', class: 'plc-button plc-button-danger', 'aria-disabled': String(busy), 'data-focus-key': 'confirm-delete', onclick: () => actions.confirmDelete() }, busy ? 'Deleting…' : 'Delete')));
 }
 
 function deletion(view: View, threadId: string, commentId: string | null): HTMLElement {
   const { state, actions } = view;
   const busy = state.busyThreads.has(threadId);
-  const focusKey = `delete-${threadId}-${commentId ?? 'thread'}`;
   const confirmation = deleteConfirmation(view, threadId, commentId);
   if (confirmation) return confirmation;
-  return h('button', { type: 'button', class: 'plc-delete', disabled: busy, 'aria-label': commentId === null ? 'Delete thread' : 'Delete reply', 'data-focus-key': focusKey, onclick: () => actions.requestDelete(threadId, commentId) }, 'Delete');
+  return h('button', { type: 'button', class: 'plc-delete', disabled: busy, 'aria-label': commentId === null ? 'Delete thread' : 'Delete reply', 'data-focus-key': deleteFocusKey(threadId, commentId), onclick: () => actions.requestDelete(threadId, commentId) }, 'Delete');
 }
 
-// Lives in the popup header. While saving it stays focusable (aria-disabled, not disabled) so focus is not dropped.
+// A thread update waits while it saves or while a reply sends (see replySending).
+const updateBlocked = (state: State, threadId: string) => state.busyThreads.has(threadId) || replySending(state, threadId);
+
+// Lives in the popup header. While blocked it stays focusable (aria-disabled, not disabled) so focus is not dropped.
 function resolveToggle({ state, actions }: View, thread: Thread): HTMLElement {
-  const busy = state.busyThreads.has(thread.id);
+  const blocked = updateBlocked(state, thread.id);
   return h('button', {
     type: 'button',
     class: 'plc-button plc-button-quiet plc-resolve',
     'data-resolved': String(thread.resolved),
-    'aria-disabled': String(busy),
+    'aria-disabled': String(blocked),
     'data-focus-key': `resolve-${thread.id}`,
-    onclick: () => { if (!busy) actions.setResolved(thread.id, !thread.resolved); },
-  }, icon(thread.resolved ? ICONS.reopen : ICONS.check), busy ? 'Saving…' : thread.resolved ? 'Reopen' : 'Resolve');
+    title: replySending(state, thread.id) ? 'Available once the reply has sent' : undefined,
+    onclick: () => { if (!blocked) actions.setResolved(thread.id, !thread.resolved); },
+  }, icon(thread.resolved ? ICONS.reopen : ICONS.check), state.busyThreads.has(thread.id) ? 'Saving…' : thread.resolved ? 'Reopen' : 'Resolve');
 }
 
-function placementNote({ actions }: View, thread: Thread, placement: Placement): HTMLElement | null {
+function placementNote({ state, actions }: View, thread: Thread, placement: Placement): HTMLElement | null {
   if (thread.resolved) return null;
+  const blocked = { 'aria-disabled': String(updateBlocked(state, thread.id)) };
+  const reattach = button('Attach to other text', () => actions.startReattach(thread.id), 'quiet', blocked);
   if (placement.status === 'approximate') {
     return h('div', { class: 'plc-placement' },
       h('p', {}, 'The quoted text has changed. This comment now points at the closest match: ', h('q', { class: 'plc-current' }, placement.current)),
-      h('div', { class: 'plc-actions' }, button('Keep it here', () => actions.keepPlacement(thread.id)), button('Attach to other text', () => actions.startReattach(thread.id))));
+      h('div', { class: 'plc-actions' }, button('Keep it here', () => actions.keepPlacement(thread.id), 'quiet', blocked), reattach));
   }
   if (placement.status === 'unattached') {
     return h('div', { class: 'plc-placement' },
       h('p', {}, 'The quoted text is no longer in the document.'),
-      h('div', { class: 'plc-actions' }, button('Attach to other text', () => actions.startReattach(thread.id))));
+      h('div', { class: 'plc-actions' }, reattach));
   }
   return null;
 }
@@ -343,13 +355,13 @@ function pendingThreadCard({ actions }: View, pending: PendingThread): HTMLEleme
   return h('article', { class: 'plc-thread', 'data-delivery': pending.delivery.status },
     pending.anchor ? h('div', { class: 'plc-quote-detached' }, quote(pending.anchor.quote)) : h('p', { class: 'plc-scope' }, 'Whole document'),
     h('ol', { class: 'plc-comments' }, h('li', { class: 'plc-comment' }, body(pending.body))),
-    deliveryLine(pending.delivery, 'posted', () => actions.retryThread(pending.key), () => actions.editThread(pending.key)));
+    deliveryLine(pending.delivery, 'posted', { retry: () => actions.retryThread(pending.key), edit: () => actions.editThread(pending.key) }));
 }
 
-function pendingReply({ actions }: View, reply: PendingReply): HTMLElement {
+function pendingReply({ state, actions }: View, reply: PendingReply): HTMLElement {
   return h('li', { class: 'plc-comment', 'data-delivery': reply.delivery.status },
     body(reply.body),
-    deliveryLine(reply.delivery, 'posted', () => actions.retryReply(reply.key), () => actions.editReply(reply.key)));
+    deliveryLine(reply.delivery, 'posted', { retry: () => actions.retryReply(reply.key), edit: () => actions.editReply(reply.key), blocked: state.busyThreads.has(reply.threadId) }));
 }
 
 // Notes
@@ -369,7 +381,7 @@ function notes(view: View): HTMLElement[] {
 function pendingNoteCard({ actions }: View, pending: PendingNote): HTMLElement {
   return h('article', { class: 'plc-note', 'data-delivery': pending.delivery.status },
     body(pending.body),
-    deliveryLine(pending.delivery, 'saved', () => actions.retryNote(pending.key), () => actions.editPendingNote(pending.key)));
+    deliveryLine(pending.delivery, 'saved', { retry: () => actions.retryNote(pending.key), edit: () => actions.editPendingNote(pending.key) }));
 }
 
 function noteCard({ state, actions }: View, note: Note): HTMLElement {
@@ -394,9 +406,11 @@ function noteCard({ state, actions }: View, note: Note): HTMLElement {
           button('Save my version', () => actions.overwriteNote(note.id), 'primary'),
           button('Use their version', () => actions.takeTheirs(note.id)))),
       edit.failure && h('p', { class: 'plc-delivery plc-delivery-failed' },
-        edit.failure.kind === 'network'
-          ? `Not confirmed. ${describeFailure(edit.failure)} Save again to check.`
-          : `Not saved. ${describeFailure(edit.failure)}`),
+        edit.failure.kind === 'blank'
+          ? 'A note needs some text. Write something, or choose Cancel to keep the saved version.'
+          : mayHaveSaved(edit.failure)
+            ? `Not confirmed. ${describeFailure(edit.failure)} Save again to check.`
+            : `Not saved. ${describeFailure(edit.failure)}`),
       !conflict && h('div', { class: 'plc-actions' },
         h('button', { type: 'submit', class: 'plc-button plc-button-primary', 'aria-disabled': String(edit.saving) }, edit.saving ? 'Saving…' : 'Save'),
         button('Cancel', () => actions.cancelNoteEdit(note.id)))));

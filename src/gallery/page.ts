@@ -329,10 +329,11 @@ code { font: 0.9em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 // Links work without this script: each targets the preview frame by name. The script
 // adds what plain links cannot: current-page marking and the appearance, page-width
-// and device controls, which stay hidden until it runs. Appearance and page width
-// press the previewed page's own controls, so the preview shows exactly what a reader
-// gets; an authored HTML page has the colour control but no width control, and the
-// width button then has nothing to press.
+// and device controls, which stay hidden until it runs. Page width presses the
+// previewed page's own control, so the preview shows exactly what a reader gets; an
+// authored HTML page has no width control, and the width button then has nothing to
+// press. Appearance is a preview-only choice: pressing the page's colour control would
+// save it for every page on this origin, including the documents the gallery links to.
 const GALLERY_SCRIPT = `
 (() => {
   const frame = document.querySelector('iframe[name="g-preview"]');
@@ -354,9 +355,10 @@ const GALLERY_SCRIPT = `
     }
     open.href = link.href;
   };
-  // Same-origin previews get the page's own controls pressed, so the page and its
-  // toggles agree. A file:// preview is cross-origin; it follows the frame's colour
-  // scheme and keeps the width the page last stored.
+  // Same-origin previews get the page's own width control pressed and its colour
+  // attribute set, so the page and its toggles agree. A file:// preview is
+  // cross-origin; it follows the frame's colour scheme and keeps the width the page
+  // last stored.
   const press = (selector) => {
     try {
       const option = frame.contentDocument?.querySelector(selector);
@@ -365,7 +367,15 @@ const GALLERY_SCRIPT = `
   };
   const applyScheme = () => {
     frame.style.colorScheme = scheme === "system" ? "" : scheme;
-    press('[data-planloft-theme-option="' + scheme + '"]');
+    try {
+      const page = frame.contentDocument;
+      if (!page) return;
+      if (scheme === "system") delete page.documentElement.dataset.planloftColorScheme;
+      else page.documentElement.dataset.planloftColorScheme = scheme;
+      for (const option of page.querySelectorAll("[data-planloft-theme-option]")) {
+        option.setAttribute("aria-pressed", String(option.dataset.planloftThemeOption === scheme));
+      }
+    } catch {}
   };
   const applyLayout = () => press('[data-planloft-layout-option="' + layout + '"]');
   // A freshly loaded page shows the width its reader last chose, and the reader can
@@ -394,9 +404,12 @@ const GALLERY_SCRIPT = `
     select(link);
     if (link.closest(".g-cards")) viewer.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
+  const showScheme = () => {
+    for (const button of document.querySelectorAll("[data-scheme]")) button.setAttribute("aria-pressed", String(button.dataset.scheme === scheme));
+  };
   for (const button of document.querySelectorAll("[data-scheme]")) button.addEventListener("click", () => {
     scheme = button.dataset.scheme;
-    for (const other of document.querySelectorAll("[data-scheme]")) other.setAttribute("aria-pressed", String(other === button));
+    showScheme();
     applyScheme();
   });
   for (const button of document.querySelectorAll("[data-layout]")) button.addEventListener("click", () => {
@@ -415,6 +428,13 @@ const GALLERY_SCRIPT = `
     try {
       frame.contentDocument?.addEventListener("click", (event) => {
         if (event.target.closest?.("[data-planloft-layout-option]")) syncLayout();
+        // The reader chose a colour inside the page, which the page saves as usual.
+        const option = event.target.closest?.("[data-planloft-theme-option]");
+        if (option) {
+          scheme = option.dataset.planloftThemeOption;
+          showScheme();
+          applyScheme();
+        }
       });
     } catch {}
   });

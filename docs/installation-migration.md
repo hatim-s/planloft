@@ -1,6 +1,12 @@
 # Migrate an existing Planloft installation
 
-Planloft 0.2.3 replaces the short portable skill names with
+This guide upgrades an older installation to Planloft 1.0.0. Read the
+[1.0.0 release notes](./releases/1.0.0.md) first: they list the breaking changes and
+the backups to take before upgrading. Version 1.0.0 is prepared in the repository but
+is not on npm until the maintainer publishes it, so `planloft@1.0.0` does not resolve
+before then.
+
+Since 0.2.3, the portable skill names are
 `planloft-write-doc` and `planloft-customise`. Codex keeps the product labels
 `planloft:write-doc` and `planloft:customise`; Claude Code and other Agent Skills hosts
 use the new hyphenated names. Follow these steps once for every machine or project that
@@ -44,7 +50,7 @@ Do not delete the parent skills directory or the new `planloft-write-doc` and
 ## 2. Remove a retired host installation
 
 Older Planloft releases could be installed as a Codex or Claude host bundle. Planloft
-0.2.3 does not ship that product. If you used it, remove it before restarting the
+has not shipped that product since 0.2.3. If you used it, remove it before restarting the
 host so the retired skills and automatic lifecycle behavior do not remain active:
 
 ```bash
@@ -56,21 +62,22 @@ claude plugin uninstall planloft@planloft
 ```
 
 Expected: the host no longer lists a Planloft plugin. There is no replacement host
-bundle in 0.2.3; install the CLI and focused portable skills in the next steps.
+bundle; install the CLI and focused portable skills in the next steps.
 
 ## 3. Upgrade the CLI
 
-Choose the package manager you use:
+Planloft 1.0.0 requires Node.js 22.15.0 or newer, or Bun 1.4 or newer. Check with
+`node --version` first. Then choose the package manager you use:
 
 ```bash
-npm install -g planloft@0.2.3
-# or: pnpm add -g planloft@0.2.3
-# or: bun add -g planloft@0.2.3
+npm install -g planloft@1.0.0
+# or: pnpm add -g planloft@1.0.0
+# or: bun add -g planloft@1.0.0
 
 planloft --version
 ```
 
-Expected: `planloft --version` prints `0.2.3`.
+Expected: `planloft --version` prints `1.0.0`.
 
 ## 4. Install the focused skills
 
@@ -146,10 +153,21 @@ public repository, then configure all four values:
 ## 8. Update Node callers, if any
 
 Applications that need the complete CLI-equivalent interface should use the async
-`createPlanloftApplication()` API and handle `PlanloftApplicationError` codes.
+`createPlanloftApplication()` API and handle `PlanloftApplicationError` codes. In
+1.0.0 every operation on that application object, including MDX render, hoist,
+publish, and `migrate`, throws only `PlanloftApplicationError`. MDX and migration
+problems arrive as its `diagnosticCode` (`MDX_*` or `PLANLOFT_MIGRATION_*`). When
+Planloft knows them, the error also carries a source `location` (line, and column and
+file when available), the built-in `component` name, a `reason` from a closed list of
+component-input reasons, and whether the failing file was `imported`. That guarantee covers `createPlanloftApplication()` only.
+Lower-level exports such as `compileMdx`, `prepareDocument`, and `renderMdxDocument`
+can still throw `MdxAuthoringError` and other module errors.
 
 The focused package-root exports `ingestDocument`, `hoistDocument`, and
-`renderDocument` remain available. Direct imports from the old `src/commands/*`
+`renderDocument` remain available. `hoistDocument` takes a prepared document: call
+`prepareDocument(document, { sourcePath, projectRoot })` first, which compiles MDX
+and checks HTML before anything is stored. `RenderOptions` no longer accepts
+`bodyHtml` or `extraStyles`. Direct imports from the old `src/commands/*`
 implementation must be replaced rather than adding backward-compatibility shims.
 
 ## 9. Verify the migration
@@ -160,7 +178,7 @@ planloft init
 planloft list
 ```
 
-Expected: the version is `0.2.3`, configuration validation succeeds, and existing
+Expected: the version is `1.0.0`, configuration validation succeeds, and existing
 documents are listed. Finally, create a small test plan with `planloft-write-doc` and preview it
 with `planloft preview [slug]`.
 
@@ -173,7 +191,13 @@ the expected bytes; they are never replaced. If the destination matches but the
 backup is absent, a dry run reports `dry-run-backup` and a write creates the backup
 and reports `backup-created`. Repeated runs with matching destination and backup
 are unchanged. The converter preserves frontmatter, code and common GFM syntax, including
-tables, links, strikethrough and task lists. It checks MDX syntax without executing it.
+tables, links, strikethrough and task lists. Indented code blocks become fenced code
+blocks, including inside lists and blockquotes, because MDX does not treat indentation
+as code. If tab indentation makes the block's container ambiguous, the code itself
+contains tabs that would have to be kept, or list-contained code has ambiguous trailing
+whitespace, migration stops before writing the backup or
+destination and reports the original line and column. Fence that block by hand and run
+the migration again. It checks MDX syntax without executing it.
 Raw HTML, including scripts and comments, requires review at the reported location.
 Keep layout and scripts in HTML when their behavior matters, or replace static markup
 with equivalent Markdown or a reviewed component before migration. Existing `.html`

@@ -27,7 +27,16 @@ export interface IngestOptions {
   trustedMdx?: boolean;
 }
 
+export class DocumentTrustError extends Error {
+  constructor(readonly code: "PLANLOFT_TRUSTED_MDX_REQUIRED" | "PLANLOFT_TRUSTED_HTML_REQUIRED") {
+    super(code === "PLANLOFT_TRUSTED_MDX_REQUIRED" ? "MDX executes code. Pass --trusted-mdx only for content you trust." : "HTML input is disabled by default. Enable trusted HTML only for content you trust.");
+    this.name = "DocumentTrustError";
+  }
+}
+
 /** Normalize Markdown, JSON, or trusted HTML into one canonical document. */
+export function ingestDocument<Format extends PlanFormat>(raw: string, options: IngestOptions & { format: Format }): CanonicalDocument<Format>;
+export function ingestDocument(raw: string, options: IngestOptions): CanonicalDocument;
 export function ingestDocument(raw: string, options: IngestOptions): CanonicalDocument {
   const sourceName = options.sourceName ? path.basename(options.sourceName) : "document";
   const fallbackSlug = sourceName.replace(/\.(md|mdx|markdown|html?|json)$/i, "");
@@ -37,13 +46,11 @@ export function ingestDocument(raw: string, options: IngestOptions): CanonicalDo
   }
 
   if (options.format === "html" && !options.trustedHtml) {
-    throw new Error(
-      "HTML input is disabled by default. Pass the trusted-HTML option only for content you trust.",
-    );
+    throw new DocumentTrustError("PLANLOFT_TRUSTED_HTML_REQUIRED");
   }
 
   if (options.format === "mdx" && !options.trustedMdx) {
-    throw new Error("MDX executes code. Pass --trusted-mdx only for content you trust.");
+    throw new DocumentTrustError("PLANLOFT_TRUSTED_MDX_REQUIRED");
   }
 
   const parsed = options.format === "md" || options.format === "mdx" ? fm.parse(raw) : { data: {}, content: raw };
@@ -113,12 +120,10 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
     throw new Error('"contentFormat" must be "md", "mdx", or "html".');
   }
   if (contentFormat === "mdx" && !options.trustedMdx) {
-    throw new Error("MDX executes code. Pass --trusted-mdx only for content you trust.");
+    throw new DocumentTrustError("PLANLOFT_TRUSTED_MDX_REQUIRED");
   }
   if (contentFormat === "html" && !options.trustedHtml) {
-    throw new Error(
-      "JSON HTML content is disabled by default. Pass the trusted-HTML option only for content you trust.",
-    );
+    throw new DocumentTrustError("PLANLOFT_TRUSTED_HTML_REQUIRED");
   }
 
   const document = canonical({
@@ -164,6 +169,7 @@ function canonical(input: {
     status: merged.status ?? "active",
     contentFormat: input.contentFormat,
     content: input.content,
+    sourceLineOffset: null,
     trustedHtml: input.trustedHtml,
   };
 }

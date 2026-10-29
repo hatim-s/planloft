@@ -36,7 +36,8 @@ help until they are actually supported.
 
 Maintainers publish with the single command documented in the [release
 guide](./releasing.md). It updates the version, runs the release checks, pushes `main`,
-publishes to npm, tags the commit, and verifies the remote skills.
+publishes to npm, tags the commit, and verifies the remote skills. Release notes and
+per-version release plans live in [`releases/`](./releases/1.0.0.md).
 
 ### Local or generated surface
 
@@ -82,7 +83,12 @@ than merely inspecting tar entries:
 
 ```bash
 bun scripts/validate-packed-package.ts /path/to/planloft-<version>.tgz
+bun scripts/validate-packed-package.ts /path/to/planloft-<version>.tgz --minimum-node
 ```
+
+Both install the tarball's production dependencies in a disposable directory and check
+a JavaScript and TypeScript consumer. The first accepts any stable Node 22.15.0 or
+newer. `--minimum-node` requires exactly Node v22.15.0 on `PATH`.
 
 After a release, start fresh Codex, Claude Code, and Pi sessions and confirm the
 host-specific names in [setup](./setup.md) are visible. Agent discovery has no stable

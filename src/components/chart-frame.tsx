@@ -21,6 +21,7 @@ export function requireSeriesCount(component: string, count: number): void {
     throw new ComponentInputError(
       component,
       `plots ${count} series; the limit is ${SERIES_LIMIT}. Fold the smallest into an "Other" series or split the chart.`,
+      "series_limit",
     );
   }
 }
@@ -59,7 +60,9 @@ interface DrawOptions {
 export function drawScene(scene: ChartScene, { hits, ...options }: DrawOptions): string {
   const markup = renderChartSvg(scene, { ...options, tabIndex: -1 });
   if (!hits || hits.items.length === 0) return markup;
-  const layer = hits.items.map((hit) => hitMarkup(hit, hits.expose)).join("");
+  // One tab stop per drawing: the first hit takes Tab and the tooltip script moves
+  // focus between hits with the arrow keys, Home and End.
+  const layer = hits.items.map((hit, index) => hitMarkup(hit, hits.expose && (index === 0 ? 0 : -1))).join("");
   const group = hits.expose
     ? `<g class="pl-chart__hits" role="list" data-planloft-ignore>`
     : `<g class="pl-chart__hits" aria-hidden="true" data-planloft-ignore>`;
@@ -89,9 +92,9 @@ export function drawFrames(
   });
 }
 
-function hitMarkup(hit: Hit, expose: boolean): string {
+function hitMarkup(hit: Hit, tabIndex: 0 | -1 | false): string {
   const text = [hit.title, ...hit.rows.map(([label, value]) => `${label}: ${value}`)].join("\n");
-  const shared = `${expose ? ' role="listitem" tabindex="0"' : ""}${hit.color ? ` data-pl-color="${escapeXml(hit.color)}"` : ""}`;
+  const shared = `${tabIndex === false ? "" : ` role="listitem" tabindex="${tabIndex}"`}${hit.color ? ` data-pl-color="${escapeXml(hit.color)}"` : ""}`;
   const title = `<title>${escapeXml(text)}</title>`;
   if (hit.shape === "path") {
     return `<path class="pl-hit" d="${escapeXml(hit.d)}" transform="translate(${round(hit.translate[0])},${round(hit.translate[1])})"${shared}>${title}</path>`;

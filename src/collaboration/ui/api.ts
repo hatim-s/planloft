@@ -2,8 +2,8 @@ import type { CollaborationConfig, CollaborationState, Comment, Note, Task, Text
 import { InvalidResponse, parse } from './parse.js';
 
 /**
- * Why a request did not produce the value. `network` means the request may or may not
- * have reached the server; creation retries reuse the same idempotency key for that reason.
+ * Why a request did not produce the value. `offline` means it was never sent. `network`
+ * means it was sent and no response arrived, so it may or may not have reached the server.
  */
 export type Failure<T = never> =
   | { kind: 'offline' }
@@ -43,7 +43,8 @@ export function createApi(config: CollaborationConfig) {
         cache: 'no-store',
       });
     } catch {
-      return { ok: false, failure: { kind: navigator.onLine ? 'network' : 'offline' } };
+      // Sent, even if the reader has gone offline since, so it may have been saved.
+      return { ok: false, failure: { kind: 'network' } };
     }
     let body: unknown = null;
     try {
@@ -90,6 +91,14 @@ export function createApi(config: CollaborationConfig) {
 
 export type Api = ReturnType<typeof createApi>;
 
+/**
+ * Whether the server may have applied the change despite the failure: nothing came back,
+ * a success response could not be read, or the server failed partway.
+ */
+export function mayHaveSaved(failure: Failure<unknown>): boolean {
+  return failure.kind === 'network' || failure.kind === 'invalid' || (failure.kind === 'status' && failure.status >= 500);
+}
+
 /** Reader-facing explanation of a failure. */
 export function describeFailure(failure: Failure<unknown>): string {
   switch (failure.kind) {
@@ -98,6 +107,7 @@ export function describeFailure(failure: Failure<unknown>): string {
     case 'conflict': return 'Someone else changed this first.';
     case 'invalid': return 'The comment server sent a response this page cannot read.';
     case 'status':
+      if (failure.code === 'capacity_exceeded') return 'This document has reached its limit for comments, notes or tasks.';
       if (failure.status === 410) return 'This comment was deleted.';
       if (failure.status === 404) return 'Comments are not set up for this document.';
       if (failure.status === 413) return 'That is too long to save.';

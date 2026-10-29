@@ -1,4 +1,4 @@
-import { barY, createChartScene, defineChart, text, waterfall, type ChartScene } from "@tanstack/charts";
+import { barY, createChartScene, defineChart, text, type ChartScene } from "@tanstack/charts";
 import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import type { ReactNode } from "react";
@@ -6,9 +6,8 @@ import { ChartFigure, drawFrames, markHits, useChartId, type Frame } from "./cha
 import {
   columnLabel,
   ComponentInputError,
-  exactCell,
-  exactNumberFormatter,
-  numberFormatter,
+  DecimalSum,
+  resolveFormatting,
   numericCell,
   requireKeys,
   requireRows,
@@ -53,30 +52,31 @@ export function WaterfallChart({
   requireKeys("WaterfallChart", rows, [label, value]);
 
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
+  const { axis: format, exact } = resolveFormatting("WaterfallChart", formatting);
   const signed = (amount: number) => (amount > 0 ? `+${format(amount)}` : format(amount));
-  const steps = waterfall(
-    rows.map((row, index) => {
-      const amount = numericCell(row, value);
-      if (amount === null) {
-        throw new ComponentInputError("WaterfallChart", `needs a numeric value for "${value}" in row ${index + 1}.`);
-      }
-      return { step: textCell(row, label), amount };
-    }),
-    { value: "amount", total: total !== false },
-  ).map((step, index) => {
-    // An opening balance and the appended total are both levels, not changes.
-    const kind = opening && index === 0 ? "total" : step.kind;
-    return {
-      ...step,
-      kind,
-      // The transform appends the total row without a step name; give it the chart's.
-      step: step.kind === "total" ? String(total) : step.step,
-      color: KIND_COLOR[kind],
-    };
+  const sum = new DecimalSum();
+  let cursor = 0;
+  const steps = rows.map((row, index) => {
+    const amount = numericCell(row, value);
+    if (amount === null) {
+      throw new ComponentInputError("WaterfallChart", `needs a numeric value for "${value}" in row ${index + 1}.`, "invalid_value");
+    }
+    const start = cursor;
+    const end = sum.add(amount);
+    if (!Number.isFinite(end)) {
+      throw new ComponentInputError("WaterfallChart", "needs finite running totals.", "invalid_value");
+    }
+    cursor = end;
+    const kind = opening && index === 0 ? "total" : amount >= 0 ? "increase" : "decrease";
+    return { step: textCell(row, label), delta: amount, start, end, kind, color: KIND_COLOR[kind] } as const;
   });
+  if (total !== false) {
+    steps.push({ step: total, delta: cursor, start: 0, end: cursor, kind: "total", color: KIND_COLOR.total });
+  }
   const categories = steps.map((step) => step.step);
+  if (new Set(categories).size !== categories.length) {
+    throw new ComponentInputError("WaterfallChart", "needs unique step labels, including the closing total label.", "duplicate_category");
+  }
   const kinds = [...new Set(steps.map((step) => step.kind))];
   const hits = (scene: ChartScene) =>
     markHits(scene, (index) => {
@@ -140,7 +140,7 @@ export function WaterfallChart({
       frames={frames}
       data={{
         columns: [columnLabel(label, undefined), "Change", "Running total"],
-        rows: steps.map((step) => [step.step, step.kind === "total" ? "" : `${step.delta > 0 ? "+" : ""}${exactCell(step.delta)}`, exactCell(step.end)]),
+        rows: steps.map((step) => [step.step, step.kind === "total" ? "" : `${step.delta > 0 ? "+" : ""}${exact(step.delta)}`, exact(step.end)]),
       }}
     />
   );

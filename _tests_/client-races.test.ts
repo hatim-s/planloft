@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 import type { Note, Task } from '../src/collaboration/contracts.js';
-import type { Result } from '../src/collaboration/ui/api.js';
+import { migrate, sqliteDatabase } from '../src/collaboration/database.js';
+import { createCollaborationService } from '../src/collaboration/service.js';
+import { createApi, idempotencyKey, type Result } from '../src/collaboration/ui/api.js';
+import { changesContent } from '../src/collaboration/ui/dom-text.js';
 import { NoteEditing } from '../src/collaboration/ui/notes.js';
-import type { NoteEdit, Notice } from '../src/collaboration/ui/state.js';
+import { parse } from '../src/collaboration/ui/parse.js';
+import { deliver, replySending, type Delivery, type NoteEdit, type Notice, type PendingNote, type PendingReply, type PendingThread } from '../src/collaboration/ui/state.js';
 import { TaskSaves } from '../src/collaboration/ui/task-saves.js';
 
 // Requests whose responses the test releases one at a time, in any order.
@@ -164,4 +169,137 @@ test('a current task retry resends its original version so a newer server change
   await settle();
   assert.deepEqual(state.tasks.get('t'), { key: 't', checked: false, version: 6 });
   assert.match([...notices.values()].at(-1)!.message, /Someone else changed “Task” first/);
+});
+
+test('a blank note edit is held in the editor and never sent', async () => {
+  const original: Note = { id: 'n', body: 'original', version: 1, createdAt: 't0', updatedAt: 't0' };
+  const state = { notes: [original], noteEdits: new Map<string, NoteEdit>() };
+  const requests = controlled<Result<Note, Note>>();
+  const editing = new NoteEditing({ state, api: { updateNote: requests.call }, render: () => {}, announce: () => {}, notify: () => 0 });
+  editing.begin('n');
+  editing.setDraft('n', '  \n ');
+  await editing.save('n');
+  assert.equal(requests.pending.length, 0);
+  assert.deepEqual(state.noteEdits.get('n')?.failure, { kind: 'blank' });
+  assert.equal(state.notes[0]!.body, 'original');
+});
+
+// The real service on SQLite behind the real client transport. `respond` decides what the
+// client sees for each request after the service has handled it, or instead of calling it.
+async function creationHarness() {
+  const sqlite = new DatabaseSync(':memory:');
+  sqlite.exec('PRAGMA foreign_keys = ON');
+  const db = sqliteDatabase(sqlite);
+  await migrate(db);
+  const service = createCollaborationService(db, 'secret');
+  await service(new Request('http://local/documents/doc', { method: 'PUT', headers: { Authorization: 'Bearer secret' }, body: JSON.stringify({ revision: '1' }) }));
+  type Outcome = 'deliver' | 'lose' | 'unreadable' | 'server-error' | 'refuse' | 'offline';
+  const outcomes: Outcome[] = [];
+  let online = true;
+  Object.defineProperty(globalThis.navigator, 'onLine', { configurable: true, get: () => online });
+  globalThis.fetch = async (input, init) => {
+    const outcome = outcomes.shift() ?? 'deliver';
+    if (outcome === 'refuse') return new Response(JSON.stringify({ error: 'invalid_request' }), { status: 400 });
+    const response = await service(new Request(input, init));
+    if (outcome === 'lose') throw new TypeError('Failed to fetch');
+    if (outcome === 'unreadable') return new Response('<html>proxy page</html>', { status: 201 });
+    if (outcome === 'server-error') return new Response(JSON.stringify({ error: 'internal' }), { status: 503 });
+    return response;
+  };
+  const api = createApi({ documentId: 'doc', revision: '1', apiUrl: 'http://local' });
+  const send = async <T>(pending: { delivery: Delivery }, next: Outcome, request: () => Promise<Result<T>>) => {
+    online = next !== 'offline';
+    if (next !== 'offline') outcomes.push(next);
+    const value = await deliver(pending, request);
+    online = true;
+    return value;
+  };
+  const state = async () => parse.state(await (await service(new Request('http://local/documents/doc/state'))).json());
+  return { api, send, state, close: () => sqlite.close() };
+}
+
+test('a creation that may have been saved stays unknown until a retry with its original key settles it', async () => {
+  const { api, send, state, close } = await creationHarness();
+  try {
+    const thread: PendingThread = { key: idempotencyKey(), body: 'Original comment', anchor: null, delivery: { status: 'sending' } };
+    const post = () => api.createThread(thread.body, thread.anchor, thread.key);
+    // The server saves it, but the response is lost: Edit would post a second copy.
+    assert.equal(await send(thread, 'lose', post), null);
+    assert.equal(thread.delivery.status, 'unknown');
+    assert.equal((await state()).threads.length, 1);
+    // A retry that never leaves the browser cannot make the outcome certain.
+    assert.equal(await send(thread, 'offline', post), null);
+    assert.deepEqual(thread.delivery, { status: 'unknown', failure: { kind: 'offline' } });
+    // Unreadable successes and server failures may also have saved.
+    assert.equal(await send(thread, 'unreadable', post), null);
+    assert.equal(thread.delivery.status, 'unknown');
+    assert.equal(await send(thread, 'server-error', post), null);
+    assert.equal(thread.delivery.status, 'unknown');
+    const saved = await send(thread, 'deliver', post);
+    assert.deepEqual((await state()).threads.map(item => [item.id, item.body]), [[saved?.id, 'Original comment']]);
+
+    const reply: PendingReply = { key: idempotencyKey(), threadId: saved!.id, body: 'Original reply', delivery: { status: 'sending' } };
+    const postReply = () => api.reply(reply.threadId, reply.body, reply.key);
+    const held = send(reply, 'server-error', postReply);
+    // A thread update waits while the reply sends, so its reply list cannot be stale.
+    assert.equal(replySending({ pendingReplies: [reply] }, reply.threadId), true);
+    assert.equal(await held, null);
+    assert.equal(replySending({ pendingReplies: [reply] }, reply.threadId), false);
+    assert.equal(reply.delivery.status, 'unknown');
+    const savedReply = await send(reply, 'deliver', postReply);
+    assert.deepEqual((await state()).threads[0]!.comments.map(item => [item.id, item.body]), [[savedReply?.id, 'Original reply']]);
+
+    const note: PendingNote = { key: idempotencyKey(), body: 'Original note', delivery: { status: 'sending' } };
+    const postNote = () => api.createNote(note.body, note.key);
+    assert.equal(await send(note, 'lose', postNote), null);
+    assert.equal(note.delivery.status, 'unknown');
+    await send(note, 'deliver', postNote);
+    assert.deepEqual((await state()).notes.map(item => item.body), ['Original note']);
+  } finally { close(); }
+});
+
+test('only a creation the server refused, or one never sent, can go back to the composer', async () => {
+  const { api, send, state, close } = await creationHarness();
+  try {
+    const refused: PendingNote = { key: idempotencyKey(), body: 'Refused note', delivery: { status: 'sending' } };
+    assert.equal(await send(refused, 'refuse', () => api.createNote(refused.body, refused.key)), null);
+    assert.equal(refused.delivery.status, 'failed');
+    const unsent: PendingNote = { key: idempotencyKey(), body: 'Unsent note', delivery: { status: 'sending' } };
+    assert.equal(await send(unsent, 'offline', () => api.createNote(unsent.body, unsent.key)), null);
+    assert.deepEqual(unsent.delivery, { status: 'failed', failure: { kind: 'offline' } });
+    assert.deepEqual((await state()).notes, []);
+  } finally { close(); }
+});
+
+// Minimal element tree for the mutation filter, matching attribute selectors the way the DOM does.
+class FakeElement {
+  constructor(readonly attributes: string[], readonly parentElement: FakeElement | null = null) {}
+  matches(selectors: string): boolean {
+    return selectors.split(',').some(selector => {
+      const attribute = /^\s*\[([\w-]+)\]\s*$/.exec(selector)?.[1];
+      return attribute !== undefined && this.attributes.includes(attribute);
+    });
+  }
+  closest(selectors: string): FakeElement | null {
+    return this.matches(selectors) ? this : this.parentElement?.closest(selectors) ?? null;
+  }
+}
+
+test('layout ignores tooltip and runtime mutations but not content changes mixed in with them', () => {
+  Object.assign(globalThis, { Element: FakeElement });
+  const body = new FakeElement([]);
+  const paragraph = new FakeElement([], body);
+  const tip = new FakeElement(['data-planloft-ignore'], body);
+  const panel = new FakeElement([], new FakeElement(['data-planloft-collaboration'], body));
+  const text = (parent: FakeElement) => ({ parentElement: parent });
+  const record = (type: MutationRecordType, target: unknown, added: unknown[] = [], removed: unknown[] = []) =>
+    ({ type, target, addedNodes: added, removedNodes: removed }) as unknown as MutationRecord;
+  // The first tooltip append is recorded on the body.
+  assert.equal(changesContent(record('childList', body, [tip])), false);
+  assert.equal(changesContent(record('childList', tip, [text(tip)], [text(tip)])), false);
+  assert.equal(changesContent(record('characterData', text(tip))), false);
+  assert.equal(changesContent(record('childList', panel, [new FakeElement([], panel)])), false);
+  assert.equal(changesContent(record('childList', body, [tip, paragraph])), true);
+  assert.equal(changesContent(record('childList', body, [], [paragraph])), true);
+  assert.equal(changesContent(record('characterData', text(paragraph))), true);
 });

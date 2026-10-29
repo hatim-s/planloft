@@ -83,9 +83,61 @@ function convertMarkdown(raw: string): string {
   const body = matter(raw).content;
   if (!raw.endsWith(body)) throw new MigrationError('INVALID_SOURCE', 'Cannot preserve frontmatter exactly; review the document manually.');
   const prefix = raw.slice(0, raw.length - body.length);
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(body);
+  const parser = unified().use(remarkParse).use(remarkGfm);
+  const tree = parser.parse(body);
   const edits: { start: number; end: number; value: string }[] = [];
   const lineOffset = (prefix.match(/\n/g) ?? []).length;
+  const listCode = new WeakSet<object>();
+  visit(tree, 'list', list => {
+    visit(list, 'code', node => { listCode.add(node); });
+    return SKIP;
+  });
+  visit(tree, 'code', node => {
+    const start = node.position?.start;
+    const end = node.position?.end;
+    if (start?.offset === undefined || end?.offset === undefined) {
+      throw new MigrationError('INVALID_SOURCE', 'Markdown parser did not provide a source location.');
+    }
+    if (/^(?:`{3,}|~{3,})/.test(body.slice(start.offset, end.offset))) return;
+    // Marked trims terminal list-item whitespace; remark preserves it in code.
+    if (listCode.has(node) && /\s$/.test(node.value)) {
+      throw new MigrationError('UNSUPPORTED_CONTENT', `Indented code at line ${start.line + lineOffset}, column ${start.column} needs manual conversion; trailing whitespace inside list code renders differently in Markdown and MDX.`);
+    }
+    const lineStart = body.lastIndexOf('\n', start.offset - 1) + 1;
+    const container = body.slice(lineStart, start.offset);
+    // A list marker opens the block only once; subsequent lines need its indentation.
+    const continuation = container.replace(/(?:[*+-]|\d+[.)])(?=[ \t])/g, marker => ' '.repeat(marker.length));
+    if (!/^[ >]*$/.test(continuation)) {
+      throw new MigrationError('UNSUPPORTED_CONTENT', `Indented code at line ${start.line + lineOffset}, column ${start.column} needs manual conversion; its container indentation cannot be preserved safely.`);
+    }
+    if (node.value.includes('\t')) {
+      throw new MigrationError('UNSUPPORTED_CONTENT', `Indented code at line ${start.line + lineOffset}, column ${start.column} needs manual conversion; tab characters inside code render differently in Markdown and MDX.`);
+    }
+    const runs = node.value.match(/`+/g) ?? [];
+    const fence = '`'.repeat(runs.reduce((length, run) => Math.max(length, run.length + 1), 3));
+    const newline = body.includes('\r\n') ? '\r\n' : '\n';
+    edits.push({
+      start: start.offset,
+      end: end.offset,
+      value: [fence, ...node.value.split(/\r\n|\r|\n/), fence].join(`${newline}${continuation}`),
+    });
+  });
+  if (edits.length) {
+    let fenced = body;
+    for (const edit of edits.sort((a, b) => b.start - a.start)) {
+      fenced = fenced.slice(0, edit.start) + edit.value + fenced.slice(edit.end);
+    }
+    const fencedTree = parser.parse(fenced);
+    // Container syntax can depend on surrounding blocks. Reject any structural drift.
+    const withoutPositions = (key: string, value: unknown) => key === 'position' ? undefined : value;
+    if (JSON.stringify(tree, withoutPositions) !== JSON.stringify(fencedTree, withoutPositions)) {
+      const offset = edits[edits.length - 1]!.start;
+      const before = body.slice(0, offset);
+      const line = (before.match(/\n/g) ?? []).length + 1 + lineOffset;
+      const column = offset - body.lastIndexOf('\n', offset - 1);
+      throw new MigrationError('UNSUPPORTED_CONTENT', `Indented code at line ${line}, column ${column} needs manual conversion; fencing it changes the Markdown block structure.`);
+    }
+  }
   visit(tree, (node) => {
     if (!node.position || node.position.start.offset === undefined || node.position.end.offset === undefined) {
       throw new MigrationError('INVALID_SOURCE', 'Markdown parser did not provide a source location.');

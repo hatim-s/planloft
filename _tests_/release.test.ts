@@ -40,7 +40,7 @@ test("one release command owns versioning, publishing, and tagging", () => {
   assert.match(help.stdout, /bun run release <version>/);
 
   const guide = read("docs/releasing.md");
-  assert.match(guide, /bun run release 0\.2\.5/);
+  assert.match(guide, /bun run release 1\.0\.0/);
   assert.doesNotMatch(guide, /release:prepare|release:publish|PLANLOFT_PUBLISH/);
   assert.match(guide, /updates `package\.json`/i);
   assert.match(guide, /commits and pushes `main`/i);

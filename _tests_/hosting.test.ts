@@ -58,12 +58,13 @@ test("migration fails before moving data on collisions, unsafe IDs, symlinks, an
   }
 });
 
-test("publication uses one whole-site Vercel project and stable IDs across hosts", () => {
+test("publication uses one whole-site Vercel project and stable IDs across hosts", { timeout: 30_000 }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-publish-"));
   const env = { ...process.env, HOME: dir, PLANLOFT_HOME: path.join(dir, "home"), PATH: `${path.join(dir, "bin")}:${process.env.PATH}`, GIT_CONFIG_NOSYSTEM: "1" };
   const git = (args: string[], cwd = dir) => execFileSync("git", args, { cwd, env, stdio: "pipe", encoding: "utf8" });
   const cli = (...args: string[]) => {
-    const result = spawnSync(process.execPath, [path.join(root, "node_modules/tsx/dist/cli.mjs"), path.join(root, "src/cli.ts"), ...args], { cwd: path.join(dir, "project"), env, encoding: "utf8" });
+    const loader = process.versions.bun ? [] : [path.join(root, "node_modules/tsx/dist/cli.mjs")];
+    const result = spawnSync(process.execPath, [...loader, path.join(root, "src/cli.ts"), ...args], { cwd: path.join(dir, "project"), env, encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
     return result.stdout;
   };

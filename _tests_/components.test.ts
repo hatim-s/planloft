@@ -5,8 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BarChart, ComponentInputError, DataTable, DonutChart, Heatmap, LineChart, Sparkline, Todo, WaterfallChart } from "../src/components/index.js";
-import { exactNumberFormatter, type Row } from "../src/components/data.js";
+import { BarChart, ComponentInputError, DataTable, DonutChart, Heatmap, LineChart, Sparkline, Stat, Todo, WaterfallChart, type DataTableColumn } from "../src/components/index.js";
+import { resolveFormatting, sumNumeric, isComponentInputError, type Row } from "../src/components/data.js";
 import { buildGallery } from "../src/gallery/index.js";
 
 const rows = [
@@ -156,7 +156,7 @@ test("chart data tables preserve values independently of compact chart labels", 
     const html = renderToStaticMarkup(chart);
     const table = html.slice(html.indexOf('<div class="pl-sr'));
     assert.match(table, />1\.2345</);
-    assert.match(table, />\+?12345</);
+    assert.match(table, />\+?12,345</);
   }
 });
 
@@ -211,7 +211,7 @@ test("whitespace is missing across numeric chart and table consumers", () => {
   const line = renderToStaticMarkup(createElement(LineChart, { data, x: "name", y: "n" }));
   assert.match(line, /<th scope="row">blank<\/th><td>—<\/td>/);
   assert.match(line, /<th scope="row">zero<\/th><td>0<\/td>/);
-  assert.match(line, /<th scope="row">negative<\/th><td>-2<\/td>/);
+  assert.match(line, /<th scope="row">negative<\/th><td>−2<\/td>/);
   const table = renderToStaticMarkup(createElement(DataTable, { data, columns: ["name", "n"], sort: "n", totals: true }));
   const body = table.match(/<tbody>(.*?)<\/tbody>/)?.[1] ?? "";
   assert.deepEqual([...body.matchAll(/<th scope="row">([^<]+)<\/th>/g)].map((match) => match[1]), ["negative", "zero", "blank"]);
@@ -234,7 +234,7 @@ test("bar totals and ordering leave incomplete aggregates unknown", () => {
       if (layout === "stacked") {
         assert.match(table, /<th scope="row">partial<\/th><td>10<\/td><td>—<\/td><td>—<\/td>/);
         assert.match(table, /<th scope="row">zero<\/th><td>0<\/td><td>0<\/td><td>0<\/td>/);
-        assert.match(table, /<th scope="row">negative<\/th><td>-3<\/td><td>1<\/td><td>-2<\/td>/);
+        assert.match(table, /<th scope="row">negative<\/th><td>−3<\/td><td>1<\/td><td>−2<\/td>/);
       }
     }
   }
@@ -267,12 +267,15 @@ test("the gallery renders specimens, HTML, and the catalog in every theme", asyn
 
 
 test("tooltip values retain tiny measurements and all available significant digits", () => {
-  const format = exactNumberFormatter({});
+  const format = resolveFormatting("BarChart", {}).exact;
   for (const value of [1e-21, 1.2345678901234568e-10, Number.MIN_VALUE, -1e-21]) {
-    assert.equal(Number(format(value).replace("−", "-")), value);
+    assert.equal(Number(format(value).replaceAll("−", "-")), value);
   }
-  assert.equal(exactNumberFormatter({ format: "currency" })(12), "$12.00");
-  assert.match(exactNumberFormatter({ format: "percent" })(1e-24), /1E.22%/);
+  assert.equal(format(-1.2e-25), "−1.2E−25");
+  assert.equal(format(-0), "0");
+  assert.equal(resolveFormatting("BarChart", { format: "currency" }).exact(12), "$12.00");
+  assert.equal(resolveFormatting("BarChart", { format: "currency", currency: "EUR" }).axis(300), "€300");
+  assert.match(resolveFormatting("BarChart", { format: "percent" }).exact(1e-24), /1E.22%/);
 });
 
 test("every overlapping stacked target exposes every segment value", () => {
@@ -292,5 +295,179 @@ test("every overlapping stacked target exposes every segment value", () => {
 test("line charts reject repeated category labels before plotting", () => {
   for (const area of [true, false]) {
     assert.throws(() => renderToStaticMarkup(createElement(LineChart, { data: [{x:"A",n:1},{x:"B",n:2},{x:"A",n:3}], x:"x",y:"n",area })), /unique categories.*Combine repeated/);
+  }
+});
+
+test("decimal aggregation removes accumulator noise without rounding authored precision", () => {
+  assert.equal(sumNumeric([0.1, 0.2]), 0.3);
+  assert.equal(sumNumeric([10.1, 20.2, -0.3]), 30);
+  for (const values of [[1e16, 1, -1e16], [1e16, -1e16, 1], [1, 1e16, -1e16]]) {
+    assert.equal(sumNumeric(values), 1, "cancellation keeps small contributions regardless of order");
+  }
+  for (const value of [1.2345678901234567, 1.2345678901234568e-10, Number.MIN_VALUE]) {
+    assert.equal(sumNumeric([value, 0]), value);
+  }
+  assert.equal(sumNumeric([1e-24, 2e-24]), 3e-24);
+  assert.equal(sumNumeric([Number.MIN_VALUE, Number.MIN_VALUE]), 1e-323);
+  assert.equal(sumNumeric([0.1, null, 0.2]), null);
+});
+
+test("computed chart totals share exact percent and currency semantics with accessible tables", () => {
+  const bar = renderToStaticMarkup(createElement(BarChart, {
+    data: [{ x: "A", a: 0.1, b: 0.2 }], x: "x", y: ["a", "b"], layout: "stacked", format: "percent",
+  }));
+  for (const frame of framesOf(bar)) {
+    for (const hit of hitsOf(frame)) assert.deepEqual(hit.lines, ["A", "A: 10%", "B: 20%", "Total: 30%"]);
+  }
+  assert.match(bar, /<th scope="row">A<\/th><td>10%<\/td><td>20%<\/td><td>30%<\/td>/);
+
+  const waterfall = renderToStaticMarkup(createElement(WaterfallChart, {
+    data: [{ s: "Open", n: 10.1 }, { s: "Add", n: 20.2 }, { s: "Fee", n: -0.3 }],
+    label: "s", value: "n", format: "currency", currency: "EUR", unit: "net",
+  }));
+  for (const frame of framesOf(waterfall)) {
+    assert.deepEqual(hitsOf(frame).map((hit) => hit.lines), [
+      ["Open", "Balance: €10.10 net"],
+      ["Add", "Change: +€20.20 net", "Running total: €30.30 net"],
+      ["Fee", "Change: −€0.30 net", "Running total: €30.00 net"],
+      ["Total", "Balance: €30.00 net"],
+    ]);
+  }
+  assert.match(waterfall, /<th scope="row">Add<\/th><td>\+€20\.20 net<\/td><td>€30\.30 net<\/td>/);
+  assert.match(waterfall, /<th scope="row">Total<\/th><td><\/td><td>€30\.00 net<\/td>/);
+
+  const cancellation = renderToStaticMarkup(createElement(WaterfallChart, {
+    data: [{ s: "Start", n: 1e16 }, { s: "Small", n: 1 }, { s: "Cancel", n: -1e16 }], label: "s", value: "n",
+  }));
+  assert.deepEqual(hitsOf(framesOf(cancellation)[0]!).at(-1)!.lines, ["Total", "Balance: 1"]);
+});
+
+test("all chart tables keep tooltip currency, percentage and unit formatting", () => {
+  for (const formatting of [{ format: "percent", unit: "share" }, { format: "currency", currency: "EUR", unit: "net" }] as const) {
+    const data = [{ name: "A", n: 0.42, group: "G" }];
+    const charts = [
+      createElement(BarChart, { data, x: "name", y: "n", ...formatting }),
+      createElement(LineChart, { data, x: "name", y: "n", ...formatting }),
+      createElement(DonutChart, { data, label: "name", value: "n", ...formatting }),
+      createElement(Heatmap, { data, x: "name", y: "group", value: "n", ...formatting }),
+    ];
+    const expected = formatting.format === "percent" ? "42% share" : "€0.42 net";
+    for (const chart of charts) {
+      const html = renderToStaticMarkup(chart);
+      assert.equal(hitsOf(html)[0]!.lines[1], `N: ${expected}`);
+      const table = html.slice(html.indexOf('<div class="pl-sr pl-chart__data"'));
+      assert.ok(table.includes(`<td>${expected}</td>`), expected);
+    }
+  }
+});
+
+test("DataTable currency uses meaningful precision and decimal totals while compact stays explicit", () => {
+  const data = [{ name: "A", n: 1234567.89 }, { name: "B", n: 999.5 }];
+  const html = renderToStaticMarkup(createElement(DataTable, {
+    data, columns: ["name", { key: "n", format: "currency" }], totals: true,
+  }));
+  assert.match(html, />\$1,234,567\.89<\/td>/);
+  assert.match(html, />\$999\.50<\/td>/);
+  assert.match(html, /<tfoot><tr><th scope="row">Total<\/th><td class="pl-num">\$1,235,567\.39<\/td>/);
+  const yen = renderToStaticMarkup(createElement(DataTable, {
+    data: [{ n: 1234 }], columns: [{ key: "n", format: "currency", currency: "JPY" }],
+  }));
+  assert.match(yen, />¥1,234<\/th>/);
+  const fractional = renderToStaticMarkup(createElement(DataTable, {
+    data: [{ n: 12.345 }], columns: [{ key: "n", format: "currency" }],
+  }));
+  assert.match(fractional, />\$12\.345<\/th>/);
+  const compact = renderToStaticMarkup(createElement(DataTable, {
+    data, columns: ["name", { key: "n", format: "compact" }],
+  }));
+  assert.match(compact, />1\.2M<\/td>/);
+});
+
+test("format validation returns authenticated component-specific errors instead of Intl exceptions", () => {
+  // React creates the same untyped prop boundary as authored MDX.
+  for (const Component of [BarChart, LineChart, DonutChart, WaterfallChart, Heatmap, Sparkline, Stat]) {
+    const props = { data: [{ x: "A", y: "G", n: 1 }], x: "x", y: "n", label: "x", value: "n", values: [1, 2] };
+    for (const [invalid, reason] of [
+      [{ format: "percentage" }, "invalid_format"],
+      [{ format: "currency", currency: "dollars" }, "invalid_currency"],
+    ] as const) {
+      assert.throws(() => renderToStaticMarkup(createElement<typeof props>(Component, { ...props, ...invalid })), (error: unknown) => {
+        assert.ok(isComponentInputError(error));
+        assert.equal(error.component, Component.name);
+        assert.equal(error.reason, reason);
+        assert.ok(Object.isFrozen(error));
+        return true;
+      });
+    }
+  }
+  for (const invalid of [{ format: "money" }, { format: "currency", currency: "dollars" }]) {
+    const column = { key: "n", ...invalid };
+    // Authored MDX can pass a column whose format violates the TypeScript contract.
+    const authoredColumn = column as DataTableColumn;
+    assert.throws(() => renderToStaticMarkup(createElement(DataTable, {
+      data: [{ n: 1 }], columns: [authoredColumn],
+    })), (error: unknown) => isComponentInputError(error) && error.component === "DataTable");
+  }
+  const forged = Object.create(ComponentInputError.prototype);
+  assert.equal(isComponentInputError(forged), false);
+  const genuine = new ComponentInputError("BarChart", "safe", "invalid_format");
+  assert.throws(() => Object.assign(genuine, { component: "arbitrary" }), TypeError);
+});
+
+test("ambiguous chart categories fail before marks and tables can disagree", () => {
+  const cases = [
+    { Component: BarChart, props: { data: [{ x: "A", n: 1 }, { x: "A", n: 2 }], x: "x", y: "n" }, reason: "duplicate_category" },
+    { Component: DonutChart, props: { data: [{ x: "A", n: 1 }, { x: "A", n: 2 }], label: "x", value: "n" }, reason: "duplicate_category" },
+    { Component: Heatmap, props: { data: [{ x: "A", y: "G", n: 1 }, { x: "A", y: "G", n: 9 }], x: "x", y: "y", value: "n" }, reason: "duplicate_coordinate" },
+    { Component: WaterfallChart, props: { data: [{ x: "A", n: 1 }, { x: "A", n: 2 }], label: "x", value: "n" }, reason: "duplicate_category" },
+    { Component: WaterfallChart, props: { data: [{ x: "Total", n: 1 }], label: "x", value: "n" }, reason: "duplicate_category" },
+    { Component: WaterfallChart, props: { data: [{ x: "Balance", n: 1 }], label: "x", value: "n", total: "Balance" }, reason: "duplicate_category" },
+  ];
+  for (const { Component, props, reason } of cases) {
+    const fixture = { x: "x", y: "y", label: "x", value: "n", ...props };
+    assert.throws(() => renderToStaticMarkup(createElement<typeof fixture>(Component, fixture)), (error: unknown) => {
+      assert.ok(isComponentInputError(error));
+      assert.equal(error.component, Component.name);
+      assert.equal(error.reason, reason);
+      return true;
+    });
+  }
+  assert.doesNotThrow(() => renderToStaticMarkup(createElement(WaterfallChart, {
+    data: [{ x: "Total", n: 1 }], label: "x", value: "n", total: false,
+  })));
+  // Delimiters inside categories must not turn distinct coordinate pairs into duplicates.
+  assert.doesNotThrow(() => renderToStaticMarkup(createElement(Heatmap, {
+    data: [{ x: "a:b", y: "c", n: 1 }, { x: "b", y: "c:a", n: 2 }], x: "x", y: "y", value: "n",
+  })));
+});
+
+test("Stat changes retain currency and units and leave unsigned nonzero text neutral", () => {
+  const currency = renderToStaticMarkup(createElement(Stat, {
+    label: "Revenue", value: 1200, format: "currency", currency: "EUR", unit: "net", change: 300, changeFormat: "currency",
+  }));
+  assert.match(currency, />\+€300\.00 net/);
+  assert.doesNotMatch(currency, /\$/);
+  const percent = renderToStaticMarkup(createElement(Stat, {
+    label: "Latency", value: 120, unit: "ms", change: 0.12, changeFormat: "percent",
+  }));
+  assert.match(percent, />120 ms</);
+  assert.match(percent, />\+12%</);
+  const precise = renderToStaticMarkup(createElement(Stat, {
+    label: "Price", value: 19.99, format: "currency", currency: "EUR", change: 0.01,
+  }));
+  assert.match(precise, />€19\.99</);
+  assert.match(precise, />\+€0\.01</);
+  const small = renderToStaticMarkup(createElement(Stat, { label: "Latency", value: -0.001, change: -0.001 }));
+  assert.match(small, />−0\.001</);
+  assert.doesNotMatch(small, />−0</);
+  const compact = renderToStaticMarkup(createElement(Stat, { label: "Users", value: 1200, format: "compact" }));
+  assert.match(compact, />1\.2K</);
+  const unsigned = renderToStaticMarkup(createElement(Stat, { label: "Growth", value: 12, change: "12% vs Q2" }));
+  assert.match(unsigned, /data-assessment="neutral">12% vs Q2/);
+  assert.doesNotMatch(unsigned, /Unchanged|pl-stat__arrow/);
+  for (const change of ["0% vs Q2", "-0%", "+0", "−0.00 ms"]) {
+    const zero = renderToStaticMarkup(createElement(Stat, { label: "Growth", value: 12, change }));
+    assert.match(zero, /data-assessment="neutral"/);
+    assert.match(zero, /Unchanged/);
   }
 });

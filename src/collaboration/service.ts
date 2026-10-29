@@ -1,9 +1,7 @@
-import type { CollaborationState, Note, TextAnchor, Thread } from './contracts.js';
+import { COLLABORATION_LIMITS, InvalidResponse, requests, type CollaborationState, type Note, type TextAnchor, type Thread } from './contracts.js';
 import type { Database } from './database.js';
 
 type Row = Record<string, unknown>;
-const string = (value: unknown): value is string => typeof value === 'string';
-const nonempty = (value: unknown): value is string => string(value) && value.trim().length > 0 && value.length <= 100_000;
 const comment = (r: Row) => ({ id: String(r.id), body: String(r.body), createdAt: String(r.created_at) });
 const note = (r: Row): Note => ({ id: String(r.id), body: String(r.body), version: Number(r.version), createdAt: String(r.created_at), updatedAt: String(r.updated_at) });
 const thread = (r: Row): Thread => ({ id: String(r.id), body: String(r.body), anchor: r.anchor === null ? null : JSON.parse(String(r.anchor)) as TextAnchor, resolved: !!r.resolved, createdAt: String(r.created_at), comments: [] });
@@ -43,7 +41,7 @@ async function readPayload(request: Request): Promise<Record<string, unknown> | 
 
 /** Public document access allows every reader to comment and edit notes. Admin credentials only register documents. */
 export function createCollaborationService(db: Database, adminToken?: string): (request: Request) => Promise<Response> {
-  return async request => {
+  const handle = async (request: Request): Promise<Response> => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     let path: string[];
     try { path = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent); }
@@ -63,9 +61,9 @@ export function createCollaborationService(db: Database, adminToken?: string): (
     const run = (sql: string, args: (string | number | null)[] = []) => db.execute({ sql, args });
     if (!parts.length && request.method === 'PUT') {
       if (request.headers.get('Authorization') !== `Bearer ${adminToken}`) return error('unauthorized', 401);
-      if (!nonempty(payload.revision) || payload.revision.length > 1000) return error('invalid_request', 400);
-      await run('INSERT INTO documents (id, revision) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET revision = excluded.revision', [doc, payload.revision]);
-      return json({ documentId: doc, revision: payload.revision });
+      const revision = requests.revision(payload.revision);
+      await run('INSERT INTO documents (id, revision) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET revision = excluded.revision', [doc, revision]);
+      return json({ documentId: doc, revision });
     }
     if (!(await run('SELECT id FROM documents WHERE id = ?', [doc])).rows.length) return error('not_found', 404);
     if (parts[0] === 'state' && parts.length === 1 && request.method === 'GET') {
@@ -76,27 +74,33 @@ export function createCollaborationService(db: Database, adminToken?: string): (
         run('SELECT * FROM tasks WHERE document_id = ? ORDER BY task_key', [doc]),
       ]);
       const state: CollaborationState = { threads: threads.rows.map(thread), notes: notes.rows.map(note), tasks: tasks.rows.map(r => ({ key: String(r.task_key), checked: !!r.checked, version: Number(r.version) })) };
-      for (const r of comments.rows) state.threads.find(t => t.id === r.thread_id)?.comments.push(comment(r));
+      const byId = new Map(state.threads.map(thread => [thread.id, thread]));
+      for (const r of comments.rows) byId.get(String(r.thread_id))?.comments.push(comment(r));
       return json(state);
     }
     const key = request.headers.get('Idempotency-Key');
-    if (key !== null && (!nonempty(key) || key.length > 200)) return error('invalid_request', 400);
+    if (key !== null) requests.key(key);
+    // Admission and insertion run in one SQLite statement across all adapters.
+    const admission = (table: 'threads' | 'comments' | 'notes' | 'tasks') => `(SELECT COUNT(*) FROM ${table} WHERE document_id = ?) < ${COLLABORATION_LIMITS[table]} AND (? IS NULL OR (SELECT COUNT(*) FROM creation_requests WHERE document_id = ?) < ${COLLABORATION_LIMITS.creationRequests})`;
+    const admissionArgs = [doc, key, doc];
+    const absentCreation = async (operation: string) => key !== null && (await run('SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?', [doc, operation, key])).rows.length ? error('deleted', 410) : error('capacity_exceeded', 409);
     const matchesRequest = async (operation: string, requestPayload: string) => {
       if (key === null) return true;
       const stored = (await run('SELECT payload FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?', [doc, operation, key])).rows[0]?.payload;
       return typeof stored === 'string' && JSON.stringify(JSON.parse(stored)) === requestPayload;
     };
     if (parts[0] === 'threads' && parts.length === 1 && request.method === 'POST') {
-      if (!nonempty(payload.body) || !(payload.anchor === null || validAnchor(payload.anchor, doc))) return error('invalid_request', 400);
+      const body = requests.body(payload.body);
+      const anchor = requests.anchor(payload.anchor, doc);
       const rowId = id();
-      const storedAnchor = payload.anchor === null ? null : serializeAnchor(payload.anchor);
-      const requestPayload = JSON.stringify([payload.body, storedAnchor]);
-      await run('INSERT INTO threads (id, document_id, body, anchor, created_at, request_key) SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?) ON CONFLICT(document_id, request_key) DO NOTHING', [rowId, doc, payload.body, storedAnchor, now(), key, doc, 'thread', key]);
+      const storedAnchor = anchor === null ? null : serializeAnchor(anchor);
+      const requestPayload = JSON.stringify([body, storedAnchor]);
+      await run(`INSERT INTO threads (id, document_id, body, anchor, created_at, request_key) SELECT ?, ?, ?, ?, ?, ? WHERE ${admission('threads')} AND NOT EXISTS (SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?) ON CONFLICT(document_id, request_key) DO NOTHING`, [rowId, doc, body, storedAnchor, now(), key, ...admissionArgs, doc, 'thread', key]);
       const result = await run(key === null ? 'SELECT * FROM threads WHERE document_id = ? AND id = ?' : 'SELECT * FROM threads WHERE document_id = ? AND request_key = ?', [doc, key ?? rowId]);
-      if (!result.rows.length) return error('deleted', 410);
+      if (!result.rows.length) return absentCreation('thread');
       if (!(await matchesRequest('thread', requestPayload))) return error('idempotency_conflict', 409);
       const saved = thread(result.rows[0]!);
-      if (saved.id !== rowId) { saved.body = payload.body; saved.anchor = payload.anchor; saved.resolved = false; }
+      if (saved.id !== rowId) { saved.body = body; saved.anchor = anchor; saved.resolved = false; }
       return json(saved, 201);
     }
     if (parts[0] === 'threads' && parts[1]) {
@@ -122,9 +126,9 @@ export function createCollaborationService(db: Database, adminToken?: string): (
       if (parts.length === 2 && request.method === 'PATCH') {
         if (payload.resolved === undefined && payload.anchor === undefined) return error('invalid_request', 400);
         if (payload.resolved !== undefined && typeof payload.resolved !== 'boolean') return error('invalid_request', 400);
-        if (payload.anchor !== undefined && !(payload.anchor === null || validAnchor(payload.anchor, doc))) return error('invalid_request', 400);
+        const anchor = payload.anchor === undefined ? undefined : requests.anchor(payload.anchor, doc);
         if (payload.resolved !== undefined) await run('UPDATE threads SET resolved = ? WHERE document_id = ? AND id = ?', [Number(payload.resolved), doc, threadId]);
-        if (payload.anchor !== undefined) await run('UPDATE threads SET anchor = ? WHERE document_id = ? AND id = ?', [payload.anchor === null ? null : JSON.stringify(payload.anchor), doc, threadId]);
+        if (anchor !== undefined) await run('UPDATE threads SET anchor = ? WHERE document_id = ? AND id = ?', [anchor === null ? null : serializeAnchor(anchor), doc, threadId]);
         const [updated, replies] = await Promise.all([
           run('SELECT * FROM threads WHERE document_id = ? AND id = ?', [doc, threadId]),
           run('SELECT * FROM comments WHERE document_id = ? AND thread_id = ? ORDER BY created_at, id', [doc, threadId]),
@@ -133,54 +137,57 @@ export function createCollaborationService(db: Database, adminToken?: string): (
         return json({ ...thread(updated.rows[0]!), comments: replies.rows.map(comment) });
       }
       if (parts.length === 3 && parts[2] === 'comments' && request.method === 'POST') {
-        if (!nonempty(payload.body)) return error('invalid_request', 400);
+        const body = requests.body(payload.body);
         const rowId = id();
-        const requestPayload = JSON.stringify([threadId, payload.body]);
-        await run('INSERT INTO comments (id, document_id, thread_id, body, created_at, request_key) SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM threads WHERE document_id = ? AND id = ?) AND NOT EXISTS (SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?) ON CONFLICT(document_id, request_key) DO NOTHING', [rowId, doc, threadId, payload.body, now(), key, doc, threadId, doc, 'comment', key]);
+        const requestPayload = JSON.stringify([threadId, body]);
+        await run(`INSERT INTO comments (id, document_id, thread_id, body, created_at, request_key) SELECT ?, ?, ?, ?, ?, ? WHERE ${admission('comments')} AND EXISTS (SELECT 1 FROM threads WHERE document_id = ? AND id = ?) AND NOT EXISTS (SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = ? AND request_key = ?) ON CONFLICT(document_id, request_key) DO NOTHING`, [rowId, doc, threadId, body, now(), key, ...admissionArgs, doc, threadId, doc, 'comment', key]);
         const r = (await run(key === null ? 'SELECT * FROM comments WHERE document_id = ? AND id = ?' : 'SELECT * FROM comments WHERE document_id = ? AND request_key = ?', [doc, key ?? rowId])).rows[0];
-        if (!r) return error('deleted', 410);
+        if (!r) return absentCreation('comment');
         if (!(await matchesRequest('comment', requestPayload))) return error('idempotency_conflict', 409);
-        return json({ id: r.id, body: r.body, createdAt: r.created_at }, 201);
+        return json(comment(r), 201);
       }
     }
     if (parts[0] === 'notes' && parts.length === 1 && request.method === 'POST') {
-      if (!string(payload.body) || payload.body.length > 100_000) return error('invalid_request', 400);
+      const body = requests.body(payload.body);
       const rowId = id(), time = now();
-      const requestPayload = JSON.stringify([payload.body]);
-      await run('INSERT INTO notes (id, document_id, body, created_at, updated_at, request_key) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(document_id, request_key) DO NOTHING', [rowId, doc, payload.body, time, time, key]);
+      const requestPayload = JSON.stringify([body]);
+      await run(`INSERT INTO notes (id, document_id, body, created_at, updated_at, request_key) SELECT ?, ?, ?, ?, ?, ? WHERE ${admission('notes')} AND NOT EXISTS (SELECT 1 FROM creation_requests WHERE document_id = ? AND operation = 'note' AND request_key = ?) ON CONFLICT(document_id, request_key) DO NOTHING`, [rowId, doc, body, time, time, key, ...admissionArgs, doc, key]);
       const row = (await run(key === null ? 'SELECT * FROM notes WHERE document_id = ? AND id = ?' : 'SELECT * FROM notes WHERE document_id = ? AND request_key = ?', [doc, key ?? rowId])).rows[0]!;
+      if (!row) return absentCreation('note');
       if (!(await matchesRequest('note', requestPayload))) return error('idempotency_conflict', 409);
       const saved = note(row);
-      if (saved.id !== rowId) { saved.body = payload.body; saved.version = 1; saved.updatedAt = saved.createdAt; }
+      if (saved.id !== rowId) { saved.body = body; saved.version = 1; saved.updatedAt = saved.createdAt; }
       return json(saved, 201);
     }
     if (parts[0] === 'notes' && parts.length === 2 && request.method === 'PATCH') {
-      if (!string(payload.body) || payload.body.length > 100_000 || !Number.isSafeInteger(payload.version) || Number(payload.version) < 1) return error('invalid_request', 400);
-      const result = await run('UPDATE notes SET body = ?, version = version + 1, updated_at = ? WHERE document_id = ? AND id = ? AND version = ? RETURNING *', [payload.body, now(), doc, parts[1]!, Number(payload.version)]);
+      const { body, version } = requests.notePatch(payload);
+      const result = await run('UPDATE notes SET body = ?, version = version + 1, updated_at = ? WHERE document_id = ? AND id = ? AND version = ? AND body <> ? RETURNING *', [body, now(), doc, parts[1]!, version, body]);
       if (result.rows.length) return json(note(result.rows[0]!));
       const current = (await run('SELECT * FROM notes WHERE document_id = ? AND id = ?', [doc, parts[1]!])).rows[0];
       if (!current) return error('not_found', 404);
+      if (Number(current.version) === version && current.body === body) return json(note(current));
       return json({ error: 'conflict', current: note(current) }, 409);
     }
     if (parts[0] === 'tasks' && parts.length === 2 && request.method === 'PUT') {
-      if (!nonempty(parts[1]) || typeof payload.checked !== 'boolean' || (payload.version !== undefined && (!Number.isSafeInteger(payload.version) || Number(payload.version) < 0))) return error('invalid_request', 400);
-      const taskKey = parts[1]!;
-      const result = await run(`INSERT INTO tasks (document_id, task_key, checked, version) SELECT ?, ?, ?, 1 WHERE ? IS NULL OR ? = 0 OR EXISTS (SELECT 1 FROM tasks WHERE document_id = ? AND task_key = ?) ON CONFLICT(document_id, task_key) DO UPDATE SET checked = excluded.checked, version = CASE WHEN tasks.checked = excluded.checked THEN tasks.version ELSE tasks.version + 1 END WHERE ? IS NULL OR tasks.version = ? OR tasks.checked = excluded.checked`, [doc, taskKey, Number(payload.checked), payload.version === undefined ? null : Number(payload.version), payload.version === undefined ? null : Number(payload.version), doc, taskKey, payload.version === undefined ? null : Number(payload.version), payload.version === undefined ? null : Number(payload.version)]);
+      const taskKey = requests.taskKey(parts[1]);
+      const taskPayload = requests.taskPut(payload);
+      const result = await run(`INSERT INTO tasks (document_id, task_key, checked, version) SELECT ?, ?, ?, 1 WHERE ((SELECT COUNT(*) FROM tasks WHERE document_id = ?) < ${COLLABORATION_LIMITS.tasks} OR EXISTS (SELECT 1 FROM tasks WHERE document_id = ? AND task_key = ?)) AND (? IS NULL OR ? = 0 OR EXISTS (SELECT 1 FROM tasks WHERE document_id = ? AND task_key = ?)) ON CONFLICT(document_id, task_key) DO UPDATE SET checked = excluded.checked, version = CASE WHEN tasks.checked = excluded.checked THEN tasks.version ELSE tasks.version + 1 END WHERE ? IS NULL OR tasks.version = ? OR tasks.checked = excluded.checked`, [doc, taskKey, Number(taskPayload.checked), doc, doc, taskKey, taskPayload.version === undefined ? null : Number(taskPayload.version), taskPayload.version === undefined ? null : Number(taskPayload.version), doc, taskKey, taskPayload.version === undefined ? null : Number(taskPayload.version), taskPayload.version === undefined ? null : Number(taskPayload.version)]);
       const current = (await run('SELECT * FROM tasks WHERE document_id = ? AND task_key = ?', [doc, taskKey])).rows[0];
-      if (!current) return error('conflict', 409);
+      if (!current) return error(taskPayload.version !== undefined && taskPayload.version > 0 ? 'conflict' : 'capacity_exceeded', 409);
       const task = { key: taskKey, checked: !!current.checked, version: Number(current.version) };
       if (!result.changes) return json({ error: 'conflict', current: task }, 409);
       return json(task);
     }
     return error('not_found', 404);
   };
+  return async request => {
+    try { return await handle(request); }
+    catch (cause) {
+      if (cause instanceof InvalidResponse) return error('invalid_request', 400);
+      throw cause;
+    }
+  };
 }
-function validAnchor(value: unknown, doc: string): value is TextAnchor {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const a = value as Record<string, unknown>;
-  return Object.keys(a).every(key => ['quote', 'prefix', 'suffix', 'start', 'end', 'documentId', 'revision'].includes(key)) && nonempty(a.quote) && a.quote.length <= 4096 && string(a.prefix) && a.prefix.length <= 1000 && string(a.suffix) && a.suffix.length <= 1000 && Number.isSafeInteger(a.start) && Number.isSafeInteger(a.end) && Number(a.start) >= 0 && Number(a.end) > Number(a.start) && (a.documentId === undefined || a.documentId === doc) && (a.revision === undefined || (string(a.revision) && a.revision.length <= 1000));
-}
-
 function serializeAnchor(anchor: TextAnchor): string {
   return JSON.stringify({ quote: anchor.quote, prefix: anchor.prefix, suffix: anchor.suffix, start: anchor.start, end: anchor.end, ...(anchor.revision === undefined ? {} : { revision: anchor.revision }), ...(anchor.documentId === undefined ? {} : { documentId: anchor.documentId }) });
 }

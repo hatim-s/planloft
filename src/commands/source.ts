@@ -1,4 +1,7 @@
 import fs from "node:fs";
+import path from "node:path";
+import { gitRoot } from "../core/project.js";
+import { prepareDocument, type PreparedDocument } from "../mdx/compiler.js";
 import { ingestDocument } from "../core/ingest.js";
 import { sourceFormatFromPath } from "../core/ingest.js";
 import type { CanonicalDocument, Kind, SourceFormat } from "../core/types.js";
@@ -50,6 +53,13 @@ export async function readCanonicalDocument(
       theme: flags.theme,
       status: flags.status,
     },
+  });
+}
+
+export async function readPreparedDocument(input: string, flags: SourceFlags, reader: SourceReader, cwd: string): Promise<PreparedDocument> {
+  const sourcePath = input === "-" ? undefined : path.resolve(cwd, input);
+  return prepareDocument(await readCanonicalDocument(sourcePath ?? "-", flags, reader), {
+    sourcePath, projectRoot: gitRoot(cwd) ?? cwd,
   });
 }
 

@@ -277,7 +277,7 @@ async function release(version: string): Promise<void> {
 }
 
 function printHelp(): void {
-  console.log(`Usage: bun run release <version>\n\nExample:\n  bun run release 0.2.5`);
+  console.log(`Usage: bun run release <version>\n\nExample:\n  bun run release 1.0.0`);
 }
 
 /** Parses the release command's single version argument. */

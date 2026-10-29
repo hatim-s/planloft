@@ -160,8 +160,11 @@ deploying are always explicit; stored documents remain local until copied or pub
 - [MDX components and shared task keys](./docs/components.md)
 - [Architecture decisions](./docs/adr/README.md)
 - [Release guide](./docs/releasing.md)
+- [1.0.0 release notes](./docs/releases/1.0.0.md)
 
-Planloft requires Node.js 18 or newer and is licensed under the [MIT License](./LICENSE).
+Planloft requires Node.js 22.15.0 or newer, or Bun 1.4 or newer. The generated local
+collaboration service has the same Node requirement. Planloft is licensed under the
+[MIT License](./LICENSE).
 
 For Vercel setup, shared hosting, and the one-way repository migration, see [Deployment](./docs/deployment.md).
 
@@ -174,9 +177,9 @@ planloft render report.mdx --trusted-mdx --out ./report-site
 planloft hoist report.mdx --trusted-mdx
 ```
 
-Built-in component tags work without imports; they can also be imported from `planloft/components`. Local `.tsx` and `.mdx` imports resolve relative to the document. Charts and tables render static HTML and SVG. Exports from `~/.planloft/components/index.tsx` and the project's `.planloft/components/index.tsx` are available as MDX components. Project entries take precedence over global entries and built-ins. Registry files are executable code too.
+Built-in component tags work without imports; they can also be imported from `planloft/components`. Local `.tsx` and `.mdx` imports resolve relative to the document. Components render to static HTML and SVG with no React in the browser. Every page carries a small reader script for the theme toggle and chart tooltips; the collaboration client is added only when you attach it. Exports from `~/.planloft/components/index.tsx` and the project's `.planloft/components/index.tsx` are available as MDX components. Project entries take precedence over global entries and built-ins. Registry files are executable code too.
 
-Hoist bundles the document and its dependencies beside the stored source as `<document>.mdx.bundle.js`. Copy carries that snapshot along. Preview and publication use the snapshot even if the original dependency files move. If the stored source changes, Planloft rejects the stale snapshot; hoist the edited document again from a location with its dependencies. Treat the snapshot as trusted executable code, not as a sandbox or a tamper-proof signature.
+Hoist bundles the document, its imports, registry components, and the component runtime into one minified `<document>.mdx.bundle.js` beside the stored source. Copy carries that snapshot along. Preview and publication of a stored document use its snapshot, so they keep working after the original dependency files move. The snapshot is pinned: component fixes and Planloft upgrades reach a stored document only after you hoist it again from its source. Rendering or hoisting a source path always compiles from source first. It falls back to an adjacent snapshot only when an import is missing and the snapshot matches the current source. Treat the snapshot as trusted executable code, not as a sandbox or a tamper-proof signature.
 
 ### Collaboration
 
@@ -187,10 +190,12 @@ admin credentials server-side and apply the generated SQL migration before use.
 Generation is local and does not deploy a service. See [deployment](./docs/deployment.md)
 for setup and current validation limits.
 
-Readers can comment on selected text or the document and edit shared notes. Threads
-open in floating popups beside their text; the Comments button opens a compact list.
-Any reader can delete a reply or delete a whole thread with its replies, after an
-inline confirmation. The page
+Access is public and anonymous. Anyone who can open the page can comment on selected
+text or the document, create and edit shared notes, and tick shared tasks. Any reader
+can also delete any reply or a whole thread with its replies, after an inline
+confirmation. There are no viewer accounts, and notes cannot be deleted. Do not enable
+collaboration on a document whose comments need an accountable author. Threads open in
+floating popups beside their text; the Comments button opens a compact list. The page
 loads state once, applies local mutation results, and requires a reload to see other
 readers' changes. A `<Todo task="release.verify" label="Verify the release" />` uses an explicit stable task key.
 It stays disabled until the collaboration client loads state. GFM task lists do not

@@ -15,6 +15,20 @@ export function isExcluded(element: Element): boolean {
   return EXCLUDED_TAGS.has(element.localName) || element.matches(EXCLUDED_SELECTOR);
 }
 
+const insideExcluded = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest(EXCLUDED_SELECTOR) != null;
+
+/**
+ * Whether a mutation can change the indexed text. Chart tooltips, reader controls and the
+ * collaboration UI change the page inside excluded regions. The tooltip's first append is
+ * recorded on the body, so a child list change is skipped only when every node it adds or
+ * removes is itself excluded; a record that also touches content still counts.
+ */
+export function changesContent(record: Pick<MutationRecord, 'type' | 'target' | 'addedNodes' | 'removedNodes'>): boolean {
+  if (insideExcluded(record.target)) return false;
+  if (record.type !== 'childList') return true;
+  return ![...record.addedNodes, ...record.removedNodes].every(node => node instanceof Element && node.matches(EXCLUDED_SELECTOR));
+}
+
 function collect(element: Element, chunks: TextChunk<Text>[]): void {
   for (let child = element.firstChild; child; child = child.nextSibling) {
     if (child instanceof Text) chunks.push({ node: child, data: child.data });

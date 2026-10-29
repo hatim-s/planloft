@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { ComponentInputError } from "./data.js";
+import { TASK_KEY } from "../collaboration/contracts.js";
 
 export interface TodoProps {
   /**
@@ -16,7 +17,7 @@ export interface TodoProps {
   children?: ReactNode;
 }
 
-const TASK_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+
 
 /**
  * A checkbox whose state the collaboration runtime owns. Rendered pages ship it

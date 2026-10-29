@@ -14,7 +14,7 @@ import { Status, STATUS_TONES, type StatusTone } from "./figures.js";
 import {
   columnLabel,
   ComponentInputError,
-  numberFormatter,
+  resolveFormatting,
   numericCell,
   requireKeys,
   requireRows,
@@ -186,11 +186,11 @@ function resolveColumns(rows: readonly Row[], columns: DataTableProps["columns"]
       numeric,
       marker,
       colors,
-      format: numberFormatter({
+      format: resolveFormatting("DataTable", {
         format: numberFormat,
         currency: spec.currency,
         unit: spec.unit,
-      }),
+      }).table,
     };
   });
 }

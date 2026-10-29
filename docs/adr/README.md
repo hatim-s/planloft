@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-These records preserve historical decisions. Theme authoring templates and custom theme layouts described in older ADRs have been superseded by the [theme-only contract](../../themes/README.md).
+These records preserve historical decisions. Theme authoring templates and custom theme layouts described in older ADRs are superseded by [ADR-0019](./0019-token-only-themes-and-html-support-blocks.md) and the [theme-only contract](../../themes/README.md).
 
 This directory records the significant architectural decisions for **planloft**.
 
@@ -19,7 +19,7 @@ is shaped the way it is, not just *what* it does.
 | [0003](./0003-marked-renderer.md) | replace Astro with a minimal `marked` renderer | Accepted (supersedes 0001 §D10, §D25; partially superseded by 0007) |
 | [0005](./0005-custom-domain.md) | optional custom domain for GitHub Pages deploys | Superseded by 0006 |
 | [0006](./0006-github-pages-only.md) | narrow active hosting scope to GitHub Pages | Superseded by 0017 |
-| [0007](./0007-document-pipeline.md) | canonical document pipeline and constrained theme layouts | Accepted (amends 0001, 0002; partially supersedes 0003; amended by 0011) |
+| [0007](./0007-document-pipeline.md) | canonical document pipeline and constrained theme layouts | Accepted (amends 0001, 0002; partially supersedes 0003; amended by 0011, 0018; F2 amended and F3 superseded by 0019) |
 | [0008](./0008-single-skill-command-knowledge.md) | single skill, authoritative command knowledge, and dual-theme output | Accepted (G1 and G6 amended by 0015; supersedes 0002 E4; amends 0001) |
 | [0009](./0009-publication-contracts.md) | explicit publication security, comments, and expiry contracts | Accepted (supersedes 0001 D12; amends D19-D21 and D23) |
 | [0010](./0010-configuration-and-theme-validation.md) | strict configuration and explicit theme resolution | Accepted (amends 0001, 0007; amended by 0011) |
@@ -30,6 +30,9 @@ is shaped the way it is, not just *what* it does.
 | [0015](./0015-planloft-customization-skill.md) | focused Planloft explanation and theme-customization skill | Accepted (amends 0008 and 0012) |
 | [0016](./0016-cross-host-skill-identities.md) | cross-host Planloft skill identities | Accepted (amends 0012 and 0015) |
 | [0017](./0017-shared-static-hosting.md) | shared static hosting for Vercel and GitHub Pages | Accepted (supersedes 0006) |
+| [0018](./0018-trusted-mdx-snapshots.md) | trusted MDX with pinned self-contained snapshots | Accepted (amends 0007 F1, 0011) |
+| [0019](./0019-token-only-themes-and-html-support-blocks.md) | token-only themes and owned support blocks in trusted HTML | Accepted (supersedes 0007 F3; amends 0007 F2, 0010) |
+| [0020](./0020-collaboration-service-and-client.md) | collaboration service ports, public viewer access, and idempotent writes | Accepted |
 
 ## Conventions
 

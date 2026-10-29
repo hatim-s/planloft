@@ -1,3 +1,4 @@
+import { COLLABORATION_LIMITS } from './contracts.js';
 export type SqlValue = string | number | null;
 export interface Statement { sql: string; args?: SqlValue[] }
 export interface SqlResult { rows: Record<string, unknown>[]; changes: number }
@@ -13,11 +14,41 @@ export const schema = [
   `CREATE TRIGGER IF NOT EXISTS comments_request_insert AFTER INSERT ON comments WHEN NEW.request_key IS NOT NULL BEGIN INSERT INTO creation_requests VALUES (NEW.document_id, 'comment', NEW.request_key, json_array(NEW.thread_id, NEW.body)); END`,
   `CREATE TRIGGER IF NOT EXISTS notes_request_insert AFTER INSERT ON notes WHEN NEW.request_key IS NOT NULL BEGIN INSERT INTO creation_requests VALUES (NEW.document_id, 'note', NEW.request_key, json_array(NEW.body)); END`,
   `CREATE TABLE IF NOT EXISTS note_history (note_id TEXT NOT NULL, document_id TEXT NOT NULL, body TEXT NOT NULL, version INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(note_id, version))`,
-  `CREATE TRIGGER IF NOT EXISTS notes_history_insert AFTER INSERT ON notes BEGIN INSERT INTO note_history VALUES (NEW.id, NEW.document_id, NEW.body, NEW.version, NEW.updated_at); END`,
-  `CREATE TRIGGER IF NOT EXISTS notes_history_update AFTER UPDATE OF body, version ON notes BEGIN INSERT INTO note_history VALUES (NEW.id, NEW.document_id, NEW.body, NEW.version, NEW.updated_at); END`,
+  `DROP TRIGGER IF EXISTS notes_history_insert`,
+  `CREATE TRIGGER notes_history_insert AFTER INSERT ON notes BEGIN INSERT INTO note_history VALUES (NEW.id, NEW.document_id, NEW.body, NEW.version, NEW.updated_at); DELETE FROM note_history WHERE note_id = NEW.id AND version NOT IN (SELECT version FROM note_history WHERE note_id = NEW.id ORDER BY version DESC LIMIT ${COLLABORATION_LIMITS.noteHistory}); END`,
+  `DROP TRIGGER IF EXISTS notes_history_update`,
+  `CREATE TRIGGER notes_history_update AFTER UPDATE OF body, version ON notes BEGIN INSERT INTO note_history VALUES (NEW.id, NEW.document_id, NEW.body, NEW.version, NEW.updated_at); DELETE FROM note_history WHERE note_id = NEW.id AND version NOT IN (SELECT version FROM note_history WHERE note_id = NEW.id ORDER BY version DESC LIMIT ${COLLABORATION_LIMITS.noteHistory}); END`,
+  `DELETE FROM note_history WHERE (note_id, version) IN (SELECT note_id, version FROM (SELECT note_id, version, ROW_NUMBER() OVER (PARTITION BY note_id ORDER BY version DESC) AS position FROM note_history) WHERE position > ${COLLABORATION_LIMITS.noteHistory})`,
+  `CREATE INDEX IF NOT EXISTS threads_document ON threads(document_id)`,
+  `CREATE INDEX IF NOT EXISTS comments_document ON comments(document_id, thread_id)`,
+  `CREATE INDEX IF NOT EXISTS notes_document ON notes(document_id)`,
   `CREATE TABLE IF NOT EXISTS tasks (document_id TEXT NOT NULL REFERENCES documents(id), task_key TEXT NOT NULL, checked INTEGER NOT NULL, version INTEGER NOT NULL, PRIMARY KEY(document_id, task_key))`,
 ];
 export async function migrate(db: Database): Promise<void> { await db.batch(schema.map(sql => ({ sql }))); }
+
+interface SqliteHandle {
+  prepare(sql: string): {
+    all(...args: SqlValue[]): Record<string, unknown>[];
+    run(...args: SqlValue[]): { changes: number | bigint };
+  };
+  exec(sql: string): unknown;
+}
+/** Structural handle supports node:sqlite without importing it into Workers. */
+export function sqliteDatabase(handle: SqliteHandle): Database {
+  const execute = ({ sql, args = [] }: Statement): SqlResult => {
+    const statement = handle.prepare(sql);
+    if (/^\s*SELECT/i.test(sql) || /\bRETURNING\b/i.test(sql)) return { rows: statement.all(...args), changes: 0 };
+    return { rows: [], changes: Number(statement.run(...args).changes) };
+  };
+  return {
+    execute: async statement => execute(statement),
+    batch: async statements => {
+      handle.exec('BEGIN IMMEDIATE');
+      try { const results = statements.map(execute); handle.exec('COMMIT'); return results; }
+      catch (error) { handle.exec('ROLLBACK'); throw error; }
+    },
+  };
+}
 
 interface D1Statement { bind(...args: SqlValue[]): D1Statement; all(): Promise<{ results?: Record<string, unknown>[]; meta?: { changes?: number } }> }
 interface D1Binding { prepare(sql: string): D1Statement; batch(statements: D1Statement[]): Promise<{ results?: Record<string, unknown>[]; meta?: { changes?: number } }[]> }

@@ -9,6 +9,7 @@ import { DEFAULT_CONFIG, saveConfig } from "./configuration.js";
 import { withPlanloftHome } from "./core/paths.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+const TS_LOADER = process.versions.bun ? [] : ["--import", "tsx"];
 
 test("application resolution returns a theme and selected format and normalizes agent metadata", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-test-"));
@@ -65,7 +66,7 @@ test("application resolution rejects invalid metadata and theme before writes", 
 test("resolve rejects unsupported format with resolve-specific guidance", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-format-"));
   try {
-    const result = spawnSync(process.execPath, ["--import", "tsx", path.join(ROOT, "src/cli.ts"), "resolve", "--format", "json"],
+    const result = spawnSync(process.execPath, [...TS_LOADER, path.join(ROOT, "src/cli.ts"), "resolve", "--format", "json"],
       { cwd: ROOT, env: { ...process.env, PLANLOFT_HOME: path.join(root, "home") }, encoding: "utf8" });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /PLANLOFT_RESOLVE_FORMAT_INVALID.*Use md, mdx, or html/);
@@ -79,7 +80,7 @@ test("CLI adapter maps application validation failures to stderr and exit code",
   try {
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", path.join(ROOT, "src/cli.ts"), "resolve", "--title", "   "],
+      [...TS_LOADER, path.join(ROOT, "src/cli.ts"), "resolve", "--title", "   "],
       { cwd: ROOT, env: { ...process.env, PLANLOFT_HOME: home }, encoding: "utf8" },
     );
     assert.equal(result.status, 1);

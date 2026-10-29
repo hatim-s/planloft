@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ComponentInputError, numberFormatter, type ValueFormatting } from "./data.js";
+import { ComponentInputError, resolveFormatting, type ValueFormatting } from "./data.js";
 import { Sparkline } from "./sparkline.js";
 
 export interface StatProps extends ValueFormatting {
@@ -19,17 +19,23 @@ export interface StatProps extends ValueFormatting {
 }
 
 export function Stat({ label, value, change, changeFormat, good = "up", period, trend, children, ...formatting }: StatProps) {
-  const shown = typeof value === "number" ? numberFormatter(formatting)(value) : value;
-  const delta = change === undefined ? undefined : describeChange(change, changeFormat);
-  const assessment = delta && delta.direction !== "flat" ? (delta.direction === good ? "good" : "bad") : "neutral";
+  const format = resolveFormatting("Stat", formatting).table;
+  const shown = typeof value === "number" ? format(value) : value;
+  const changeFormatter = resolveFormatting("Stat", {
+    ...formatting, format: changeFormat ?? formatting.format, unit: (changeFormat ?? formatting.format) === "percent" ? undefined : formatting.unit,
+  }).table;
+  const delta = change === undefined ? undefined : describeChange(change, changeFormatter);
+  const assessment = delta?.direction === "up" || delta?.direction === "down" ? (delta.direction === good ? "good" : "bad") : "neutral";
   return (
     <div className="pl-stat">
       <p className="pl-stat__label">{label}</p>
       <p className="pl-stat__value">{shown}</p>
       {delta ? (
         <p className="pl-stat__change" data-assessment={assessment}>
-          <span className="pl-stat__arrow" aria-hidden="true">{ARROW[delta.direction]}</span>
-          <span className="pl-sr">{DIRECTION_WORD[delta.direction]} </span>
+          {delta.direction ? <>
+            <span className="pl-stat__arrow" aria-hidden="true">{ARROW[delta.direction]}</span>
+            <span className="pl-sr">{DIRECTION_WORD[delta.direction]} </span>
+          </> : null}
           {delta.text}
           {period ? <span className="pl-stat__period"> {period}</span> : null}
         </p>
@@ -43,14 +49,14 @@ export function Stat({ label, value, change, changeFormat, good = "up", period, 
 const ARROW = { up: "↗", down: "↘", flat: "→" } as const;
 const DIRECTION_WORD = { up: "Up", down: "Down", flat: "Unchanged" } as const;
 
-function describeChange(change: number | string, format: ValueFormatting["format"]) {
+function describeChange(change: number | string, format: (value: number) => string) {
   if (typeof change === "number") {
     const direction = change > 0 ? "up" : change < 0 ? "down" : "flat";
-    const magnitude = numberFormatter({ format })(Math.abs(change));
+    const magnitude = format(Math.abs(change));
     return { direction, text: `${change > 0 ? "+" : change < 0 ? "−" : ""}${magnitude}` } as const;
   }
   const trimmed = change.trim();
-  const direction = /^[-−]/.test(trimmed) ? "down" : /^\+/.test(trimmed) ? "up" : "flat";
+  const direction = /^[+−-]?0(?:\.0+)?(?:$|\s|%)/.test(trimmed) ? "flat" : /^[-−]/.test(trimmed) ? "down" : /^\+/.test(trimmed) ? "up" : null;
   return { direction, text: trimmed.replace(/^-/, "−") } as const;
 }
 

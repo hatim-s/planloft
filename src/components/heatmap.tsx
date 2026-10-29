@@ -5,9 +5,7 @@ import { ChartFigure, drawFrames, markHits, useChartId, type Frame } from "./cha
 import {
   columnLabel,
   ComponentInputError,
-  exactCell,
-  exactNumberFormatter,
-  numberFormatter,
+  resolveFormatting,
   numericCell,
   requireKeys,
   requireRows,
@@ -49,10 +47,9 @@ export function Heatmap({ data, x, y, value, title, caption, labels, ...formatti
   requireKeys("Heatmap", rows, [x, y, value]);
 
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
+  const { axis: format, exact } = resolveFormatting("Heatmap", formatting);
   const values = rows.map((row) => numericCell(row, value)).filter((number): number is number => number !== null);
-  if (values.length === 0) throw new ComponentInputError("Heatmap", `needs at least one numeric value for "${value}".`);
+  if (values.length === 0) throw new ComponentInputError("Heatmap", `needs at least one numeric value for "${value}".`, "invalid_value");
   const min = Math.min(...values);
   const max = Math.max(...values);
   const stepOf = (number: number) => (max === min ? STEPS - 1 : Math.min(STEPS - 1, Math.floor(((number - min) / (max - min)) * STEPS)));
@@ -68,6 +65,9 @@ export function Heatmap({ data, x, y, value, title, caption, labels, ...formatti
       step: number === null ? "empty" : String(stepOf(number)),
     };
   });
+  if (new Set(cells.map((cell) => JSON.stringify([cell.row, cell.column]))).size !== cells.length) {
+    throw new ComponentInputError("Heatmap", "needs a unique row and column pair for each cell.", "duplicate_coordinate");
+  }
   const steps = Array.from({ length: STEPS }, (_, step) => step);
   const bound = (step: number) => min + ((max - min) * step) / STEPS;
   const hits = (scene: ChartScene) =>
@@ -75,7 +75,7 @@ export function Heatmap({ data, x, y, value, title, caption, labels, ...formatti
       const entry = cells[index]!;
       return {
         title: `${entry.row}, ${entry.column}`,
-        rows: [[columnLabel(value, labels), entry.value === null ? "—" : exact(entry.value)]],
+        rows: [[columnLabel(value, labels), exact(entry.value)]],
         color: entry.value === null ? undefined : stepColor(stepOf(entry.value)),
       };
     });
@@ -123,7 +123,7 @@ export function Heatmap({ data, x, y, value, title, caption, labels, ...formatti
           name,
           ...columns.map((column) => {
             const match = cells.find((entry) => entry.row === name && entry.column === column);
-            return exactCell(match?.value ?? null);
+            return exact(match?.value ?? null);
           }),
         ]),
       }}

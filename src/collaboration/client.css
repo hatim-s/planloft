@@ -1,7 +1,7 @@
 /* Planloft collaboration runtime. Every rule is scoped to `.plc`, which also resets
    inherited theme styles, so the UI looks the same on every theme apart from the
-   theme's own colors. Colors come from the public theme variables, then the
-   built-in theme variables, then system colors. */
+   theme's own colors. Colors come from the theme's `--planloft-*` tokens, then
+   system colors. */
 
 .plc {
   all: initial;
@@ -9,10 +9,10 @@
      CanvasText fallbacks match a page that sets its own dark scheme. */
   color-scheme: inherit;
   display: contents;
-  --plc-ink: var(--planloft-ink, var(--ink, CanvasText));
-  --plc-paper: var(--planloft-paper, var(--paper, Canvas));
-  --plc-rule: var(--planloft-rule, var(--rule, color-mix(in srgb, CanvasText 18%, transparent)));
-  --plc-accent: var(--planloft-accent, var(--accent, LinkText));
+  --plc-ink: var(--planloft-ink, CanvasText);
+  --plc-paper: var(--planloft-paper, Canvas);
+  --plc-rule: var(--planloft-rule, color-mix(in srgb, CanvasText 18%, transparent));
+  --plc-accent: var(--planloft-accent, LinkText);
   --plc-muted: var(--planloft-muted, color-mix(in srgb, var(--plc-ink) 62%, var(--plc-paper)));
   --plc-surface: var(--planloft-surface, color-mix(in srgb, var(--plc-ink) 5%, var(--plc-paper)));
   /* Mixing a fixed hue with the ink keeps it legible on light and dark paper alike. */
@@ -657,19 +657,19 @@
 /* Comment highlights in the document. These live outside `.plc` because they paint
    the page's own text. */
 ::highlight(planloft-comment) {
-  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 16%, transparent);
-  text-decoration: underline 2px color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 55%, transparent);
+  background-color: color-mix(in srgb, var(--planloft-accent, Highlight) 16%, transparent);
+  text-decoration: underline 2px color-mix(in srgb, var(--planloft-accent, Highlight) 55%, transparent);
 }
 ::highlight(planloft-comment-approximate) {
-  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 10%, transparent);
-  text-decoration: underline 2px dotted color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 60%, transparent);
+  background-color: color-mix(in srgb, var(--planloft-accent, Highlight) 10%, transparent);
+  text-decoration: underline 2px dotted color-mix(in srgb, var(--planloft-accent, Highlight) 60%, transparent);
 }
 ::highlight(planloft-comment-active) {
-  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 30%, transparent);
-  text-decoration: underline 2px var(--planloft-accent, var(--accent, Highlight));
+  background-color: color-mix(in srgb, var(--planloft-accent, Highlight) 30%, transparent);
+  text-decoration: underline 2px var(--planloft-accent, Highlight);
 }
 ::highlight(planloft-comment-draft) {
-  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 24%, transparent);
+  background-color: color-mix(in srgb, var(--planloft-accent, Highlight) 24%, transparent);
 }
 @media print {
   ::highlight(planloft-comment),

@@ -5,9 +5,8 @@ import { ChartFigure, drawScene, markHits, requireSeriesCount, seriesColor, useC
 import {
   columnLabel,
   ComponentInputError,
-  exactCell,
-  exactNumberFormatter,
-  numberFormatter,
+  resolveFormatting,
+  sumNumeric,
   numericCell,
   requireKeys,
   requireRows,
@@ -36,18 +35,20 @@ export function DonutChart({ data, label, value, title, caption, centerLabel = "
   requireSeriesCount("DonutChart", rows.length);
 
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
+  const { axis: format, exact } = resolveFormatting("DonutChart", formatting);
   const slices = rows.map((row, index) => {
     const amount = numericCell(row, value);
     if (amount === null || amount < 0) {
-      throw new ComponentInputError("DonutChart", `needs a non-negative numeric value for "${value}" in row ${index + 1}.`);
+      throw new ComponentInputError("DonutChart", `needs a non-negative numeric value for "${value}" in row ${index + 1}.`, "invalid_value");
     }
     return { name: textCell(row, label), amount };
   });
-  const sum = slices.reduce((total, slice) => total + slice.amount, 0);
+  const sum = sumNumeric(slices.map((slice) => slice.amount));
   const share = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 0 });
   const names = slices.map((slice) => slice.name);
+  if (new Set(names).size !== names.length) {
+    throw new ComponentInputError("DonutChart", `needs unique slice labels in column "${label}".`, "duplicate_category");
+  }
   const shareOf = (slice: { amount: number }) => share.format(sum === 0 ? 0 : slice.amount / sum);
   // Arcs come out of `pie` in slice order, so an arc's datum index is its slice index.
   const arcs = pie(slices, { value: "amount", gapAngle: 0.025 });
@@ -111,7 +112,7 @@ export function DonutChart({ data, label, value, title, caption, centerLabel = "
       }
       data={{
         columns: [columnLabel(label, undefined), columnLabel(value, undefined), "Share"],
-        rows: slices.map((slice) => [slice.name, exactCell(slice.amount), shareOf(slice)]),
+        rows: slices.map((slice) => [slice.name, exact(slice.amount), shareOf(slice)]),
       }}
     />
   );

@@ -52,6 +52,8 @@ export const componentStyles = String.raw`
   clip-path: inset(50%);
   white-space: nowrap;
 }
+/* Hidden chart tables must not become keyboard-focusable scroll containers. */
+.pl-chart__data table { display: table; max-width: none; overflow: visible; }
 .pl-scroll { max-width: 100%; overflow-x: auto; }
 .pl-scroll > table { display: table; width: 100%; max-width: none; margin: 0; overflow: visible; }
 .pl-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

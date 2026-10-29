@@ -5,11 +5,9 @@ import type { ReactNode } from "react";
 import { ChartFigure, drawFrames, markHits, requireSeriesCount, seriesColor, useChartId, type Frame } from "./chart-frame.js";
 import {
   columnLabel,
-  exactCell,
-  exactNumberFormatter,
   ComponentInputError,
   keyList,
-  numberFormatter,
+  resolveFormatting,
   numericCell,
   requireKeys,
   requireRows,
@@ -71,9 +69,7 @@ export function BarChart({
   }
 
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
-  const exactOrMissing = (value: number | null) => (value === null ? "—" : exact(value));
+  const { axis: format, exact } = resolveFormatting("BarChart", formatting);
   const total = (row: Row) => sumNumeric(series.map((key) => numericCell(row, key)));
   const ordered = sort ? [...rows].sort((a, b) => {
     const aTotal = total(a);
@@ -83,6 +79,9 @@ export function BarChart({
     return sort === "ascending" ? aTotal - bTotal : bTotal - aTotal;
   }) : rows;
   const categories = ordered.map((row) => textCell(row, x));
+  if (new Set(categories).size !== categories.length) {
+    throw new ComponentInputError("BarChart", `needs unique categories in column "${x}".`, "duplicate_category");
+  }
   const bars: Bar[] = ordered.flatMap((row) =>
     series.map((key) => ({ id: `${key}:${textCell(row, x)}`, category: textCell(row, x), series: key, value: numericCell(row, key) })),
   );
@@ -113,9 +112,9 @@ export function BarChart({
         title: bar.category,
         rows: [
           ...(stacked
-            ? series.map((key) => [columnLabel(key, labels), exactOrMissing(numericCell(row, key))] as const)
-            : [[columnLabel(bar.series, labels), exactOrMissing(bar.value)] as const]),
-          ...(stacked ? [["Total", exactOrMissing(total(row))] as const] : []),
+            ? series.map((key) => [columnLabel(key, labels), exact(numericCell(row, key))] as const)
+            : [[columnLabel(bar.series, labels), exact(bar.value)] as const]),
+          ...(stacked ? [["Total", exact(total(row))] as const] : []),
         ],
         color: seriesColor(series.indexOf(bar.series)),
       };
@@ -183,8 +182,8 @@ export function BarChart({
         columns: [columnLabel(x, labels), ...series.map((key) => columnLabel(key, labels)), ...(stacked ? ["Total"] : [])],
         rows: ordered.map((row) => [
           textCell(row, x),
-          ...series.map((key) => exactCell(numericCell(row, key))),
-          ...(stacked ? [exactCell(total(row))] : []),
+          ...series.map((key) => exact(numericCell(row, key))),
+          ...(stacked ? [exact(total(row))] : []),
         ]),
       }}
     />

@@ -18,7 +18,7 @@ const SENTINEL = "SECRET_error-boundary_sentinel";
 test("public errors are immutable value objects despite hostile details and subclasses", () => {
   let getterCalls = 0;
   const details = Object.create(null) as Record<string, unknown>;
-  for (const key of ["stage", "diagnosticCode", "field"]) {
+  for (const key of ["stage", "diagnosticCode", "field", "component", "reason", "location", "imported"]) {
     Object.defineProperty(details, key, {
       enumerable: true,
       get() {
@@ -186,6 +186,7 @@ test("CLI proxy traps and stdin failures fall back without leaking", async () =>
     "field",
     "code",
     "message",
+    "component", "reason", "location", "imported",
   ]) {
     let getterCalls = 0;
     const hostile = Object.create(null);
@@ -317,7 +318,13 @@ test("migration preserves actionable source locations and redacts conflict paths
   const app = createPlanloftApplication({ cwd: root, planloftHome: path.join(root, "home") });
   try {
     fs.writeFileSync(source, "<b>raw</b>\n");
-    await assert.rejects(app.migrate(source, { out: destination, dryRun: true }), /Raw HTML at line 1, column 1/);
+    await assert.rejects(app.migrate(source, { out: destination, dryRun: true }), (error: unknown) => {
+      assert.ok(error instanceof PlanloftApplicationError);
+      assert.equal(error.diagnosticCode, "PLANLOFT_MIGRATION_UNSUPPORTED_CONTENT");
+      assert.deepEqual(error.location, { line: 1, column: 1 });
+      assert.match(error.message, /line 1, column 1/);
+      return true;
+    });
     fs.writeFileSync(source, "# Safe\n");
     fs.writeFileSync(destination, "different");
     await assert.rejects(app.migrate(source, { out: destination, dryRun: true }), (error: unknown) => {

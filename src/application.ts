@@ -10,14 +10,14 @@ import { docFile } from "./core/doc.js";
 import { shortId } from "./core/id.js";
 import { normalizeDocumentMetadata } from "./core/ingest.js";
 import { configPath, withPlanloftHome } from "./core/paths.js";
-import { gitRoot, projectKey } from "./core/project.js";
+import { projectKey } from "./core/project.js";
 import { slugify } from "./core/slug.js";
 import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
 import { hasGh } from "./hosts/github-pages.js";
 import { attachCollaboration } from "./collaboration/attachment.js";
 import { buildCollaborationDeployment } from "./collaboration/deploy.js";
 import { packageRoot } from "./core/paths.js";
-import type { CollaborationConfig } from "./collaboration/contracts.js";
+import type { CollaborationConfig, CollaborationProvider } from "./collaboration/contracts.js";
 import { MigrationError, migrateDocument, type MigrationResult } from "./migration/index.js";
 import { prepareHostingRepository } from "./hosts/layout.js";
 import {
@@ -33,24 +33,15 @@ import {
   type PublicationOptions,
 } from "./publication.js";
 import { buildGallery } from "./gallery/index.js";
-import { buildSiteAsync, renderDocument } from "./render/renderer.js";
-import { isMdxAuthoringError, prepareMdx, renderMdxDocument } from "./mdx/index.js";
+import { buildSite, renderPreparedDocument } from "./render/renderer.js";
+import { isMdxAuthoringError, type MdxAuthoringError } from "./mdx/compiler.js";
+import { isBuiltinComponentName, isComponentInputReason, type BuiltinComponentName, type ComponentInputReason } from "./components/metadata.js";
 import { type ThemeDiagnosticCode } from "./render/themes.js";
 import {
-  readCanonicalDocument,
+  readPreparedDocument,
   type SourceFlags,
   type SourceReader,
 } from "./commands/source.js";
-
-const safeMigrationErrors = new WeakSet<MigrationError>();
-
-export function isSafeMigrationError(error: unknown): error is MigrationError {
-  try {
-    return error instanceof MigrationError && safeMigrationErrors.has(error);
-  } catch {
-    return false;
-  }
-}
 
 export const APPLICATION_ERROR_CATEGORIES = [
   "validation",
@@ -113,6 +104,10 @@ const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
 export type ApplicationErrorStage = PublicationEffectStage;
 
 export type ApplicationDiagnosticCode =
+  | MdxAuthoringError["code"]
+  | `PLANLOFT_MIGRATION_${MigrationError["code"]}`
+  | "PLANLOFT_COLLABORATION_BUILD_FAILED"
+  | "PLANLOFT_COLLABORATION_MARKERS_INVALID"
   | ConfigDiagnosticCode
   | ThemeDiagnosticCode
   | "PLANLOFT_DOCUMENT_METADATA_INVALID"
@@ -142,7 +137,13 @@ export type ApplicationDiagnosticCode =
 
 export type ApplicationDiagnosticField = "title" | "slug" | "kind" | "theme" | "status";
 
+export interface ApplicationDiagnosticLocation { line: number; column?: number; file?: string }
+
 export interface PlanloftApplicationErrorDetails {
+  location?: ApplicationDiagnosticLocation;
+  imported?: boolean;
+  component?: BuiltinComponentName;
+  reason?: ComponentInputReason;
   stage?: ApplicationErrorStage;
   diagnosticCode?: ApplicationDiagnosticCode;
   field?: ApplicationDiagnosticField;
@@ -155,6 +156,10 @@ export class PlanloftApplicationError extends Error {
   readonly stage?: ApplicationErrorStage;
   readonly diagnosticCode?: ApplicationDiagnosticCode;
   readonly field?: ApplicationDiagnosticField;
+  readonly location?: ApplicationDiagnosticLocation;
+  readonly imported?: boolean;
+  readonly component?: BuiltinComponentName;
+  readonly reason?: ComponentInputReason;
 
   constructor(
     category: ApplicationErrorCategory,
@@ -182,12 +187,16 @@ export class PlanloftApplicationError extends Error {
       stage: immutableProperty(safeDetails.stage, true),
       diagnosticCode: immutableProperty(safeDetails.diagnosticCode, true),
       field: immutableProperty(safeDetails.field, true),
+      location: immutableProperty(safeDetails.location, true),
+      imported: immutableProperty(safeDetails.imported, true),
+      component: immutableProperty(safeDetails.component, true),
+      reason: immutableProperty(safeDetails.reason, true),
     });
     Object.freeze(this);
   }
 
-  toJSON(): Readonly<Record<string, string>> {
-    const output: Record<string, string> = {
+  toJSON(): Readonly<Record<string, unknown>> {
+    const output: Record<string, unknown> = {
       name: this.name,
       message: this.message,
       code: this.code,
@@ -197,6 +206,10 @@ export class PlanloftApplicationError extends Error {
     if (this.stage !== undefined) output.stage = this.stage;
     if (this.diagnosticCode !== undefined) output.diagnosticCode = this.diagnosticCode;
     if (this.field !== undefined) output.field = this.field;
+    if (this.location !== undefined) output.location = this.location;
+    if (this.component !== undefined) output.component = this.component;
+    if (this.reason !== undefined) output.reason = this.reason;
+    if (this.imported !== undefined) output.imported = this.imported;
     return Object.freeze(output);
   }
 }
@@ -356,7 +369,7 @@ export interface PlanloftApplication {
   init(options?: InitOptions): Promise<InitResult>;
   attach(input: string, options: CollaborationConfig & { out: string }): Promise<{ documentId: string }>;
   gallery(options: { out: string }): Promise<{ indexPath: string }>;
-  collaborationBuild(options: { provider: "local" | "cloudflare" | "vercel"; out: string }): Promise<{ directory: string }>;
+  collaborationBuild(options: { provider: CollaborationProvider; out: string }): Promise<{ directory: string }>;
   migrate(source: string, options: { out: string; dryRun?: boolean }): Promise<MigrationResult>;
   migrateToVercel(directory: string): Promise<{ operation: "migrate-to-vercel"; directory: string; migrated: boolean }>;
 }
@@ -414,17 +427,14 @@ export function createPlanloftApplication(
       try {
         return await effect();
       } catch (error) {
-        if (isMdxAuthoringError(error)) throw error;
-        if (operation === "migrate" && error instanceof MigrationError) {
-          const message = error.code === "DESTINATION_CONFLICT"
-            ? "Destination already exists with different content. Choose a different destination."
-            : error.code === "BACKUP_CONFLICT"
-              ? "Backup already exists with different content. Resolve the backup conflict before migrating."
-              : error.message;
-          const safe = new MigrationError(error.code, message);
-          safeMigrationErrors.add(safe);
-          throw safe;
-        }
+        if (isMdxAuthoringError(error)) throw applicationError("validation", operation, {
+          diagnosticCode: error.code,
+          component: error.component,
+          reason: error.reason,
+          ...(error.line === undefined ? {} : { location: { line: error.line, column: error.column, file: error.sourceFile } }),
+          imported: error.imported,
+        });
+        if (operation === "migrate" && error instanceof MigrationError) throw migrationApplicationError(error);
         throw classifyError(operation, error);
       }
     });
@@ -433,11 +443,13 @@ export function createPlanloftApplication(
     meta: DocMeta,
     options: DeployOptions,
     prepared?: PreparedPublication,
+    renderedHtml?: string,
   ): Promise<DeploymentSummary> => {
     const validated = prepared ?? publication.prepare(meta, options);
     try {
-      return await publication.publish(meta, validated);
+      return await publication.publish(meta, validated, renderedHtml);
     } catch (error) {
+      if (isMdxAuthoringError(error)) throw error;
       throw classifyError("deploy", error);
     }
   };
@@ -446,10 +458,7 @@ export function createPlanloftApplication(
     gallery: (options) => run("gallery", () => buildGallery({ outDir: path.resolve(currentDirectory(), options.out) })),
     attach: (input, options) => run("attach", async () => {
       const html = fileSystem.readText(path.resolve(currentDirectory(), input));
-      const result = await attachCollaboration(html, { documentId: options.documentId, revision: options.revision, apiUrl: options.apiUrl, contentSelector: options.contentSelector }, {
-        clientPath: path.join(packageRoot, "src/collaboration/client.ts"),
-        cssPath: path.join(packageRoot, "src/collaboration/client.css"),
-      });
+      const result = await attachCollaboration(html, { documentId: options.documentId, revision: options.revision, apiUrl: options.apiUrl, contentSelector: options.contentSelector });
       fileSystem.writeText(path.resolve(currentDirectory(), options.out), result.html);
       return { documentId: result.config.documentId };
     }),
@@ -466,15 +475,9 @@ export function createPlanloftApplication(
     render: (input, options = {}) =>
       run("render", async () => {
         const cwd = currentDirectory();
-        const doc = await readCanonicalDocument(
-          resolveSourceInput(input, cwd),
-          options,
-          sourceReader,
-        );
+        const doc = await readPreparedDocument(input, options, sourceReader, cwd);
         const theme = configuration.resolveProject(projectKey(cwd).key, doc.theme).theme;
-        const html = doc.contentFormat === "mdx"
-          ? await renderMdxDocument(doc, theme, { noindex: options.noindex, sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd })
-          : renderDocument(doc, theme, { noindex: options.noindex });
+        const html = renderPreparedDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
         const destination = outputFile(path.resolve(cwd, options.out));
@@ -486,16 +489,7 @@ export function createPlanloftApplication(
     hoist: (input, options = {}) =>
       run("hoist", async () => {
         const cwd = currentDirectory();
-        const doc = await readCanonicalDocument(
-          resolveSourceInput(input, cwd),
-          options,
-          sourceReader,
-        );
-        if (doc.contentFormat === "mdx") {
-          doc.compiledMdx = await prepareMdx(doc.content, { sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd, sourceLineOffset: doc.sourceLineOffset });
-        } else if (doc.contentFormat === "html") {
-          renderDocument(doc, configuration.resolveProject(projectKey(cwd).key, doc.theme).theme);
-        }
+        const doc = await readPreparedDocument(input, options, sourceReader, cwd);
         const meta = persistence.hoist(doc, clock());
         return { operation: "hoist", document: publicDocument(meta, true) };
       }),
@@ -504,11 +498,7 @@ export function createPlanloftApplication(
       run("publish", async () => {
         // Parse and validate every locally knowable input before the first store write.
         const cwd = currentDirectory();
-        const doc = await readCanonicalDocument(
-          resolveSourceInput(input, cwd),
-          options,
-          sourceReader,
-        );
+        const doc = await readPreparedDocument(input, options, sourceReader, cwd);
         const now = clock();
         const project = persistence.project();
         const draftMeta: DocMeta = {
@@ -526,12 +516,9 @@ export function createPlanloftApplication(
         // Publication preparation validates configuration, theme, TTL, expiry, and comments
         // before persistence performs the first mutation.
         const prepared = publication.prepare(draftMeta, options, now);
-        if (doc.contentFormat === "mdx") {
-          doc.compiledMdx = await prepareMdx(doc.content, { sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd, sourceLineOffset: doc.sourceLineOffset });
-        }
-        if (doc.contentFormat === "html") renderDocument(doc, prepared.theme, { noindex: true });
+        const html = renderPreparedDocument(doc, prepared.theme, { noindex: true, comments: prepared.comments });
         const meta = persistence.hoist(doc, now);
-        const deployment = await deployMeta(meta, options, prepared);
+        const deployment = await deployMeta(meta, options, prepared, html);
         return { operation: "publish", document: publicDocument(meta, true), deployment };
       }),
 
@@ -585,7 +572,7 @@ export function createPlanloftApplication(
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
         const theme = configuration.resolveProject(projectKey(cwd).key, meta.theme).theme;
-        const directory = await buildSiteAsync({ doc: meta, theme, base: "/" });
+        const directory = await buildSite({ doc: meta, theme });
         const url = `file://${directory}/index.html`;
         const opened = (dependencies.openUrl ?? openUrl)(url);
         return { operation: "preview", slug: meta.slug, directory, url, opened };
@@ -708,10 +695,6 @@ function outputFile(output: string): string {
   return path.extname(output).toLowerCase() === ".html" ? output : path.join(output, "index.html");
 }
 
-function resolveSourceInput(input: string, cwd: string): string {
-  return input === "-" ? input : path.resolve(cwd, input);
-}
-
 function openUrl(url: string): boolean {
   const command =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
@@ -743,6 +726,7 @@ function classifyError(
         stage: validStage(candidate.stage),
         diagnosticCode: validDiagnostic(candidate.diagnosticCode),
         field: validField(candidate.field),
+        ...safeAuthoringDetails(candidate),
       });
     }
     return applicationError("local_effect", operation);
@@ -762,7 +746,7 @@ function classifyError(
   if (candidate.name === "ConfigError" && validConfigDiagnostic(candidate.code)) {
     return applicationError("configuration", operation, { diagnosticCode: candidate.code });
   }
-  if (candidate.name === "UnsupportedHtmlStructureError" && candidate.code === "PLANLOFT_HTML_FRAMESET_UNSUPPORTED") {
+  if ((candidate.name === "UnsupportedHtmlStructureError" || candidate.name === "CollaborationFramesetError") && candidate.code === "PLANLOFT_HTML_FRAMESET_UNSUPPORTED") {
     return applicationError("validation", operation, { diagnosticCode: "PLANLOFT_HTML_FRAMESET_UNSUPPORTED" });
   }
   if (candidate.name === "RenderSupportError" && candidate.code === "PLANLOFT_RENDER_SUPPORT_CONFLICT") {
@@ -771,6 +755,10 @@ function classifyError(
   if (candidate.name === "ThemeError" && validThemeDiagnostic(candidate.code)) {
     return applicationError("validation", operation, { diagnosticCode: candidate.code });
   }
+  if (candidate.name === "DocumentTrustError" && (candidate.code === "PLANLOFT_TRUSTED_MDX_REQUIRED" || candidate.code === "PLANLOFT_TRUSTED_HTML_REQUIRED")) return applicationError("validation", operation, { diagnosticCode: candidate.code });
+  if (candidate.name === "MdxSnapshotError" && candidate.code === "PLANLOFT_MDX_SNAPSHOT_STALE") return applicationError("validation", operation, { diagnosticCode: candidate.code });
+  if (candidate.name === "CollaborationAttachmentError" && candidate.code === "PLANLOFT_COLLABORATION_MARKERS_INVALID") return applicationError("validation", operation, { diagnosticCode: candidate.code });
+  if (candidate.name === "CollaborationDeploymentError" && candidate.code === "PLANLOFT_COLLABORATION_BUILD_FAILED") return applicationError("local_effect", operation, { diagnosticCode: candidate.code });
   const hostingCode = typeof candidate.message === "string" ? candidate.message.split(":")[0] : undefined;
   if (hostingCode && validDiagnostic(hostingCode) && ["PLANLOFT_VERCEL_CONFIG_INVALID", "PLANLOFT_CLOUDFLARE_CONFIG_INVALID", "PLANLOFT_HOST_INVALID", "PLANLOFT_HOSTING_INVALID"].includes(hostingCode)) {
     return applicationError("validation", operation, { diagnosticCode: validDiagnostic(hostingCode) });
@@ -798,6 +786,7 @@ export function canonicalizePlanloftApplicationError(
     stage: validStage(inspected.values.stage),
     diagnosticCode: validDiagnostic(inspected.values.diagnosticCode),
     field: validField(inspected.values.field),
+    ...safeAuthoringDetails(inspected.values),
   });
 }
 
@@ -846,11 +835,6 @@ function validationDiagnostic(message: unknown): PlanloftApplicationErrorDetails
   if (/^(?:--ttl|TTL|config\.defaultTtlDays) does not produce a representable expiry/.test(message)) {
     return { diagnosticCode: "PLANLOFT_EXPIRY_INVALID" };
   }
-  if (message.startsWith("MDX executes code.")) return { diagnosticCode: "PLANLOFT_TRUSTED_MDX_REQUIRED" };
-  if (message.startsWith("Stored MDX has changed since")) return { diagnosticCode: "PLANLOFT_MDX_SNAPSHOT_STALE" };
-  if (/^(?:HTML input|JSON HTML content) is disabled by default\./.test(message)) {
-    return { diagnosticCode: "PLANLOFT_TRUSTED_HTML_REQUIRED" };
-  }
   if (message.startsWith("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED:")) {
     return { diagnosticCode: "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED" };
   }
@@ -875,6 +859,11 @@ const ERROR_STAGES = new Set<ApplicationErrorStage>([
 ]);
 
 const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
+  "MDX_SYNTAX", "MDX_IMPORT", "MDX_COMPONENT", "MDX_COMPONENT_INPUT",
+  "PLANLOFT_COLLABORATION_MARKERS_INVALID", "PLANLOFT_COLLABORATION_BUILD_FAILED",
+  "PLANLOFT_MIGRATION_UNSUPPORTED_FORMAT", "PLANLOFT_MIGRATION_UNSUPPORTED_CONTENT",
+  "PLANLOFT_MIGRATION_INVALID_SOURCE", "PLANLOFT_MIGRATION_PATH_CONFLICT",
+  "PLANLOFT_MIGRATION_DESTINATION_CONFLICT", "PLANLOFT_MIGRATION_BACKUP_CONFLICT",
   "PLANLOFT_CONFIG_MALFORMED",
   "PLANLOFT_CONFIG_INACCESSIBLE",
   "PLANLOFT_CONFIG_INVALID",
@@ -918,8 +907,33 @@ const DIAGNOSTIC_FIELDS = new Set<ApplicationDiagnosticField>([
   "status",
 ]);
 
+function safeAuthoringDetails(value: Record<string, unknown>): Pick<PlanloftApplicationErrorDetails, "component" | "reason" | "location" | "imported"> {
+  const location = inspectOwnDataProperties(value.location, ["line", "column", "file"]);
+  const line = location.safe ? safePosition(location.values.line) : undefined;
+  const column = location.safe ? safePosition(location.values.column) : undefined;
+  const file = location.safe && typeof location.values.file === "string" && location.values.file.length <= 160 && /^(?!\.\.(?:\/|$))(?!\/)[A-Za-z0-9._/-]+$/.test(location.values.file) && !location.values.file.split("/").includes("..") ? location.values.file : undefined;
+  return {
+    ...(isBuiltinComponentName(value.component) ? { component: value.component } : {}),
+    ...(isComponentInputReason(value.reason) ? { reason: value.reason } : {}),
+    ...(value.imported === true ? { imported: true } : {}),
+    ...(line === undefined ? {} : { location: Object.freeze({ line, ...(column === undefined ? {} : { column }), ...(file === undefined ? {} : { file }) }) }),
+  };
+}
+
+function safePosition(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 9999999 ? value : undefined;
+}
+
+function migrationApplicationError(error: MigrationError): PlanloftApplicationError {
+  const match = /\bat line (\d{1,7}), column (\d{1,7})\b/.exec(error.message);
+  return applicationError(error.code === "DESTINATION_CONFLICT" || error.code === "BACKUP_CONFLICT" ? "conflict" : "validation", "migrate", {
+    diagnosticCode: `PLANLOFT_MIGRATION_${error.code}`,
+    ...(match ? { location: { line: Number(match[1]), column: Number(match[2]) } } : {}),
+  });
+}
+
 function sanitizeErrorDetails(details: unknown): PlanloftApplicationErrorDetails {
-  const inspected = inspectOwnDataProperties(details, ["stage", "diagnosticCode", "field"]);
+  const inspected = inspectOwnDataProperties(details, ["stage", "diagnosticCode", "field", "component", "reason", "location", "imported"]);
   if (!inspected.safe) return {};
   const stage = validStage(inspected.values.stage);
   const diagnosticCode = validDiagnostic(inspected.values.diagnosticCode);
@@ -928,6 +942,7 @@ function sanitizeErrorDetails(details: unknown): PlanloftApplicationErrorDetails
     ...(stage === undefined ? {} : { stage }),
     ...(diagnosticCode === undefined ? {} : { diagnosticCode }),
     ...(field === undefined ? {} : { field }),
+    ...safeAuthoringDetails(inspected.values),
   };
 }
 
@@ -940,6 +955,7 @@ const CAUGHT_VALUE_PROPERTIES = [
   "field",
   "code",
   "message",
+  "component", "reason", "location", "imported",
 ] as const;
 
 type InspectedValues = Record<(typeof CAUGHT_VALUE_PROPERTIES)[number] | "stage" | "diagnosticCode" | "field", unknown>;
@@ -1026,7 +1042,22 @@ function applicationErrorMessage(
     : operation.charAt(0).toUpperCase() + operation.slice(1);
   const diagnostic = details.diagnosticCode;
   const prefix = diagnostic ? `[${diagnostic}] ` : "";
+  const location = details.location;
+  const position = location ? ` at line ${location.line}${location.column === undefined ? "" : `, column ${location.column}`}` : "";
+  const context = details.imported ? location?.file ? ` in imported MDX ${location.file}` : " in an imported MDX file" : "";
   const messages: Partial<Record<ApplicationDiagnosticCode, string>> = {
+    MDX_SYNTAX: `MDX syntax error${context}${position}. Check the document and imported MDX.`,
+    MDX_IMPORT: "An MDX import could not be resolved. Check the import and its source location.",
+    MDX_COMPONENT: "An MDX component is missing. Import it or add it to a component registry.",
+    MDX_COMPONENT_INPUT: details.component ? `Invalid data or props for <${details.component}>${details.reason ? ` (${details.reason})` : ""}. Check the component inputs.` : "Invalid component inputs.",
+    PLANLOFT_COLLABORATION_BUILD_FAILED: "Collaboration service build failed. Check the provider and installed package assets.",
+    PLANLOFT_COLLABORATION_MARKERS_INVALID: "Collaboration markers are invalid. Restore the original HTML or repair the complete attachment block.",
+    PLANLOFT_MIGRATION_UNSUPPORTED_FORMAT: "Migration supports Markdown to .mdx or HTML to the same HTML extension only.",
+    PLANLOFT_MIGRATION_UNSUPPORTED_CONTENT: `Unsupported content${position} needs manual conversion before migration.`,
+    PLANLOFT_MIGRATION_INVALID_SOURCE: "Migration source is invalid. Check encoding and document structure.",
+    PLANLOFT_MIGRATION_PATH_CONFLICT: "Source, destination, and backup must be separate paths.",
+    PLANLOFT_MIGRATION_DESTINATION_CONFLICT: "Destination already exists with different content. Choose a different destination.",
+    PLANLOFT_MIGRATION_BACKUP_CONFLICT: "Backup already exists with different content. Resolve the backup conflict before migrating.",
     PLANLOFT_CONFIG_MALFORMED: "Configuration JSON is malformed. Fix config.json and try again.",
     PLANLOFT_CONFIG_INACCESSIBLE: "Configuration is inaccessible. Check Planloft home permissions and try again.",
     PLANLOFT_CONFIG_INVALID: "Configuration is semantically invalid. Check supported fields and values.",
@@ -1043,7 +1074,7 @@ function applicationErrorMessage(
     PLANLOFT_RESOLVE_FORMAT_INVALID: "Resolve format is invalid. Use md, mdx, or html.",
     PLANLOFT_DOCUMENT_FORMAT_INVALID: "Document format is invalid. Use md, mdx, json, or html and specify stdin format explicitly.",
     PLANLOFT_TRUSTED_MDX_REQUIRED: "MDX executes code. Pass --trusted-mdx only for content you trust.",
-    PLANLOFT_MDX_SNAPSHOT_STALE: "Stored MDX has changed since its dependencies were compiled. Hoist it again from its source location.",
+    PLANLOFT_MDX_SNAPSHOT_STALE: "Stored MDX has changed since its dependencies were compiled. Restore the source dependencies and compile again; <source>.bundle.js cannot be reused.",
     PLANLOFT_TRUSTED_HTML_REQUIRED: "HTML input is disabled by default. Enable trusted HTML only for content you trust.",
     PLANLOFT_HTML_FRAMESET_UNSUPPORTED: "Frameset HTML is not supported. Convert it to a document with an ordinary body, or keep the original externally.",
     PLANLOFT_RENDER_SUPPORT_CONFLICT: "Existing Planloft support is ambiguous or conflicts with the document. Regenerate from the original source, or review legacy generated support in a separate candidate before migrating.",

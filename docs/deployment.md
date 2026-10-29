@@ -150,7 +150,7 @@ Ship the updated service and attached HTML together to enable deletion in the UI
 
 `planloft collaboration-build --provider cloudflare --out <directory>` generates a
 Cloudflare Worker and D1 migration. The `vercel` provider generates a Vercel service
-using Turso, and `local` generates a Node 22 service using SQLite. Configure the D1
+using Turso, and `local` generates a service for Node.js 22.15.0 or newer using its built-in SQLite. Configure the D1
 binding or Turso URL and token and the admin token on the server, then apply the
 provided `migration.sql`. Generation does not deploy infrastructure. Provider artifacts
 have not been verified on live Cloudflare or Vercel infrastructure.
@@ -159,8 +159,28 @@ Register each document with the service using its admin API before attaching it.
 `planloft attach <input> --out <html-file> --document-id <id> --revision <revision>
 --api-url <service-url>` adds the browser client to an HTML document. Reattachment
 preserves the existing document ID. The browser configuration contains no admin or
-database credentials. Access is public to viewers; they can comment and edit shared
-notes. The client fetches state on load, updates after its own mutations, and does not
+database credentials. Access is public and anonymous. Any viewer can comment, delete any
+thread or reply, create and edit shared notes, and change shared tasks. Notes cannot
+be deleted. The admin token only registers documents. Each document has these caps:
+
+| Limit | Per document |
+| --- | --- |
+| Live threads | 128 |
+| Live replies | 512 |
+| Notes | 64 |
+| Task keys | 512 |
+| Keyed creation identities, including deleted ones | 2048 |
+| Comment, reply, or note body | 4096 UTF-16 code units |
+| Anchor quote | 4096 UTF-16 code units, with up to 1000 on each side for context |
+| Note history | the latest 20 revisions per note |
+
+A new write over a cap fails with HTTP 409 and `capacity_exceeded`. Deleting a thread
+or reply frees its live slot but not its creation identity, because the identity stays
+as a tombstone. Once the identity cap is full, new keyed creations fail while retries
+of earlier requests still succeed. Saving a note with unchanged text does not add a
+revision. Data stored before these caps existed is kept, except that applying the new
+migration trims note history to the latest 20 revisions. There is no whole-document
+size budget, pagination, rate limit, or cap on the number of documents. The client fetches state on load, updates after its own mutations, and does not
 poll. Reload to see changes from other readers. Task checkboxes need stable explicit
 keys so their state survives document edits.
 

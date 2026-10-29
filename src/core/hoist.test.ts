@@ -6,7 +6,7 @@ import test from "node:test";
 import { DEFAULT_CONFIG } from "../configuration.js";
 import { createDocumentPersistence, hoistDocument } from "../persistence.js";
 import { indexPath } from "./paths.js";
-import { projectKey } from "./project.js";
+import { ingestDocument } from "./ingest.js";
 
 test("hoisting persists canonical source and indexes it for the project", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-home-test-"));
@@ -17,6 +17,7 @@ test("hoisting persists canonical source and indexes it for the project", () => 
     const meta = hoistDocument(
       {
         version: 1,
+        sourceLineOffset: null,
         title: "Imported plan",
         slug: "imported-plan",
         kind: "plan",
@@ -38,9 +39,7 @@ test("hoisting persists canonical source and indexes it for the project", () => 
     );
     assert.equal(Object.values(createDocumentPersistence({ cwd: project }).list().projects)[0]?.docs["imported-plan"]?.file, meta.file);
 
-    const projectIdentity = projectKey(project);
-    const normalized = createDocumentPersistence({ cwd: project }).capture(meta.file);
-    assert.equal(normalized?.trustedHtml, false);
+    assert.equal(createDocumentPersistence({ cwd: project }).find(meta.slug)?.trustedHtml, false);
   } finally {
     if (previousHome === undefined) delete process.env.PLANLOFT_HOME;
     else process.env.PLANLOFT_HOME = previousHome;
@@ -49,7 +48,7 @@ test("hoisting persists canonical source and indexes it for the project", () => 
   }
 });
 
-test("compatibility hoist validates an invalid theme without persisting defaults", () => {
+test("public hoist validates an invalid theme without persisting defaults", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-compat-hoist-validation-test-"));
   const home = path.join(root, "home");
   const project = path.join(root, "project");
@@ -60,6 +59,7 @@ test("compatibility hoist validates an invalid theme without persisting defaults
     assert.throws(
       () => hoistDocument({
         version: 1,
+        sourceLineOffset: null,
         title: "Invalid",
         slug: "invalid",
         kind: "plan",
@@ -79,7 +79,7 @@ test("compatibility hoist validates an invalid theme without persisting defaults
   }
 });
 
-test("the persistence interface preserves capture metadata and replaces document formats coherently", () => {
+test("the persistence interface normalizes canonical metadata and replaces document formats coherently", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-persistence-interface-test-"));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-persistence-project-test-"));
   const previousHome = process.env.PLANLOFT_HOME;
@@ -96,7 +96,7 @@ test("the persistence interface preserves capture metadata and replaces document
       "---\ntitle: '  Kept  '\nslug: '  kept  '\nkind: '  note  '\nstatus: '  active  '\n" +
         "theme: '  minimal  '\nowner: Hatim\nreview:\n  required: true\n---\n# Kept\n",
     );
-    const captured = persistence.capture(capture);
+    const captured = persistence.hoist(ingestDocument(fs.readFileSync(capture, "utf8"), { format: "md" }));
     assert.equal(captured?.updatedAt, "2034-05-06T07:08:09.000Z");
     assert.equal(captured?.title, "Kept");
     assert.equal(captured?.slug, "kept");
@@ -104,12 +104,13 @@ test("the persistence interface preserves capture metadata and replaces document
     assert.equal(captured?.status, "active");
     assert.equal(captured?.theme, "minimal");
     const normalizedSource = fs.readFileSync(capture, "utf8");
-    assert.match(normalizedSource, /owner: Hatim/);
-    assert.match(normalizedSource, /review:\n  required: true/);
+    assert.match(normalizedSource, /title: Kept/);
+    assert.match(normalizedSource, /theme: minimal/);
     assert.doesNotMatch(normalizedSource, /  Kept  |  kept  |  note  |  active  |  minimal  /);
 
     const replacement = persistence.hoist({
       version: 1,
+      sourceLineOffset: null,
       title: "Kept HTML",
       slug: "kept",
       kind: "plan",
@@ -134,7 +135,7 @@ test("the persistence interface preserves capture metadata and replaces document
   }
 });
 
-test("write-direct capture rejects invalid shared metadata before source, index, or format mutation", () => {
+test("canonical hoist rejects invalid shared metadata before source, index, or format mutation", () => {
   const fields = ["title", "slug", "kind", "theme", "status"] as const;
   const invalidValues: Array<{ label: string; yaml: string }> = [
     { label: "whitespace", yaml: "'   '" },
@@ -155,6 +156,7 @@ test("write-direct capture rejects invalid shared metadata before source, index,
         const persistence = createDocumentPersistence({ cwd: project });
         const html = persistence.hoist({
           version: 1,
+          sourceLineOffset: null,
           title: "Still valid",
           slug: "guarded",
           kind: "plan",
@@ -172,7 +174,7 @@ test("write-direct capture rejects invalid shared metadata before source, index,
         const htmlBefore = fs.readFileSync(html.file, "utf8");
 
         assert.throws(
-          () => persistence.capture(markdown),
+          () => persistence.hoist(ingestDocument(fs.readFileSync(markdown, "utf8"), { format: "md" })),
           new RegExp(`Markdown frontmatter metadata "${field}" must be a nonblank string`),
         );
         assert.equal(fs.readFileSync(markdown, "utf8"), markdownBefore);
@@ -188,7 +190,7 @@ test("write-direct capture rejects invalid shared metadata before source, index,
   }
 });
 
-test("write-direct HTML to Markdown replacement preserves metadata and deletes old format after indexing", () => {
+test("HTML to Markdown replacement uses explicit metadata and deletes old format after indexing", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-capture-html-md-test-"));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-capture-html-md-project-"));
   const previousHome = process.env.PLANLOFT_HOME;
@@ -197,6 +199,7 @@ test("write-direct HTML to Markdown replacement preserves metadata and deletes o
     const persistence = createDocumentPersistence({ cwd: project });
     const html = persistence.hoist({
       version: 1,
+      sourceLineOffset: null,
       title: "Preserved title",
       slug: "same-slug",
       kind: "proposal",
@@ -209,7 +212,10 @@ test("write-direct HTML to Markdown replacement preserves metadata and deletes o
     const markdown = path.join(path.dirname(html.file), "same-slug.md");
     fs.writeFileSync(markdown, "# New Markdown\n");
 
-    const captured = persistence.capture(markdown, new Date("2038-04-05T06:07:08.000Z"));
+    const captured = persistence.hoist(ingestDocument(fs.readFileSync(markdown, "utf8"), {
+      format: "md", trustedHtml: true,
+      overrides: { slug: html.slug, title: html.title, kind: html.kind, status: html.status, theme: html.theme },
+    }), new Date("2038-04-05T06:07:08.000Z"));
     assert.equal(captured?.file, path.resolve(markdown));
     assert.equal(captured?.format, "md");
     assert.equal(captured?.title, "Preserved title");
@@ -231,7 +237,7 @@ test("write-direct HTML to Markdown replacement preserves metadata and deletes o
   }
 });
 
-test("failed write-direct index update keeps the previously indexed format", () => {
+test("failed hoist index update keeps the previously indexed format", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-capture-order-test-"));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-capture-order-project-"));
   const previousHome = process.env.PLANLOFT_HOME;
@@ -240,6 +246,7 @@ test("failed write-direct index update keeps the previously indexed format", () 
     const persistence = createDocumentPersistence({ cwd: project });
     const html = persistence.hoist({
       version: 1,
+      sourceLineOffset: null,
       title: "Still indexed",
       slug: "ordered",
       kind: "plan",
@@ -266,7 +273,7 @@ test("failed write-direct index update keeps the previously indexed format", () 
       },
     });
 
-    assert.throws(() => failing.capture(markdown), /simulated index failure/);
+    assert.throws(() => failing.hoist(ingestDocument("# Replacement", { format: "md", overrides: { slug: "ordered" } })), /simulated index failure/);
     assert.equal(fs.existsSync(html.file), true);
     assert.equal(persistence.find("ordered")?.file, html.file);
   } finally {

@@ -1,7 +1,7 @@
 import { areaY, createChartScene, defineChart, dot, lineY } from "@tanstack/charts";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { columnHits, drawScene, useChartId } from "./chart-frame.js";
-import { ComponentInputError, exactNumberFormatter, numberFormatter, type ValueFormatting } from "./data.js";
+import { ComponentInputError, resolveFormatting, type ValueFormatting } from "./data.js";
 
 export interface SparklineProps extends ValueFormatting {
   values: readonly number[];
@@ -15,11 +15,10 @@ const HEIGHT = 24;
 /** A word-sized trend line that sits inline with text or inside a Stat. */
 export function Sparkline({ values, label = "Trend", ...formatting }: SparklineProps) {
   if (!Array.isArray(values) || values.length < 2 || values.some((value) => !Number.isFinite(value))) {
-    throw new ComponentInputError("Sparkline", "needs `values` with at least two numbers.");
+    throw new ComponentInputError("Sparkline", "needs `values` with at least two numbers.", "invalid_value");
   }
   const id = useChartId();
-  const format = numberFormatter(formatting);
-  const exact = exactNumberFormatter(formatting);
+  const { axis: format, exact } = resolveFormatting("Sparkline", formatting);
   const points = values.map((value, index) => ({ index, value }));
   const last = points.slice(-1);
   const scene = createChartScene(

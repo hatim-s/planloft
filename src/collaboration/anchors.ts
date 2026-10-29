@@ -14,6 +14,12 @@ export function resolveAnchor(text: string, anchor: TextAnchor): AnchorResolutio
   if (!quote.length || anchor.quote.length > 4096 || !chars.length) return { status: 'unattached' };
   const prefix = Array.from(anchor.prefix);
   const suffix = Array.from(anchor.suffix);
+  if (anchor.end - anchor.start === quote.length && anchor.start >= 0 && anchor.end <= chars.length &&
+      chars.slice(anchor.start, anchor.end).join('') === anchor.quote &&
+      chars.slice(Math.max(0, anchor.start - prefix.length), anchor.start).join('') === anchor.prefix &&
+      chars.slice(anchor.end, anchor.end + suffix.length).join('') === anchor.suffix) {
+    return { status: 'exact', start: anchor.start, end: anchor.end };
+  }
   const starts = new Set<number>();
   const ends = new Set<number>();
   const addOccurrences = (needle: string, target: Set<number>, after: boolean) => {
