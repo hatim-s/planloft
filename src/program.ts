@@ -3,6 +3,7 @@ import pc from "picocolors";
 import {
   canonicalizePlanloftApplicationError,
   createPlanloftApplication,
+  isSafeMigrationError,
   type ConfigResult,
   type CopyResult,
   type DeployResult,
@@ -17,6 +18,7 @@ import {
   type ResolveResult,
   type ApplicationOperation,
 } from "./application.js";
+import { isMdxAuthoringError } from "./mdx/index.js";
 import type { SourceFlags } from "./commands/source.js";
 import { parseTtlDays, TTL_RULE } from "./core/ttl.js";
 import {
@@ -49,6 +51,16 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       const output = present(await operation());
       if (output) writeOut(output);
     } catch (error) {
+      if (isMdxAuthoringError(error)) {
+        writeErr(`${pc.red(operationLabel(operationName) + " failed: ")}[${error.code}] ${error.message}\n`);
+        setExitCode(1);
+        return;
+      }
+      if (operationName === "migrate" && isSafeMigrationError(error)) {
+        writeErr(`${pc.red("Migrate failed: ")}${error.message}\n`);
+        setExitCode(1);
+        return;
+      }
       const failure = canonicalizePlanloftApplicationError(error, operationName);
       writeErr(`${pc.red(operationLabel(failure.operation) + " failed: ")}${failure.message}\n`);
       setExitCode(1);
@@ -67,13 +79,14 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .addHelpText("after", `\n${formatRootWorkflowHelp()}\n`);
 
   withKnowledge(program.command("render <input>"), "render")
-    .option("--format <format>", "md | json | html (required for stdin)")
+    .option("--format <format>", "md | mdx | json | html (required for stdin)")
     .option("--out <path>", "output .html file or directory; defaults to stdout")
     .option("--title <title>", "override document title")
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
     .option("--status <status>", "override document status")
+    .option("--trusted-mdx", "execute trusted MDX and imported components")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--noindex", "include noindex/nofollow metadata")
     .action(async (input, parsed) => {
@@ -85,12 +98,13 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     });
 
   withKnowledge(program.command("hoist <input>"), "hoist")
-    .option("--format <format>", "md | json | html (required for stdin)")
+    .option("--format <format>", "md | mdx | json | html (required for stdin)")
     .option("--title <title>", "override document title")
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
     .option("--status <status>", "override document status")
+    .option("--trusted-mdx", "execute trusted MDX and imported components")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .action(async (input, parsed) => {
       await run(
@@ -101,12 +115,13 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     });
 
   withKnowledge(program.command("publish <input>"), "publish")
-    .option("--format <format>", "md | json | html (required for stdin)")
+    .option("--format <format>", "md | mdx | json | html (required for stdin)")
     .option("--title <title>", "override document title")
     .option("--slug <slug>", "override document slug")
     .option("--kind <kind>", "override document kind")
     .option("--theme <theme>", "override theme")
     .option("--status <status>", "override document status")
+    .option("--trusted-mdx", "execute trusted MDX and imported components")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--ttl <days>", "publication expiry in days", positiveInteger)
     .option("--host <host>", "github-pages | vercel")
@@ -120,6 +135,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     });
 
   withKnowledge(program.command("resolve"), "resolve")
+    .option("--format <format>", "md | mdx | html (defaults to md)")
     .option("--slug <slug>", "kebab-case doc slug")
     .option("--title <title>", "human doc title")
     .option("--kind <kind>", "plan | adr | review | research | report | note | <custom>", "plan")
@@ -151,6 +167,13 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       ),
     );
 
+  withKnowledge(program.command("migrate <source>"), "migrate")
+    .requiredOption("--out <destination>", "destination path")
+    .option("--dry-run", "check without writing")
+    .action((source, options) => run("migrate", () => application.migrate(source, { out: options.out, dryRun: options.dryRun }), result =>
+      `${result.status}: ${result.destinationPath}\nBackup: ${result.backupPath}\n`,
+    ));
+
   withKnowledge(program.command("migrate-to-vercel <directory>"), "migrate-to-vercel")
     .action(directory => run("migrate-to-vercel", () => application.migrateToVercel(directory), result =>
       `${result.migrated ? "Migrated for Vercel" : "Already prepared for Vercel"}: ${result.directory}\nCommit and push the changes, then choose GitHub Actions in Pages settings.\n`,
@@ -168,6 +191,23 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
       run("init", () => application.init({ force: parsed.force }), presentInit),
     );
 
+  withKnowledge(program.command("gallery"), "gallery")
+    .requiredOption("--out <directory>", "output directory")
+    .action(options => run("gallery", () => application.gallery(options), result => `Gallery: ${result.indexPath}\n`));
+
+  withKnowledge(program.command("attach <input>"), "attach")
+    .requiredOption("--out <path>", "output HTML file")
+    .requiredOption("--document-id <id>", "registered collaboration document ID")
+    .requiredOption("--revision <revision>", "document revision")
+    .requiredOption("--api-url <url>", "collaboration service URL")
+    .option("--content-selector <selector>", "content root for text selection")
+    .action((input, options) => run("attach", () => application.attach(input, options), result => `Attached collaboration for ${result.documentId}.\n`));
+
+  withKnowledge(program.command("collaboration-build"), "collaboration-build")
+    .requiredOption("--provider <provider>", "local | cloudflare | vercel", parseCollaborationProvider)
+    .requiredOption("--out <directory>", "output directory")
+    .action(options => run("collaboration-build", () => application.collaborationBuild(options), result => `Generated collaboration service: ${result.directory}\n`));
+
   return program;
 }
 
@@ -175,6 +215,11 @@ function withKnowledge(command: Command, name: string): Command {
   return command
     .description(commandKnowledge(name).purpose)
     .addHelpText("after", `\n${formatCommandHelp(name)}\n`);
+}
+
+function parseCollaborationProvider(value: string): "local" | "cloudflare" | "vercel" {
+  if (value !== "local" && value !== "cloudflare" && value !== "vercel") throw new InvalidArgumentError("Choose local, cloudflare, or vercel.");
+  return value;
 }
 
 function positiveInteger(value: string): number {

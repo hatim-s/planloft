@@ -12,7 +12,7 @@
     "kind": { "$ref": "#/$defs/nonblankString", "default": "plan" },
     "theme": { "$ref": "#/$defs/nonblankString" },
     "status": { "$ref": "#/$defs/nonblankString", "default": "active" },
-    "contentFormat": { "enum": ["md", "html"], "default": "md" },
+    "contentFormat": { "enum": ["md", "mdx", "html"], "default": "md" },
     "content": { "type": "string" }
   },
   "$defs": {

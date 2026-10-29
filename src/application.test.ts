@@ -125,17 +125,22 @@ test("trusted HTML publishes and redeploys without changing its content", async 
   try {
     const rendered = await application.render(source, { trustedHtml: true });
     assert.equal(rendered.output, "stdout");
-    if (rendered.output === "stdout") assert.equal(rendered.html, html);
-    await assert.rejects(application.render(source, { trustedHtml: true, noindex: true }), /Direct HTML stays unchanged/);
-    await assert.rejects(application.publish(source, { trustedHtml: true, comments: true }), /Direct HTML stays unchanged/);
-    await application.publish(source, { trustedHtml: true });
+    if (rendered.output === "stdout") assert.match(rendered.html, /planloft-render:head:start/);
+    const noindex = await application.render(source, { trustedHtml: true, noindex: true });
+    if (noindex.output === "stdout") assert.match(noindex.html, /noindex, nofollow/);
+    await assert.rejects(application.publish(source, { trustedHtml: true, comments: true }), /Comments cannot be added to authored HTML/);
+    const published = await application.publish(source, { trustedHtml: true });
+    assert.equal(fs.readFileSync(published.document.file!, "utf8"), html);
+    const preview = await application.preview("page");
+    assert.match(fs.readFileSync(path.join(preview.directory, "index.html"), "utf8"), /planloft-render:head:start/);
     await application.deploy("page");
-    assert.deepEqual(deployed, [html, html]);
+    assert.equal(deployed.length, 2);
+    assert.equal(deployed[0], deployed[1]);
+    assert.match(deployed[0]!, /planloft-render:head:start/);
     withPlanloftHome(path.join(root, "home"), () =>
       saveConfig({ ...DEFAULT_CONFIG, theme: "does-not-exist" }),
     );
-    const preview = await application.preview("page");
-    assert.equal(fs.readFileSync(path.join(preview.directory, "index.html"), "utf8"), html);
+    await assert.rejects(application.preview("page"), /PLANLOFT_THEME_MISSING/);
 
     const invalid = path.join(cwd, "invalid.html");
     fs.writeFileSync(invalid, Buffer.from([0x3c, 0x70, 0x3e, 0xe9, 0x3c, 0x2f, 0x70, 0x3e]));
@@ -198,7 +203,7 @@ test("init keeps valid configuration by default and force resets only config.jso
   const preservedFiles = {
     [path.join(home, "index.json")]: '{"version":1}\n',
     [path.join(home, "docs", "example", "kept.md")]: "# Kept document\n",
-    [path.join(home, "themes", "custom", "template.md")]: "Custom guidance\n",
+    [path.join(home, "themes", "custom", "style.css")]: ":root { --ink: red }\n",
     [path.join(home, "hosting", "plans", "README.md")]: "Hosting clone\n",
     [path.join(cwd, "project-file.txt")]: "Project content\n",
   };

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/collaboration/client.ts", "src/collaboration/ui/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -11,6 +11,7 @@ export interface SourceFlags {
   theme?: string;
   status?: string;
   trustedHtml?: boolean;
+  trustedMdx?: boolean;
   /** Raw stdin supplied by an adapter when input is "-". */
   stdin?: string;
 }
@@ -41,6 +42,7 @@ export async function readCanonicalDocument(
     format,
     sourceName: input === "-" ? undefined : input,
     trustedHtml: !!flags.trustedHtml,
+    trustedMdx: !!flags.trustedMdx,
     overrides: {
       title: flags.title,
       slug: flags.slug,
@@ -53,15 +55,15 @@ export async function readCanonicalDocument(
 
 function inferFormat(input: string): SourceFormat {
   if (input === "-") {
-    throw new Error("Stdin input requires --format md|json|html.");
+    throw new Error("Stdin input requires --format md|mdx|json|html.");
   }
   return sourceFormatFromPath(input);
 }
 
 function parseSourceFormat(value: string): SourceFormat {
   const normalized = value === "markdown" ? "md" : value;
-  if (normalized !== "md" && normalized !== "json" && normalized !== "html") {
-    throw new Error("Input format must be md, json, or html.");
+  if (normalized !== "md" && normalized !== "mdx" && normalized !== "json" && normalized !== "html") {
+    throw new Error("Input format must be md, mdx, json, or html.");
   }
   return normalized;
 }

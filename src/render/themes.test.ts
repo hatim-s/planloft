@@ -4,56 +4,42 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  DEFAULT_LAYOUT,
   ThemeError,
   listAvailableThemes,
-  readLayout,
   readStyle,
-  readTemplate,
   resolveThemeDirectory,
   validateTheme,
 } from "./themes.js";
 
-test("built-in themes resolve to real directories and are listed", () => {
+test("built-in themes resolve to real directories and are listed", () => withHome(() => {
   const expected = ["briefing", "decision", "detailed", "editorial", "minimal", "research"];
   for (const theme of expected) {
     assert.equal(fs.statSync(resolveThemeDirectory(theme)).isDirectory(), true);
     assert.ok(listAvailableThemes().includes(theme));
-    assert.notEqual(readTemplate(theme), "");
     assert.notEqual(readStyle(theme), "");
-    assert.match(readTemplate(theme), /Author Markdown only/);
     assert.match(readStyle(theme), /planloft-color-schemes: light dark/);
     assert.doesNotThrow(() => validateTheme(theme));
   }
-});
-
-test("purpose-built themes provide distinct, actionable authoring structures", () => {
-  assert.match(readTemplate("briefing"), /Decisions or support needed/);
-  assert.match(readTemplate("decision"), /Options considered/);
-  assert.match(readTemplate("research"), /Gaps and limitations/);
-});
+}));
 
 test("a real user theme overrides a built-in and receives optional asset defaults", () => {
   withHome((home) => {
     const override = path.join(home, "themes", "minimal");
     fs.mkdirSync(override, { recursive: true });
-    fs.writeFileSync(path.join(override, "template.md"), "User override");
 
     assert.equal(resolveThemeDirectory("minimal"), override);
-    assert.equal(readTemplate("minimal"), "User override");
     assert.equal(readStyle("minimal"), "");
-    assert.equal(readLayout("minimal"), DEFAULT_LAYOUT);
   });
 });
 
-test("invalid and unknown themes are explicit and missing errors list choices", () => {
+test("invalid and unknown themes are explicit and missing errors list choices", () => withHome(() => {
   assertThemeError(() => resolveThemeDirectory("../minimal"), "PLANLOFT_THEME_INVALID_NAME");
   assertThemeError(
     () => resolveThemeDirectory("does-not-exist"),
     "PLANLOFT_THEME_MISSING",
     /Available themes: briefing, decision, detailed, editorial, minimal, research/,
   );
-});
+}));
 
 test("a theme name must point to a directory", () => {
   withHome((home) => {
@@ -93,38 +79,23 @@ test("dangling optional asset symlinks are inaccessible instead of receiving def
   withHome((home) => {
     const theme = path.join(home, "themes", "dangling-assets");
     fs.mkdirSync(theme, { recursive: true });
-    const readers = {
-      "template.md": readTemplate,
-      "style.css": readStyle,
-      "layout.html": readLayout,
-    };
-
-    for (const [asset, reader] of Object.entries(readers)) {
-      const file = path.join(theme, asset);
-      fs.symlinkSync(path.join(theme, `missing-${asset}`), file);
-      assertThemeError(() => reader("dangling-assets"), "PLANLOFT_THEME_INACCESSIBLE");
-      fs.unlinkSync(file);
-    }
+    const file = path.join(theme, "style.css");
+    fs.symlinkSync(path.join(theme, "missing-style"), file);
+    assertThemeError(() => readStyle("dangling-assets"), "PLANLOFT_THEME_INACCESSIBLE");
   });
 });
 
-test("constrained layouts reject missing body and invalid slots", () => {
-  withHome((home) => {
-    const theme = path.join(home, "themes", "layout-test");
-    fs.mkdirSync(theme, { recursive: true });
-    fs.writeFileSync(path.join(theme, "layout.html"), "<main>{{title}}</main>");
-    assertThemeError(() => readLayout("layout-test"), "PLANLOFT_THEME_INVALID_LAYOUT", /must contain/);
-
-    fs.writeFileSync(path.join(theme, "layout.html"), "<main>{{body}}{{execute}}</main>");
-    assertThemeError(() => readLayout("layout-test"), "PLANLOFT_THEME_INVALID_LAYOUT", /unknown slot/);
-
-    fs.writeFileSync(path.join(theme, "layout.html"), "<main>{{body}}{{ execute }}</main>");
-    assertThemeError(() => readLayout("layout-test"), "PLANLOFT_THEME_INVALID_LAYOUT", /unknown slot/);
-
-    fs.writeFileSync(path.join(theme, "layout.html"), "<main>{{body}}{{title</main>");
-    assertThemeError(() => readLayout("layout-test"), "PLANLOFT_THEME_INVALID_LAYOUT", /malformed slot/);
-  });
-});
+test("legacy assets require migration without modifying them", () => withHome((home) => {
+  const theme = path.join(home, "themes", "legacy");
+  fs.mkdirSync(theme, { recursive: true });
+  for (const asset of ["template.md", "template.mdx", "layout.html"]) {
+    const file = path.join(theme, asset);
+    fs.writeFileSync(file, "authored content");
+    assertThemeError(() => validateTheme("legacy"), "PLANLOFT_THEME_LEGACY_ASSET", /Back it up.*Markdown, MDX, or HTML/);
+    assert.equal(fs.readFileSync(file, "utf8"), "authored content");
+    fs.unlinkSync(file);
+  }
+}));
 
 function assertThemeError(
   operation: () => unknown,

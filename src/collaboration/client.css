@@ -1,0 +1,684 @@
+/* Planloft collaboration runtime. Every rule is scoped to `.plc`, which also resets
+   inherited theme styles, so the UI looks the same on every theme apart from the
+   theme's own colors. Colors come from the public theme variables, then the
+   built-in theme variables, then system colors. */
+
+.plc {
+  all: initial;
+  /* `all: initial` drops the host's color scheme; take it back so the Canvas and
+     CanvasText fallbacks match a page that sets its own dark scheme. */
+  color-scheme: inherit;
+  display: contents;
+  --plc-ink: var(--planloft-ink, var(--ink, CanvasText));
+  --plc-paper: var(--planloft-paper, var(--paper, Canvas));
+  --plc-rule: var(--planloft-rule, var(--rule, color-mix(in srgb, CanvasText 18%, transparent)));
+  --plc-accent: var(--planloft-accent, var(--accent, LinkText));
+  --plc-muted: var(--planloft-muted, color-mix(in srgb, var(--plc-ink) 62%, var(--plc-paper)));
+  --plc-surface: var(--planloft-surface, color-mix(in srgb, var(--plc-ink) 5%, var(--plc-paper)));
+  /* Mixing a fixed hue with the ink keeps it legible on light and dark paper alike. */
+  --plc-danger: color-mix(in oklab, #c8372d 72%, var(--plc-ink));
+  --plc-caution: color-mix(in oklab, #b0740f 70%, var(--plc-ink));
+  --plc-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* The same tint as a comment highlight in the page. */
+  --plc-mark: color-mix(in srgb, var(--plc-accent) 18%, transparent);
+  --plc-focus: color-mix(in srgb, var(--plc-accent) 65%, var(--plc-rule));
+  --plc-focus-ring: color-mix(in srgb, var(--plc-accent) 16%, transparent);
+  --plc-radius: 8px;
+  --plc-layer: 2147483000;
+  color: var(--plc-ink);
+  font: 400 14px/1.5 var(--plc-sans);
+}
+
+.plc :not(svg, svg *) {
+  all: unset;
+  box-sizing: border-box;
+}
+.plc [hidden] { display: none !important; }
+.plc .plc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Icons */
+.plc .plc-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Shared controls. Buttons have no outlines; only the primary action is filled. */
+.plc .plc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--plc-radius);
+  font: 500 13px/1 var(--plc-sans);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  transition: background-color 0.12s, color 0.12s;
+}
+.plc .plc-button .plc-icon { width: 16px; height: 16px; }
+.plc .plc-button-primary {
+  background: var(--plc-ink);
+  color: var(--plc-paper);
+}
+.plc .plc-button-primary:hover { background: color-mix(in srgb, var(--plc-ink) 86%, var(--plc-paper)); }
+.plc .plc-button-quiet { color: var(--plc-ink); }
+.plc .plc-button-quiet:hover { background: var(--plc-surface); }
+.plc .plc-button[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+.plc .plc-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--plc-radius);
+  color: var(--plc-muted);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+.plc .plc-icon-button:hover { color: var(--plc-ink); background: var(--plc-surface); }
+.plc .plc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.plc :is(button, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--plc-accent);
+  outline-offset: 2px;
+}
+
+/* Text fields are tinted wells without a border until they take focus. */
+.plc .plc-textarea {
+  display: block;
+  width: 100%;
+  min-height: calc(1.5em + 18px);
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--plc-surface);
+  color: var(--plc-ink);
+  font: 400 14px/1.5 var(--plc-sans);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: vertical;
+  cursor: text;
+  field-sizing: content;
+  max-height: 40vh;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.plc .plc-textarea::placeholder { color: var(--plc-muted); opacity: 1; }
+.plc .plc-textarea:focus,
+.plc .plc-field:focus-within {
+  border-color: var(--plc-focus);
+  background: var(--plc-paper);
+  box-shadow: 0 0 0 3px var(--plc-focus-ring);
+  outline: none;
+}
+.plc .plc-textarea:focus-visible { outline: none; }
+
+/* A field with its submit button inside, used by the comment composer and replies. */
+.plc .plc-field {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--plc-surface);
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.plc .plc-field .plc-textarea,
+.plc .plc-field .plc-textarea:focus {
+  flex: 1;
+  min-width: 0;
+  min-height: calc(1.5em + 8px);
+  padding: 4px 0 4px 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+.plc .plc-send {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--plc-ink);
+  color: var(--plc-paper);
+  cursor: pointer;
+  transition: opacity 0.12s, background-color 0.12s;
+}
+.plc .plc-send .plc-icon { width: 16px; height: 16px; stroke-width: 1.9; }
+.plc .plc-send:hover { background: color-mix(in srgb, var(--plc-ink) 84%, var(--plc-paper)); }
+/* Empty drafts dim the send button without disabling it; submitting empty refocuses the field. */
+.plc .plc-field:has(.plc-textarea:placeholder-shown) .plc-send { opacity: 0.35; }
+
+/* Selection toolbar */
+.plc .plc-toolbar {
+  position: fixed;
+  z-index: var(--plc-layer);
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--plc-ink);
+  color: var(--plc-paper);
+  box-shadow: 0 6px 20px color-mix(in srgb, #000 22%, transparent);
+}
+.plc .plc-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font: 500 13px/1 var(--plc-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.plc .plc-toolbar-button:hover { background: color-mix(in srgb, var(--plc-paper) 16%, transparent); }
+.plc .plc-toolbar-quiet { color: color-mix(in srgb, var(--plc-paper) 75%, transparent); }
+.plc .plc-toolbar-button:focus-visible { outline-color: var(--plc-paper); outline-offset: -2px; }
+
+/* Launcher */
+.plc .plc-launcher {
+  position: fixed;
+  z-index: var(--plc-layer);
+  right: 16px;
+  bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--plc-rule);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--plc-paper) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--plc-ink);
+  font: 600 13px/1 var(--plc-sans);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px color-mix(in srgb, #000 10%, transparent);
+}
+.plc .plc-launcher:hover { background: var(--plc-surface); }
+.plc .plc-launcher[aria-expanded="true"] { background: var(--plc-ink); color: var(--plc-paper); border-color: var(--plc-ink); }
+.plc .plc-launcher[data-state="failed"] { color: var(--plc-danger); }
+.plc .plc-launcher[data-state="loading"] .plc-icon { opacity: 0.55; }
+.plc .plc-launcher-count:empty { display: none; }
+.plc .plc-launcher-status { font-weight: 400; }
+.plc .plc-launcher-status:empty { display: none; }
+
+/* A non-modal conversation popup. The document never changes width. The popup is
+   one sheet: no inner rules, spacing carries the structure. */
+.plc .plc-panel {
+  position: fixed;
+  z-index: var(--plc-layer);
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(600px, calc(100dvh - 24px));
+  border: 1px solid color-mix(in srgb, var(--plc-rule) 75%, transparent);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--plc-paper);
+  color: var(--plc-ink);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 6%, transparent),
+    0 10px 28px -6px color-mix(in srgb, #000 18%, transparent),
+    0 28px 56px -16px color-mix(in srgb, #000 14%, transparent);
+}
+.plc .plc-panel:not([hidden]) { animation: plc-open 0.14s ease-out; }
+@keyframes plc-open {
+  from { opacity: 0; transform: translateY(3px); }
+}
+.plc .plc-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 46px;
+  padding: 8px 8px 0 14px;
+  flex-shrink: 0;
+}
+.plc .plc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.plc .plc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -8px;
+  padding: 6px 10px 6px 4px;
+  border-radius: var(--plc-radius);
+  color: var(--plc-muted);
+  font: 500 13px/1 var(--plc-sans);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+.plc .plc-back .plc-icon { width: 16px; height: 16px; }
+.plc .plc-back:hover { color: var(--plc-ink); background: var(--plc-surface); }
+.plc .plc-resolve { color: var(--plc-muted); }
+.plc .plc-resolve:hover { color: var(--plc-ink); }
+
+.plc .plc-tabs { display: flex; gap: 2px; margin-left: -8px; }
+.plc .plc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: var(--plc-radius);
+  color: var(--plc-muted);
+  font: 600 14px/1 var(--plc-sans);
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.plc .plc-tab:hover, .plc .plc-tab[aria-selected="true"] { color: var(--plc-ink); }
+.plc .plc-count {
+  min-width: 20px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--plc-surface);
+  color: var(--plc-muted);
+  font: 600 11px/1 var(--plc-sans);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.plc .plc-tab[aria-selected="true"] .plc-count { color: var(--plc-ink); }
+.plc .plc-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 8px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--plc-rule) transparent;
+  scrollbar-width: thin;
+}
+
+/* Overview */
+.plc .plc-overview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-right: -6px;
+}
+.plc .plc-filter {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--plc-surface);
+}
+.plc .plc-filter-option {
+  padding: 5px 10px;
+  border-radius: 7px;
+  color: var(--plc-muted);
+  font: 500 12.5px/1.2 var(--plc-sans);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.plc .plc-filter-option:hover { color: var(--plc-ink); }
+.plc .plc-filter-option[aria-pressed="true"] {
+  background: var(--plc-paper);
+  color: var(--plc-ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent);
+}
+.plc .plc-thread-row {
+  display: block;
+  position: relative;
+  margin: -2px -8px;
+  border-radius: 10px;
+  transition: background-color 0.12s;
+}
+.plc .plc-thread-row:is(:hover, :focus-within), .plc .plc-thread-row[data-confirming="true"] { background: var(--plc-surface); }
+.plc .plc-thread-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 42px 8px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.plc .plc-summary-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+.plc .plc-thread-row:is(:hover, :focus-within) .plc-summary-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.plc .plc-summary-delete:hover { color: var(--plc-danger); background: color-mix(in srgb, var(--plc-danger) 9%, var(--plc-paper)); }
+@media (hover: none) {
+  .plc .plc-summary-delete { opacity: 1; pointer-events: auto; }
+}
+.plc .plc-summary-scope {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  font: 400 13.5px/1.6 var(--plc-document-font, Georgia, serif);
+  overflow-wrap: anywhere;
+}
+.plc .plc-thread-row[data-placement="unattached"] .plc-quote-text { background: none; color: var(--plc-muted); text-decoration-style: dotted; text-decoration-color: var(--plc-muted); }
+.plc .plc-summary-body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.plc .plc-summary-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--plc-muted); font-size: 12px; }
+.plc .plc-section-title {
+  display: block;
+  margin-top: 6px;
+  color: var(--plc-muted);
+  font: 600 12px/1.4 var(--plc-sans);
+}
+
+.plc .plc-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--plc-surface);
+  font-size: 13px;
+}
+.plc .plc-banner-error { color: var(--plc-danger); background: color-mix(in srgb, var(--plc-danger) 9%, var(--plc-paper)); }
+.plc .plc-banner-accent { background: color-mix(in srgb, var(--plc-accent) 12%, var(--plc-paper)); }
+/* Quiet buttons sitting on a tinted block become paper chips so they still read as buttons. */
+.plc :is(.plc-banner, .plc-placement, .plc-delete-confirm, .plc-conflict, .plc-delivery-failed) .plc-button-quiet { background: var(--plc-paper); color: var(--plc-ink); }
+.plc :is(.plc-banner, .plc-placement, .plc-delete-confirm, .plc-conflict, .plc-delivery-failed) .plc-button-quiet:hover { background: color-mix(in srgb, var(--plc-ink) 6%, var(--plc-paper)); }
+.plc .plc-hint, .plc .plc-empty, .plc .plc-meta {
+  display: block;
+  color: var(--plc-muted);
+  font-size: 13px;
+}
+.plc .plc-empty { padding: 4px 0 8px; }
+.plc .plc-scope {
+  display: block;
+  color: var(--plc-muted);
+  font: 500 12.5px/1.5 var(--plc-sans);
+}
+
+/* The quoted passage keeps the document's typeface and wears the same highlight as
+   the marked text in the page, so the popup visibly belongs to that passage. */
+.plc .plc-quote {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  color: var(--plc-ink);
+  font-family: var(--plc-document-font, Georgia, serif);
+  font-size: 14.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.plc .plc-quote-text {
+  display: inline;
+  padding: 1px 1px;
+  border-radius: 2px;
+  background: var(--plc-mark);
+  text-decoration: underline 2px color-mix(in srgb, var(--plc-accent) 55%, transparent);
+  text-underline-offset: 3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color 0.12s;
+}
+.plc .plc-quote-button { display: block; text-align: left; cursor: pointer; border-radius: 4px; }
+.plc .plc-quote-button:hover .plc-quote-text { background: color-mix(in srgb, var(--plc-accent) 30%, transparent); }
+.plc .plc-quote-detached .plc-quote { color: var(--plc-muted); }
+.plc .plc-quote-detached .plc-quote-text {
+  background: none;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--plc-muted);
+}
+
+.plc .plc-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plc .plc-composer .plc-actions { justify-content: flex-end; }
+/* `field-sizing: content` ignores `rows`, so new comments and notes get their two lines here. */
+.plc .plc-composer .plc-field .plc-textarea,
+.plc .plc-composer .plc-field .plc-textarea:focus { min-height: calc(3em + 8px); }
+.plc .plc-composer > .plc-textarea { min-height: calc(3em + 18px); }
+.plc .plc-composer-scope {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-right: -6px;
+}
+.plc .plc-composer-scope .plc-icon-button { width: 26px; height: 26px; }
+.plc .plc-composer-scope .plc-icon { width: 15px; height: 15px; }
+
+/* One conversation per popup. Comments are separated by space, not rules. */
+.plc .plc-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 6px;
+}
+.plc .plc-thread:focus-visible { outline-offset: 6px; }
+.plc .plc-thread[data-delivery] { padding-left: 10px; border-left: 2px solid var(--plc-rule); }
+.plc .plc-thread[data-delivery="failed"], .plc .plc-note[data-delivery="failed"] { border-left-color: var(--plc-danger); }
+.plc [data-delivery="sending"] > .plc-comments, .plc [data-delivery="sending"] > .plc-body { opacity: 0.6; }
+
+.plc .plc-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plc .plc-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.plc .plc-body {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plc time {
+  display: inline;
+  color: var(--plc-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.plc .plc-comment-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 24px; }
+.plc .plc-delete {
+  margin-left: -2px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--plc-muted);
+  font: 500 12px/1 var(--plc-sans);
+  cursor: pointer;
+  transition: color 0.12s, background-color 0.12s;
+}
+.plc .plc-delete:hover { color: var(--plc-danger); background: color-mix(in srgb, var(--plc-danger) 9%, var(--plc-paper)); }
+.plc .plc-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--plc-danger) 5%, var(--plc-paper));
+  border: 1px solid color-mix(in srgb, var(--plc-danger) 18%, var(--plc-rule));
+  font-size: 13px;
+}
+.plc .plc-thread-row > .plc-delete-confirm { width: auto; margin: 0 8px 8px; }
+.plc .plc-delete-copy { display: flex; flex-direction: column; gap: 3px; }
+.plc .plc-delete-title { font-weight: 600; color: var(--plc-ink); }
+.plc .plc-delete-description { color: var(--plc-muted); font-size: 12px; line-height: 1.5; }
+.plc .plc-delete-confirm .plc-actions { justify-content: flex-end; }
+.plc .plc-delete-confirm .plc-button { min-height: 32px; }
+.plc .plc-button-danger { background: var(--plc-danger); color: var(--plc-paper); }
+.plc .plc-button-danger:hover { background: color-mix(in srgb, var(--plc-danger) 86%, var(--plc-ink)); }
+.plc button:disabled { opacity: 0.5; cursor: progress; }
+
+.plc .plc-placement {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--plc-caution) 10%, var(--plc-paper));
+  color: var(--plc-ink);
+  font-size: 13px;
+}
+.plc .plc-current {
+  font-family: var(--plc-document-font, Georgia, serif);
+  font-style: italic;
+}
+.plc .plc-current::before { content: open-quote; }
+.plc .plc-current::after { content: close-quote; }
+
+.plc .plc-reply { display: block; }
+
+.plc .plc-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--plc-muted);
+  font-size: 13px;
+}
+.plc .plc-delivery-failed { color: var(--plc-danger); }
+
+/* Notes */
+.plc .plc-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plc .plc-note[data-delivery] { padding-left: 10px; border-left: 2px solid var(--plc-rule); }
+.plc .plc-note + .plc-note { padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--plc-rule) 60%, transparent); }
+.plc .plc-composer + .plc-note, .plc .plc-composer + .plc-empty { margin-top: 4px; }
+.plc .plc-note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-right: -6px;
+}
+.plc .plc-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plc .plc-note-form .plc-actions { justify-content: flex-end; }
+.plc .plc-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--plc-caution) 10%, var(--plc-paper));
+}
+.plc .plc-conflict-text {
+  display: block;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: var(--plc-radius);
+  background: var(--plc-paper);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plc .plc-panel:not([hidden]) { animation: none; }
+  .plc * { transition: none !important; }
+}
+
+/* Notices */
+.plc .plc-notices {
+  position: fixed;
+  z-index: var(--plc-layer);
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+}
+.plc .plc-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 8px 14px;
+  border-radius: 8px;
+  background: var(--plc-ink);
+  color: var(--plc-paper);
+  box-shadow: 0 6px 20px color-mix(in srgb, #000 20%, transparent);
+}
+.plc .plc-notice-error { border-left: 4px solid var(--plc-danger); }
+.plc .plc-notice-text { display: block; flex: 1; font-size: 13px; }
+.plc .plc-notice .plc-button-quiet { color: var(--plc-paper); background: color-mix(in srgb, var(--plc-paper) 10%, transparent); }
+.plc .plc-notice .plc-button-quiet:hover { background: color-mix(in srgb, var(--plc-paper) 14%, transparent); }
+.plc .plc-notice .plc-icon-button { color: color-mix(in srgb, var(--plc-paper) 70%, transparent); }
+.plc .plc-notice .plc-icon-button:hover { color: var(--plc-paper); background: color-mix(in srgb, var(--plc-paper) 14%, transparent); }
+
+@media (max-width: 40rem) {
+  .plc .plc-launcher { right: 12px; bottom: 12px; }
+  .plc .plc-notices { left: 12px; bottom: 64px; width: calc(100vw - 24px); }
+}
+
+@media print {
+  .plc { display: none !important; }
+}
+
+/* Comment highlights in the document. These live outside `.plc` because they paint
+   the page's own text. */
+::highlight(planloft-comment) {
+  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 16%, transparent);
+  text-decoration: underline 2px color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 55%, transparent);
+}
+::highlight(planloft-comment-approximate) {
+  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 10%, transparent);
+  text-decoration: underline 2px dotted color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 60%, transparent);
+}
+::highlight(planloft-comment-active) {
+  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 30%, transparent);
+  text-decoration: underline 2px var(--planloft-accent, var(--accent, Highlight));
+}
+::highlight(planloft-comment-draft) {
+  background-color: color-mix(in srgb, var(--planloft-accent, var(--accent, Highlight)) 24%, transparent);
+}
+@media print {
+  ::highlight(planloft-comment),
+  ::highlight(planloft-comment-approximate),
+  ::highlight(planloft-comment-active),
+  ::highlight(planloft-comment-draft) { background-color: transparent; text-decoration: none; }
+}
+
+/* Task checkboxes are page elements; only their saving and unavailable states are styled. */
+input[type="checkbox"][data-planloft-task][data-planloft-task-state="loading"],
+input[type="checkbox"][data-planloft-task][data-planloft-task-state="saving"] { cursor: progress; opacity: 0.6; }
+input[type="checkbox"][data-planloft-task][data-planloft-task-state="unavailable"] { cursor: not-allowed; opacity: 0.45; }

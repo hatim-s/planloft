@@ -117,3 +117,34 @@ pages until the next deployment. TTL is scheduled cleanup, not access control.
 
 Vercel's static configuration follows its [project configuration reference](https://vercel.com/docs/project-configuration).
 Token and scope handling follow the [CLI global options](https://vercel.com/docs/cli/global-options).
+
+## Collaboration service
+
+Comments open in floating popups anchored to selected text. The Comments button
+opens the thread list and shared notes. Escape or a click outside dismisses the
+popup without clearing drafts. Unattached and whole-document threads remain
+available in the list.
+
+Every viewer can delete comments. `DELETE /documents/:documentId/threads/:threadId`
+removes the thread and all its replies. To delete only a reply, use
+`DELETE /documents/:documentId/threads/:threadId/comments/:commentId`.
+Both return `{ "deleted": true }`, including repeat deletes. Deletion is permanent;
+the UI asks for confirmation. Deleted creation keys remain reserved, with their
+stored text erased, so a delayed creation retry cannot restore deleted comments.
+Ship the updated service and attached HTML together to enable deletion in the UI.
+
+`planloft collaboration-build --provider cloudflare --out <directory>` generates a
+Cloudflare Worker and D1 migration. The `vercel` provider generates a Vercel service
+using Turso, and `local` generates a Node 22 service using SQLite. Configure the D1
+binding or Turso URL and token and the admin token on the server, then apply the
+provided `migration.sql`. Generation does not deploy infrastructure. Provider artifacts
+have not been verified on live Cloudflare or Vercel infrastructure.
+
+Register each document with the service using its admin API before attaching it.
+`planloft attach <input> --out <html-file> --document-id <id> --revision <revision>
+--api-url <service-url>` adds the browser client to an HTML document. Reattachment
+preserves the existing document ID. The browser configuration contains no admin or
+database credentials. Access is public to viewers; they can comment and edit shared
+notes. The client fetches state on load, updates after its own mutations, and does not
+poll. Reload to see changes from other readers. Task checkboxes need stable explicit
+keys so their state survives document edits.

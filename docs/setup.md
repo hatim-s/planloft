@@ -120,3 +120,8 @@ workflows still work. Install `gh`, then authenticate it or set
 
 Published pages live in a public, enumerable GitHub repository even though their paths
 are hard to guess and marked `noindex`. Keep sensitive documents local.
+
+The `planloft-migrate` skill supports conservative one-way document migration. Install
+it by replacing `planloft-write-doc` in the commands above. The skill requires the CLI
+on `PATH`; use `planloft help` to check whether the installed version has the migration
+command.

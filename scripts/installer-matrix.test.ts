@@ -17,7 +17,7 @@ import {
 
 test("curated live scenarios cover every relevant dimension", () => {
   const matrix = quickMatrix();
-  assert.equal(matrix.length, 12);
+  assert.equal(matrix.length, 6 * SHIPPED_SKILLS.length);
   for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"] as const) {
     assert.deepEqual(
       [...new Set(matrix.map((entry) => entry[dimension]))].sort(),
@@ -32,7 +32,7 @@ test("curated live scenarios cover every relevant dimension", () => {
 
 test("release scenarios cover latest and tagged sources without duplicating the matrix", () => {
   const matrix = releaseMatrix();
-  assert.equal(matrix.length, 12);
+  assert.equal(matrix.length, 6 * SHIPPED_SKILLS.length);
   assert.deepEqual([...new Set(matrix.map(({ source }) => source))].sort(), ["latest", "tagged"]);
   for (const source of DIMENSIONS.source) {
     assert.deepEqual(
@@ -59,8 +59,8 @@ test("latest and tagged GitHub skill sources are independent from npm versions",
   assert.throws(() => taggedSkillSource("v1.2.3", "unknown"), /Unknown shipped skill/);
 });
 
-test("repository inventory contains both portable skills", () => {
-  assert.deepEqual(SHIPPED_SKILLS, ["planloft-customise", "planloft-write-doc"]);
+test("repository inventory contains the portable skills", () => {
+  assert.deepEqual(SHIPPED_SKILLS, ["planloft-customise", "planloft-migrate", "planloft-write-doc"]);
 });
 
 test("discovery paths stay inside the disposable project or home", () => {
@@ -77,8 +77,8 @@ test("discovery paths stay inside the disposable project or home", () => {
 
 test("repository satisfies the portable installation contract", () => {
   assert.deepEqual(validateRepositoryContract(), {
-    scenarios: 12,
-    skills: ["planloft-customise", "planloft-write-doc"],
+    scenarios: 18,
+    skills: ["planloft-customise", "planloft-migrate", "planloft-write-doc"],
     skillsCliVersion: SKILLS_CLI_VERSION,
   });
 });

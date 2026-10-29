@@ -1,15 +1,39 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { marked, Renderer } from "marked";
+import { parse, type DefaultTreeAdapterTypes } from "parse5";
+import { PROSE_CSS } from "./prose.js";
+import { componentStyles } from "../components/styles.js";
 import { ingestDocument } from "../core/ingest.js";
-import { readLayout, readStyle } from "./themes.js";
+import { CONTROLS_CSS, CONTROLS_MARKUP, LAYOUT_CSS } from "./controls.js";
+import { readStyle, validateTheme } from "./themes.js";
 import { validateGiscusConfig } from "../core/giscus.js";
 import type { CanonicalDocument, DocMeta, GiscusConfig } from "../core/types.js";
+
+class RenderSupportError extends Error {
+  readonly code = "PLANLOFT_RENDER_SUPPORT_CONFLICT";
+  constructor(detail: string) {
+    super(`PLANLOFT_RENDER_SUPPORT_CONFLICT: ${detail} Regenerate from the original source, or review legacy generated support in a separate candidate before migrating.`);
+    this.name = "RenderSupportError";
+  }
+}
+
+class UnsupportedHtmlStructureError extends Error {
+  readonly code = "PLANLOFT_HTML_FRAMESET_UNSUPPORTED";
+  constructor() {
+    super("PLANLOFT_HTML_FRAMESET_UNSUPPORTED: Frameset HTML is not supported. Convert it to a document with an ordinary body, or keep the original externally.");
+    this.name = "UnsupportedHtmlStructureError";
+  }
+}
 
 export interface RenderOptions {
   comments?: GiscusConfig;
   noindex?: boolean;
+  /** Pre-rendered trusted body, used by the MDX compiler. */
+  bodyHtml?: string;
+  extraStyles?: string;
 }
 
 export interface BuildOpts extends RenderOptions {
@@ -24,35 +48,30 @@ export function renderDocument(
   theme: string,
   options: RenderOptions = {},
 ): string {
+  validateTheme(theme);
   if (doc.contentFormat === "html") {
-    if (options.comments) throw new Error("Comments cannot be added to HTML published as is.");
-    return doc.content;
+    if (options.comments) throw new Error("Comments cannot be added to authored HTML.");
+    return injectSupport(doc.content, `${readStyle(theme)}\n${PROSE_CSS}\n${componentStyles}`, options.noindex);
   }
-  const body = renderMarkdown(doc.content, doc.trustedHtml);
-
-  const layout = readLayout(theme);
-  const styles = themeStyles(readStyle(theme));
+  if (doc.contentFormat === "mdx" && options.bodyHtml === undefined) throw new Error("MDX requires renderMdxDocument.");
+  const body = options.bodyHtml ?? renderMarkdown(doc.content, doc.trustedHtml);
   const comments = options.comments ? renderGiscus(options.comments) : "";
-  const robots = options.noindex
-    ? '\n<meta name="robots" content="noindex, nofollow" />'
-    : "";
-  const rendered = renderLayout(layout, {
-    title: escapeHtml(doc.title),
-    kind: escapeHtml(doc.kind),
-    body,
-    styles,
-    // Metadata is injected after the document shell and all other render
-    // support so it always lands in a real head, even for fragment layouts.
-    robots: "",
-    comments,
-  });
-  const structured = ensureDocumentStructure(rendered);
-  const withComments =
-    comments && !layout.includes("{{comments}}")
-      ? injectComments(structured, comments)
-      : structured;
-  const themed = injectThemeSupport(withComments, styles, layout.includes("{{styles}}"));
-  return robots ? injectHeadMetadata(themed, robots) : themed;
+  const shell = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(doc.title)}</title>
+</head>
+<body data-planloft-kind="${escapeHtml(doc.kind)}">
+<main class="planloft-plan">
+<article class="planloft-prose">${body}</article>${comments}
+</main>
+</body>
+</html>
+`;
+  return injectSupport(shell, `${readStyle(theme)}\n${PROSE_CSS}\n${options.extraStyles ?? componentStyles}`, options.noindex);
+
 }
 
 function renderGiscus(config: GiscusConfig): string {
@@ -121,203 +140,91 @@ function renderMarkdown(content: string, trustedHtml: boolean): string {
   return marked.parse(content, { renderer }) as string;
 }
 
-function renderLayout(layout: string, slots: Record<string, string>): string {
-  return layout.replace(/\{\{(title|kind|body|styles|robots|comments)\}\}/g, (_, key: string) => {
-    return slots[key] ?? "";
-  });
-}
+type HtmlNode = DefaultTreeAdapterTypes.Node;
+type HtmlComment = DefaultTreeAdapterTypes.CommentNode;
 
-const THEME_SUPPORT_MARKER = "planloft-color-schemes: light dark";
-
-// The control reads four optional custom properties from the theme so it matches
-// the page instead of the operating system. Themes without them get system colors.
-const THEME_CONTROL_CSS = `
-:root { color-scheme: light dark; }
-.planloft-theme-selector {
-  --planloft-control-ink: var(--planloft-ink, CanvasText);
-  --planloft-control-paper: var(--planloft-paper, Canvas);
-  --planloft-control-rule: var(--planloft-rule, color-mix(in srgb, CanvasText 18%, transparent));
-  --planloft-control-accent: var(--planloft-accent, var(--planloft-control-ink));
-  position: fixed;
-  z-index: 1000;
-  top: 1rem;
-  right: 1rem;
-  display: inline-flex;
-  gap: 2px;
-  margin: 0;
-  padding: 3px;
-  border: 1px solid var(--planloft-control-rule);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--planloft-control-paper) 86%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  color: var(--planloft-control-ink);
-  line-height: 0;
-}
-.planloft-theme-option {
-  display: inline-grid;
-  width: 1.75rem;
-  height: 1.75rem;
-  place-items: center;
-  margin: 0;
-  border: 0;
-  border-radius: 999px;
-  padding: 0;
-  background: transparent;
-  color: color-mix(in srgb, var(--planloft-control-ink) 60%, transparent);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-.planloft-theme-option:hover {
-  color: var(--planloft-control-ink);
-  background: color-mix(in srgb, var(--planloft-control-ink) 9%, transparent);
-}
-.planloft-theme-option[aria-pressed="true"] {
-  background: var(--planloft-control-ink);
-  color: var(--planloft-control-paper);
-}
-.planloft-theme-option svg { width: 0.95rem; height: 0.95rem; pointer-events: none; }
-.planloft-theme-option:focus-visible {
-  outline: 2px solid var(--planloft-control-accent);
-  outline-offset: 2px;
-}
-@media (max-width: 40rem) {
-  .planloft-theme-selector { top: 0.625rem; right: 0.625rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .planloft-theme-option { transition: none; }
-}
-@media print {
-  .planloft-theme-selector { display: none; }
-}
-`;
-
-const SYSTEM_DARK_FALLBACK_CSS = `
-@media (prefers-color-scheme: dark) {
-  :root:not([data-planloft-color-scheme="light"]) body {
-    background: Canvas !important;
-    color: CanvasText !important;
-  }
-}
-:root[data-planloft-color-scheme="dark"] body {
-  background: Canvas !important;
-  color: CanvasText !important;
-}
-`;
-
-const THEME_TOGGLE = `<div class="planloft-theme-selector planloft-theme-toggle" role="group" aria-label="Color theme">
-  <button class="planloft-theme-option" type="button" data-planloft-theme-option="light" aria-label="Light theme" title="Light theme" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
-  </button>
-  <button class="planloft-theme-option" type="button" data-planloft-theme-option="dark" aria-label="Dark theme" title="Dark theme" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11z"/></svg>
-  </button>
-  <button class="planloft-theme-option" type="button" data-planloft-theme-option="system" aria-label="System theme" title="System theme" aria-pressed="true">
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 17v3.5"/></svg>
-  </button>
-</div>
-<script>
-(() => {
-  const root = document.documentElement;
-  const options = Array.from(document.querySelectorAll("[data-planloft-theme-option]"));
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const key = "planloft-color-scheme";
-  let saved = null;
-  try { saved = localStorage.getItem(key); } catch {}
-  let selected = saved === "light" || saved === "dark" ? saved : "system";
-  const update = () => {
-    if (selected === "system") delete root.dataset.planloftColorScheme;
-    else root.dataset.planloftColorScheme = selected;
-    const effective = selected === "system" ? (media.matches ? "dark" : "light") : selected;
-    for (const option of options) {
-      const optionName = option.dataset.planloftThemeOption;
-      option.setAttribute("aria-pressed", String(optionName === selected));
-      if (optionName === "system") option.title = \`System theme (currently \${effective})\`;
-    }
+// Only replace complete blocks that the compiler owns. Parsing supplies real tag
+// offsets, so strings in scripts and comments cannot become insertion points.
+function injectSupport(input: string, css: string, noindex = false): string {
+  const inspect = (html: string) => {
+    const document = parse(html, { sourceCodeLocationInfo: true });
+    const markers: HtmlComment[] = [];
+    const elements: DefaultTreeAdapterTypes.Element[] = [];
+    const visit = (node: HtmlNode) => {
+      if ("tagName" in node) {
+        elements.push(node);
+        if ("content" in node) visit(node.content);
+      }
+      if ("data" in node && node.data.trim().startsWith("planloft-render:")) markers.push(node);
+      if ("childNodes" in node) for (const child of node.childNodes) visit(child);
+    };
+    visit(document);
+    return { markers, elements, document };
   };
-  for (const option of options) option.addEventListener("click", () => {
-    selected = option.dataset.planloftThemeOption;
-    try { localStorage.setItem(key, selected); } catch {}
-    update();
-  });
-  media.addEventListener?.("change", update);
-  update();
-})();
-</script>`;
-
-function themeStyles(style: string): string {
-  const fallback = style.includes(THEME_SUPPORT_MARKER) ? "" : SYSTEM_DARK_FALLBACK_CSS;
-  return `${style}\n${fallback}${THEME_CONTROL_CSS}`;
-}
-
-function injectThemeSupport(html: string, styles: string, layoutIncludesStyles: boolean): string {
-  const htmlWithToggle = injectThemeToggle(html);
-  return layoutIncludesStyles ? htmlWithToggle : injectStyles(htmlWithToggle, styles);
-}
-
-function ensureDocumentStructure(html: string): string {
-  const hasHtml = /<html\b[^>]*>/i.test(html);
-  const hasHead = /<head\b[^>]*>/i.test(html);
-  const hasBody = /<body\b[^>]*>/i.test(html);
-
-  if (hasHtml) {
-    if (hasHead) return html;
-    const body = /<body\b[^>]*>/i.exec(html);
-    if (body?.index !== undefined) {
-      return `${html.slice(0, body.index)}<head></head>\n${html.slice(body.index)}`;
+  const ownedRanges = (input: string) => {
+    const found = inspect(input);
+    if (found.elements.some((element) => element.tagName === "frameset")) throw new UnsupportedHtmlStructureError();
+    const ranges: { start: number; end: number }[] = [];
+    for (const name of ["head", "controls"] as const) {
+      const markers = found.markers.filter((node) => node.data.trim().startsWith(`planloft-render:${name}`));
+      if (markers.length === 0) continue;
+      if (markers.length !== 2) throw new RenderSupportError("Invalid Planloft render markers.");
+      const [start, end] = markers.sort((a, b) => (a.sourceCodeLocation?.startOffset ?? 0) - (b.sourceCodeLocation?.startOffset ?? 0));
+      if (!start?.sourceCodeLocation || !end?.sourceCodeLocation || input.slice(start.sourceCodeLocation.startOffset, start.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:start -->` ||
+          input.slice(end.sourceCodeLocation.startOffset, end.sourceCodeLocation.endOffset) !== `<!-- planloft-render:${name}:end -->` ||
+          start.data !== ` planloft-render:${name}:start ` || end.data !== ` planloft-render:${name}:end `) throw new RenderSupportError("Invalid Planloft render markers.");
+      const content = input.slice(start.sourceCodeLocation.endOffset, end.sourceCodeLocation.startOffset);
+      const headMatch = name === "head" ? /^\n<style data-planloft-render data-planloft-sha256="([a-f0-9]{64})">((?:(?!<\/style)[\s\S])*)<\/style>\n(<meta name="robots" content="noindex, nofollow" \/>\n)?$/.exec(content) : null;
+      const headStyle = name === "head" && found.elements.find((element) =>
+        element.tagName === "style" && element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 &&
+        element.parentNode && "tagName" in element.parentNode && element.parentNode.tagName === "head",
+      );
+      const controlsParent = end.parentNode;
+      const controlsBody = controlsParent && "tagName" in controlsParent && controlsParent.tagName === "body";
+      const implicitBody = controlsBody && !controlsParent.sourceCodeLocation?.startTag;
+      const startParent = start.parentNode;
+      const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
+      const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
+      const validControls = content === `\n${CONTROLS_MARKUP}\n` && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
+      const validHead = headMatch && headStyle && hashSupport(`${headMatch[2]}\n${headMatch[3] ?? ""}`) === headMatch[1];
+      if (name === "controls" ? !validControls : !validHead) throw new RenderSupportError("Invalid Planloft render block.");
+      ranges.push({ start: start.sourceCodeLocation.startOffset, end: end.sourceCodeLocation.endOffset });
     }
-    const root = /<html\b[^>]*>/i.exec(html);
-    if (!root || root.index === undefined) return html;
-    const insertion = root.index + root[0].length;
-    return `${html.slice(0, insertion)}\n<head></head>${html.slice(insertion)}`;
-  }
-
-  if (hasBody) {
-    return `<!doctype html>\n<html>\n${hasHead ? "" : "<head></head>\n"}${html}\n</html>`;
-  }
-
-  return `<!doctype html>\n<html>\n<head></head>\n<body>\n${html}\n</body>\n</html>`;
+    if (found.markers.length !== ranges.length * 2 || (ranges.length !== 0 && ranges.length !== 2)) throw new RenderSupportError("Invalid Planloft render markers.");
+    if (ranges.length === 2 && ranges[0]!.start < ranges[1]!.end && ranges[1]!.start < ranges[0]!.end) throw new RenderSupportError("Invalid Planloft render markers.");
+    for (const element of found.elements) {
+      const loc = element.sourceCodeLocation;
+      if (!loc || ranges.some((range) => loc.startOffset >= range.start && loc.endOffset <= range.end)) continue;
+      if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
+    }
+    return { ranges, ...found };
+  };
+  const { ranges } = ownedRanges(input);
+  let html = input;
+  for (const range of ranges.sort((a, b) => b.start - a.start)) html = html.slice(0, range.start) + html.slice(range.end);
+  const { elements, document } = inspect(html);
+  const head = elements.find((node) => node.tagName === "head" && node.sourceCodeLocation?.startTag);
+  const body = elements.find((node) => node.tagName === "body" && node.sourceCodeLocation?.startTag);
+  const root = elements.find((node) => node.tagName === "html" && node.sourceCodeLocation?.startTag);
+  const doctype = document.childNodes.find((node) => node.nodeName === "#documentType");
+  const headOffset = head?.sourceCodeLocation?.startTag?.endOffset ?? root?.sourceCodeLocation?.startTag?.endOffset ?? doctype?.sourceCodeLocation?.endOffset ?? 0;
+  const parsedBody = elements.find((node) => node.tagName === "body");
+  const firstBodyChild = parsedBody?.childNodes.find((node) => node.sourceCodeLocation)?.sourceCodeLocation?.startOffset;
+  const bodyOffset = body?.sourceCodeLocation?.startTag?.endOffset ?? firstBodyChild ?? root?.sourceCodeLocation?.endTag?.startOffset ?? html.length;
+  const safeCss = `${css}\n${CONTROLS_CSS}${LAYOUT_CSS}`.replace(/<\/style/gi, "<\\/style");
+  const robots = noindex ? '<meta name="robots" content="noindex, nofollow" />\n' : "";
+  const digest = hashSupport(`${safeCss}\n${robots}`);
+  const headBlock = `<!-- planloft-render:head:start -->\n<style data-planloft-render data-planloft-sha256="${digest}">${safeCss}</style>\n${robots}<!-- planloft-render:head:end -->`;
+  const controlsBlock = `<!-- planloft-render:controls:start -->\n${CONTROLS_MARKUP}\n<!-- planloft-render:controls:end -->`;
+  const inserts = [{ offset: bodyOffset, text: controlsBlock }, { offset: headOffset, text: headBlock }].sort((a, b) => b.offset - a.offset);
+  for (const insertion of inserts) html = html.slice(0, insertion.offset) + insertion.text + html.slice(insertion.offset);
+  if (ownedRanges(html).ranges.length !== 2) throw new RenderSupportError("Cannot inject Planloft support into this HTML structure.");
+  return html;
 }
 
-function injectStyles(html: string, styles: string): string {
-  const styleElement = `<style>${styles}</style>`;
-  const headEnd = /<\/head\s*>/i.exec(html);
-  if (headEnd?.index !== undefined) {
-    return `${html.slice(0, headEnd.index)}${styleElement}\n${html.slice(headEnd.index)}`;
-  }
-  const body = /<body\b[^>]*>/i.exec(html);
-  if (body?.index !== undefined) {
-    return `${html.slice(0, body.index)}${styleElement}\n${html.slice(body.index)}`;
-  }
-  return `${styleElement}\n${html}`;
-}
-
-function injectThemeToggle(html: string): string {
-  const body = /<body\b[^>]*>/i.exec(html);
-  if (!body || body.index === undefined) return `${THEME_TOGGLE}\n${html}`;
-  const insertion = body.index + body[0].length;
-  return `${html.slice(0, insertion)}\n${THEME_TOGGLE}${html.slice(insertion)}`;
-}
-
-function injectComments(html: string, comments: string): string {
-  const bodyEnd = /<\/body\s*>/i.exec(html);
-  if (bodyEnd?.index !== undefined) {
-    return `${html.slice(0, bodyEnd.index)}${comments}\n${html.slice(bodyEnd.index)}`;
-  }
-  return `${html}${comments}`;
-}
-
-function injectHeadMetadata(html: string, metadata: string): string {
-  const headEnd = /<\/head\s*>/i.exec(html);
-  if (headEnd?.index !== undefined) {
-    return `${html.slice(0, headEnd.index)}${metadata}\n${html.slice(headEnd.index)}`;
-  }
-  const body = /<body\b[^>]*>/i.exec(html);
-  if (body?.index !== undefined) {
-    return `${html.slice(0, body.index)}${metadata}\n${html.slice(body.index)}`;
-  }
-  return `${metadata}\n${html}`;
+// This checksum detects accidental edits; it does not authenticate the author.
+function hashSupport(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function safeUrl(url: string): boolean {
@@ -342,4 +249,19 @@ const ESCAPES: Record<string, string> = {
 };
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ESCAPES[character] ?? character);
+}
+
+/** Build stored MDX from its pinned bundle, keeping imports independent of the store path. */
+export async function buildSiteAsync(opts: BuildOpts): Promise<string> {
+  if (opts.doc.format !== "mdx") return buildSite(opts);
+  const raw = fs.readFileSync(opts.doc.file, "utf8");
+  const canonical = ingestDocument(raw, {
+    format: "mdx", sourceName: opts.doc.file, trustedMdx: true,
+    overrides: { title: opts.doc.title, slug: opts.doc.slug, kind: opts.doc.kind, theme: opts.doc.theme, status: opts.doc.status },
+  });
+  const { renderCompiledMdx } = await import("../mdx/index.js");
+  const html = await renderCompiledMdx(canonical, opts.theme, fs.readFileSync(`${opts.doc.file}.bundle.js`, "utf8"), opts);
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-build-"));
+  fs.writeFileSync(path.join(outDir, "index.html"), html);
+  return outDir;
 }

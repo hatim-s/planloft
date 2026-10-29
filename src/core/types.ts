@@ -1,6 +1,6 @@
 // Shared types for the planloft store. See docs/adr/ for the decisions behind these.
 
-export type PlanFormat = "md" | "html";
+export type PlanFormat = "md" | "mdx" | "html";
 export type SourceFormat = PlanFormat | "json";
 
 // Document kinds (ADR-0002). Built-ins are first-class; any string is also accepted.
@@ -33,7 +33,11 @@ export interface CanonicalDocument {
   status: string;
   contentFormat: PlanFormat;
   content: string;
+  /** Lines removed before the MDX body, or null when no source mapping exists. */
+  sourceLineOffset?: number | null;
   trustedHtml: boolean;
+  /** Compiled snapshot for a trusted MDX document and its dependencies. */
+  compiledMdx?: string;
 }
 
 /** Stable JSON document envelope accepted by the JSON ingestion adapter. */
@@ -90,7 +94,8 @@ export interface IndexFile {
 export interface ResolvedContext {
   path: string;
   kind: Kind;
-  format: "md";
+  format: "md" | "mdx" | "html";
   theme: string;
-  template: string;
+  themeCss: string;
+  themePath: string;
 }

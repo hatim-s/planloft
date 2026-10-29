@@ -45,7 +45,7 @@ test("the shipped theme starter satisfies the runtime theme and renderer contrac
       assert.match(html, /planloft-color-schemes: light dark/);
       assert.match(html, /data-planloft-color-scheme="dark"/);
       assert.match(html, /planloft-theme-toggle/);
-      assert.match(html, /<article><h1>Theme check<\/h1>/);
+      assert.match(html, /<article class="planloft-prose"><h1>Theme check<\/h1>/);
     });
   } finally {
     fs.rmSync(home, { recursive: true, force: true });

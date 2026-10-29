@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createPlanloftConfiguration, type PlanloftConfiguration } from "./configuration.js";
+import { assertMdxSnapshot } from "./mdx/index.js";
 import { docDir, docFile } from "./core/doc.js";
 import * as fm from "./core/frontmatter.js";
 import { normalizeDocumentMetadata } from "./core/ingest.js";
@@ -130,10 +131,13 @@ export function createDocumentPersistence(
     find,
 
     hoist(document, now = clock()) {
+      if (document.contentFormat === "mdx") {
+        if (!document.compiledMdx) throw new Error("MDX must be compiled before storing.");
+        const storedBody = fm.parse(serializeCanonicalDocument(document)).content;
+        assertMdxSnapshot(storedBody, document.compiledMdx);
+      }
       const project = identity();
-      // HTML needs valid configuration but no theme; Markdown validates both before writing.
-      if (document.contentFormat === "html") configuration.load();
-      else configuration.resolveProject(project.key, document.theme);
+      configuration.resolveProject(project.key, document.theme);
       configuration.ensure();
       const file = docFile(project.label, document.slug, document.contentFormat);
       const previous = find(document.slug);
@@ -141,6 +145,9 @@ export function createDocumentPersistence(
 
       files.makeDirectory(docDir(project.label));
       files.writeText(file, source);
+      if (document.contentFormat === "mdx") {
+        files.writeText(`${file}.bundle.js`, document.compiledMdx!);
+      }
 
       const meta: DocMeta = {
         slug: document.slug,
@@ -161,6 +168,7 @@ export function createDocumentPersistence(
 
     capture(file, now = clock()) {
       if (!files.exists(file)) return null;
+      if (file.endsWith(".mdx")) throw new Error("MDX requires explicit trust and compilation. Use hoist --trusted-mdx.");
       const project = identity();
       const format = file.endsWith(".html") ? "html" : "md";
       const slug = path.basename(file).replace(/\.(md|html)$/, "");
@@ -230,8 +238,11 @@ export function createDocumentPersistence(
         throw new DocumentCopyConflictError(destination);
       }
       const contents = files.readBytes(document.file);
+      const bundle = document.format === "mdx" ? files.readBytes(`${document.file}.bundle.js`) : undefined;
+      if (bundle && files.exists(`${destination}.bundle.js`) && !copyOptions.force) throw new DocumentCopyConflictError(`${destination}.bundle.js`);
       files.makeDirectory(path.dirname(destination));
       files.writeBytes(destination, contents);
+      if (bundle) files.writeBytes(`${destination}.bundle.js`, bundle);
       return {
         document,
         path: destination,
@@ -251,6 +262,7 @@ export function createDocumentPersistence(
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
+      if (document.format === "mdx" && files.exists(`${document.file}.bundle.js`)) files.removeFile(`${document.file}.bundle.js`);
       const index = loadIndex(files);
       const entry = index.projects[identity().key];
       if (entry) delete entry.docs[slug];
@@ -312,5 +324,6 @@ function removeReplacedFormat(
     files.exists(previous.file)
   ) {
     files.removeFile(previous.file);
+    if (previous.format === "mdx" && files.exists(`${previous.file}.bundle.js`)) files.removeFile(`${previous.file}.bundle.js`);
   }
 }

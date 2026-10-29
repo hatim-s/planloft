@@ -35,7 +35,7 @@ export interface CommandKnowledge {
 
 export const PUBLICATION_PRIVACY_DISCLOSURE =
   "Public deployment: the URL path is hard to guess. Planloft adds noindex to rendered " +
-  "Markdown, but publishes trusted HTML unchanged; add noindex to the HTML yourself if needed. " +
+  "Markdown, MDX, and HTML. " +
   "The backing GitHub repository is public, and its manifest is enumerable. Keep sensitive plans local.";
 export const GITHUB_AUTH_DISCLOSURE =
   "GitHub auth precedence is authenticated gh, PLANLOFT_GITHUB_TOKEN, github.token, then " +
@@ -55,7 +55,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     name: "render",
     signature: "render <input>",
     category: "Write and transform sources",
-    purpose: "Render Markdown, JSON, or trusted HTML to a self-contained HTML artifact.",
+    purpose: "Render Markdown, trusted MDX, JSON, or trusted HTML to a self-contained HTML artifact.",
     input: "source",
     transition: "source -> artifact",
     localWrite: "optional",
@@ -66,14 +66,14 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
       { argv: ["render", "proposal.md", "--theme", "editorial", "--out", "./proposal-site"] },
     ],
     trustAndPrivacy: [
-      "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
+      "HTML input and embedded Markdown HTML require --trusted-html. MDX executes code and requires --trusted-mdx.",
     ],
   },
   {
     name: "hoist",
     signature: "hoist <input>",
     category: "Write and transform sources",
-    purpose: "Normalize Markdown, JSON, or trusted HTML into the current project's store.",
+    purpose: "Normalize Markdown, trusted MDX, JSON, or trusted HTML into the current project's store.",
     input: "source",
     transition: "source -> canonical document -> store",
     localWrite: "always",
@@ -82,7 +82,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     defaults: ["Uses document metadata and the current project identity to choose the store entry."],
     examples: [{ argv: ["hoist", "proposal.json"] }],
     trustAndPrivacy: [
-      "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
+      "HTML input and embedded Markdown HTML require --trusted-html. MDX executes code and requires --trusted-mdx.",
     ],
   },
   {
@@ -103,7 +103,7 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
       GITHUB_AUTH_DISCLOSURE,
       GISCUS_REQUIREMENTS,
       TTL_REQUIREMENTS,
-      "HTML input and embedded Markdown HTML require the explicit --trusted-html trust decision.",
+      "HTML input and embedded Markdown HTML require --trusted-html. MDX executes code and requires --trusted-mdx.",
     ],
   },
   {
@@ -177,6 +177,44 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     ],
   },
   {
+    name: "gallery", signature: "gallery", category: "Write and transform sources",
+    purpose: "Build a local gallery of bundled themes and components.", input: "none",
+    transition: "bundled themes and components -> static gallery", localWrite: "always", externalWrite: "never", destructive: false,
+    defaults: ["Requires --out to choose the output directory."],
+    examples: [{ argv: ["gallery", "--out", "./planloft-gallery"] }],
+    trustAndPrivacy: ["The gallery is generated locally and does not publish a site."],
+  },
+  {
+    name: "attach", signature: "attach <input>", category: "Write and transform sources",
+    purpose: "Attach a collaboration client to existing HTML.", input: "source",
+    transition: "HTML -> collaborative HTML", localWrite: "always", externalWrite: "never", destructive: false,
+    defaults: ["Requires --out, --document-id, --revision, and --api-url."],
+    examples: [{ argv: ["attach", "report.html", "--out", "shared.html", "--document-id", "report", "--revision", "1", "--api-url", "https://example.test"] }],
+    trustAndPrivacy: ["The document must be registered with the collaboration service separately."],
+  },
+  {
+    name: "collaboration-build", signature: "collaboration-build", category: "Configuration",
+    purpose: "Generate local collaboration service deployment files.", input: "none",
+    transition: "service templates -> local deployment files", localWrite: "always", externalWrite: "never", destructive: false,
+    defaults: ["Requires --provider and --out. Secrets are configured separately on the service."],
+    examples: [{ argv: ["collaboration-build", "--provider", "local", "--out", "./service"] }],
+    trustAndPrivacy: ["Generating files does not deploy a service."],
+  },
+  {
+    name: "migrate",
+    signature: "migrate <source>",
+    category: "Write and transform sources",
+    purpose: "Convert eligible Markdown to MDX or copy HTML unchanged with a backup.",
+    input: "source",
+    transition: "source -> backup and destination",
+    localWrite: "optional",
+    externalWrite: "never",
+    destructive: false,
+    defaults: ["Use --out to choose a destination; --dry-run checks without writing.", "Existing different destinations and backups are never overwritten."],
+    examples: [{ argv: ["migrate", "proposal.md", "--out", "proposal.mdx", "--dry-run"] }],
+    trustAndPrivacy: ["Migration does not execute or establish trust in MDX; HTML stays unchanged."],
+  },
+  {
     name: "migrate-to-vercel",
     signature: "migrate-to-vercel <directory>",
     category: "Configuration",
@@ -208,13 +246,13 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     name: "resolve",
     signature: "resolve",
     category: "Agent integration",
-    purpose: "Resolve the exact plan path, kind, theme, and authoring template.",
+    purpose: "Resolve the store path, source format, and selected theme CSS.",
     input: "none",
-    transition: "project + plan metadata -> exact store target and authoring guidance",
+    transition: "project + plan metadata -> store target and theme CSS",
     localWrite: "always",
     externalWrite: "never",
     destructive: false,
-    defaults: ["Kind defaults to plan; title and slug are derived when omitted."],
+    defaults: ["Kind defaults to plan, format defaults to md, and title and slug are derived when omitted."],
     examples: [
       {
         argv: [
@@ -373,6 +411,6 @@ export function renderSkillDiscoveryReference(command = "planloft"): string {
     `- \`${command} copy [slug]\` copies raw source into the repository.`,
     `- \`${command} deploy [slug]\` explicitly publishes a stored plan.`,
     `- \`${command} hoist <input>\` stores another Markdown, JSON, or trusted HTML document.`,
-    `- \`${command} publish page.html --trusted-html\` deploys trusted HTML exactly as supplied, without a theme or wrapper. Put any \`noindex\` metadata in the source.`,
+    `- \`${command} publish page.html --trusted-html\` deploys trusted HTML with theme tokens and reader controls, preserving its structure.`,
   ].join("\n");
 }

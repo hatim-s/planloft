@@ -1,116 +1,88 @@
-# Planloft customization theme contract
+# Planloft theme contract
 
-## Directory and resolution
+Themes set colors and typography. They do not supply authoring instructions or control
+document structure. Place a custom theme at `<planloft-home>/themes/<name>/style.css`,
+where `PLANLOFT_HOME` selects the home when set and `~/.planloft` is the default. A
+user theme shadows a built-in theme with the same name. Selection follows document
+metadata, project override, then global default; use `--theme` for a render override.
 
-Create user themes under the effective Planloft home:
+Use the documented public color and typography variables in `style.css` and provide
+light and dark values. Start with [the token starter](../assets/theme-starter/style.css).
+`template.md`, `template.mdx`, and `layout.html` are rejected. For legacy assets,
+back up the theme and sources, then create a separate token-only candidate theme.
+Review and render document copies with `--theme <candidate-name>` before promoting
+the candidate and removing legacy files from the original theme. The `planloft-migrate` skill describes this one-way workflow.
 
-```text
-<planloft-home>/themes/<name>/
-  style.css
-  template.md
-  layout.html
+Markdown and MDX render in Planloft's shared `.planloft-prose` shell. Authors choose
+the content and structure. Built-in MDX components remain available and render static
+output. Authored HTML keeps its structure, styles, and scripts; Planloft adds theme CSS
+and controls. Add `.planloft-prose` to a region for semantic styling and use
+`.planloft-plan > article` for reading/full-width support. Custom HTML can use theme
+variables in its own styles and choose any layout.
+
+## Public theme variables
+
+Colors are defined for light, dark system preference, explicit dark, and print. The
+starter shows the selectors and marker. Typography variables are state-independent.
+Use local font stacks. Themes set variables only; document CSS owns layout and shape.
+The old unprefixed color and chart names are not aliases for these variables.
+
+| Color variable | Use |
+|---|---|
+| `--planloft-paper`, `--planloft-ink` | Page background and body text |
+| `--planloft-muted`, `--planloft-surface`, `--planloft-rule` | Secondary text, inset background, borders |
+| `--planloft-accent`, `--planloft-accent-contrast` | Links and active marks; text on accent fill |
+| `--planloft-code-paper`, `--planloft-code-ink` | Code background and text |
+| `--planloft-chart-1` through `--planloft-chart-6` | Categorical chart series |
+| `--planloft-chart-sequential`, `--planloft-chart-neutral` | Heatmap hue; totals and baselines |
+| `--planloft-positive`, `--planloft-negative`, `--planloft-caution` | Status colors |
+
+| Typography variable | Use |
+|---|---|
+| `--planloft-font-body`, `--planloft-font-heading`, `--planloft-font-mono` | Font stacks |
+| `--planloft-font-size`, `--planloft-line-height`, `--planloft-code-size` | Absolute base size (for example `17px`), unitless body line height, code size relative to its context (for example `0.88em`) |
+| `--planloft-heading-weight`, `--planloft-heading-line-height`, `--planloft-heading-tracking` | Heading weight, unitless line height, letter spacing |
+| `--planloft-h1-size`, `--planloft-h2-size`, `--planloft-h3-size` | Heading sizes relative to the body size in `em` |
+
+## Authored HTML example
+
+Save this as `report.html` and run `planloft render report.html --trusted-html --theme
+editorial --out ./report-site`. The selected theme supplies the variables and controls.
+The document owns its layout and can override a theme token locally. The prose class is
+opt-in; omit it for fully custom semantic styling.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release report</title>
+  <style>
+    body { margin: 0; background: var(--planloft-paper); color: var(--planloft-ink);
+      font: var(--planloft-font-size)/var(--planloft-line-height) var(--planloft-font-body); }
+    .summary { border-left: 4px solid var(--planloft-accent); padding: 1rem;
+      background: var(--planloft-surface); }
+    .summary strong { color: var(--planloft-accent); }
+    /* A document-owned override, scoped to one region. */
+    .summary { --planloft-accent: var(--planloft-positive); }
+  </style>
+</head>
+<body>
+  <main class="planloft-plan">
+    <article class="planloft-prose">
+      <h1>Release report</h1>
+      <div class="summary"><strong>Ready:</strong> The API is deployed.</div>
+      <p>Review the rollout before enabling the next region.</p>
+    </article>
+  </main>
+</body>
+</html>
 ```
 
-All three files are optional after the directory itself resolves. `style.css` defaults
-to an empty skin, `template.md` defaults to generic authoring guidance, and
-`layout.html` defaults to Planloft's document shell. In practice, a visual theme should
-provide `style.css` and an authoring theme should provide `template.md`.
+## Validate
 
-Valid names match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. A user directory takes precedence
-over a bundled theme with the same name. Effective theme selection is document
-metadata, then project configuration, then the global configuration default.
-
-## Built-in catalog
-
-Choose a built-in by the document's job: `minimal` for terse execution, `detailed` for
-technical plans, `editorial` for narrative proposals, `decision` for durable choices,
-`research` for evidence-led investigations, and `briefing` for status or leadership
-reviews. Each built-in provides authoring guidance plus deliberate light and dark CSS.
-
-Built-in report containers use 200px of total side gutters on wide screens, 100px at
-64rem and below, and 50px at 40rem and below. They do not use per-theme max-width caps.
-
-## CSS requirements
-
-Include this exact marker when the theme provides its own complete dual palette:
-
-```css
-/* planloft-color-schemes: light dark */
-```
-
-Define all four states:
-
-1. Light variables on `:root`.
-2. System dark variables in `@media (prefers-color-scheme: dark)` for
-   `:root:not([data-planloft-color-scheme="light"])`.
-3. Explicit light variables on `:root[data-planloft-color-scheme="light"]`.
-4. Explicit dark variables on `:root[data-planloft-color-scheme="dark"]`.
-
-Planloft injects the top theme control and persists its explicit selection. Without the
-marker, the renderer adds a readable system-color fallback, but it cannot invent a
-deliberate dark palette for custom components.
-
-The control takes its colors from four optional custom properties on `:root`:
-`--planloft-ink`, `--planloft-paper`, `--planloft-rule`, and `--planloft-accent`.
-Point them at the theme's own variables once, in the base `:root` block, and they
-follow every color state. Without them the control falls back to system colors, which
-can clash with a tinted palette.
-
-Style semantic Markdown output rather than hand-authored presentation markup. Cover at
-least body text, headings, links, lists, code, preformatted blocks, blockquotes, tables,
-rules, and focus states. Preserve horizontal overflow for code and tables on narrow
-screens.
-
-## Authoring guidance
-
-`template.md` is returned by `planloft resolve` so an agent can match document structure
-and voice to the theme. Keep it renderer-neutral:
-
-- Require Markdown, not generated HTML.
-- Describe useful structure, density, and voice.
-- Avoid hard-coded presentation colors or layout markup.
-- Require content to remain legible in light and dark.
-
-Do not put general Planloft operation instructions in a theme template.
-
-## Constrained layouts
-
-`layout.html` must contain `{{body}}`. It may use only:
-
-- `{{title}}` — escaped document title.
-- `{{kind}}` — escaped document kind.
-- `{{body}}` — renderer-owned Markdown or trusted HTML body.
-- `{{styles}}` — theme and Planloft control CSS.
-- `{{robots}}` — publication metadata slot.
-- `{{comments}}` — optional giscus section.
-
-Layouts have no expressions, conditions, includes, filesystem access, or executable
-template code. Planloft repairs fragmentary shells and injects styles, comments,
-`noindex`, and the theme toggle when their optional slots are absent, but a complete
-semantic HTML shell is easier to reason about.
-
-Do not add scripts to a custom layout. Keep `{{body}}` inside the primary article or
-content region, and leave the theme toggle to the renderer.
-
-## Configuration
-
-Set the global default with `planloft config` by changing the top-level `theme`. Set a
-project override in `projects.<project-key>.theme`, or set `theme` in document metadata
-for the narrowest override. Preserve the strict version-1 object and unrelated settings.
-
-Do not edit configuration merely to test a theme. Use `planloft render <input> --theme
-<name> --out <directory>` so validation is isolated.
-
-## Validation checklist
-
-- Theme directory resolves and the render command exits successfully.
-- The body appears inside a valid HTML document with styles in the head.
-- System, explicit light, and explicit dark modes are readable.
-- The theme toggle is the first body control and has visible keyboard focus.
-- Long code, tables, and URLs do not break narrow layouts.
-- Heading hierarchy, lists, quotes, links, and code are visually distinct.
-- `template.md` produces useful Markdown without presentation markup.
-- No publish or deploy occurs during validation.
-
-For a new theme, copy and tailor the skill's `assets/theme-starter/` files rather than
-reconstructing this contract from memory.
+Render a representative document with `planloft render <input> --theme <name> --out
+<directory>`. Check light, dark, system preference, narrow and wide layouts, keyboard
+focus, contrast, tables, and code. Test authored HTML as well when it uses custom styles.
+Do not publish validation output without an explicit request.

@@ -10,7 +10,7 @@ import { withPlanloftHome } from "./core/paths.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-test("application resolution returns a Markdown context and normalizes agent metadata", async () => {
+test("application resolution returns a theme and selected format and normalizes agent metadata", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-test-"));
   try {
     const application = createPlanloftApplication({ cwd: root, planloftHome: path.join(root, "home") });
@@ -21,15 +21,17 @@ test("application resolution returns a Markdown context and normalizes agent met
     });
     assert.equal(plan.context.format, "md");
     assert.match(plan.context.path, /markdown-plan\.md$/);
-    assert.match(plan.context.template, /Author Markdown only/);
+    assert.match(plan.context.themeCss, /:root/);
+    assert.match(plan.context.themePath, /style\.css$/);
 
     const review = await application.resolve({
+      format: "mdx",
       kind: "  review  ",
       title: "  Trimmed Title  ",
       slug: "  Custom Slug  ",
     });
     assert.equal(review.context.kind, "review");
-    assert.match(review.context.path, /custom-slug\.md$/);
+    assert.match(review.context.path, /custom-slug\.mdx$/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -58,6 +60,18 @@ test("application resolution rejects invalid metadata and theme before writes", 
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("resolve rejects unsupported format with resolve-specific guidance", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-resolve-format-"));
+  try {
+    const result = spawnSync(process.execPath, ["--import", "tsx", path.join(ROOT, "src/cli.ts"), "resolve", "--format", "json"],
+      { cwd: ROOT, env: { ...process.env, PLANLOFT_HOME: path.join(root, "home") }, encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /PLANLOFT_RESOLVE_FORMAT_INVALID.*Use md, mdx, or html/);
+    assert.doesNotMatch(result.stderr, /stdin|Use md, mdx, json/);
+    assert.equal(fs.existsSync(path.join(root, "home")), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test("CLI adapter maps application validation failures to stderr and exit code", () => {

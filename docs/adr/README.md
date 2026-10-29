@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+These records preserve historical decisions. Theme authoring templates and custom theme layouts described in older ADRs have been superseded by the [theme-only contract](../../themes/README.md).
+
 This directory records the significant architectural decisions for **planloft**.
 
 These ADRs are development docs: public in the source repository, but intentionally

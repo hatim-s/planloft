@@ -5,7 +5,7 @@
 Planloft has one canonical document seam:
 
 ```text
-Markdown | JSON envelope | explicitly trusted HTML
+Markdown | trusted MDX | JSON envelope | explicitly trusted HTML
                        |
                        v
               CanonicalDocument v1
@@ -17,7 +17,7 @@ Markdown | JSON envelope | explicitly trusted HTML
 
 Every input adapter normalizes title, slug, kind, theme, status, content format,
 content, and trust metadata before downstream work. JSON is a metadata envelope around
-Markdown or trusted HTML, not a proprietary content tree.
+Markdown, trusted MDX, or trusted HTML, not a proprietary content tree.
 
 ## Operations
 
@@ -27,7 +27,7 @@ Markdown or trusted HTML, not a proprietary content tree.
 - `preview` renders a stored document and opens a local file.
 - `copy` copies stored source into the current repository.
 - `deploy` publishes an already stored document.
-- `resolve` returns the exact Markdown path and theme authoring guidance used by
+- `resolve` returns the source path and selected theme CSS used by
   `planloft-write-doc`.
 - `init` creates defaults when absent and reports readiness; it does not publish.
 
@@ -56,17 +56,15 @@ A user theme directory overrides a built-in theme with the same name. Planloft r
 invalid, missing, inaccessible, or structurally invalid themes rather than silently
 falling back. See [themes.md](themes.md) for the asset contract.
 
-The renderer owns Markdown parsing, safe URL handling, constrained layout slots,
+The renderer owns Markdown parsing, safe URL handling, a shared prose shell,
 light/dark support, the theme toggle, optional `noindex` metadata, and optional giscus
 comments. A rendered artifact is self-contained.
-Trusted HTML bypasses the renderer's theme, layout, and metadata injection. Publishing
-`page.html --trusted-html` stores and deploys its content as supplied. Add `noindex`
-to the source when needed. Planloft rejects `--comments` for direct HTML.
+Authored HTML retains its structure, styles, and scripts while the renderer supplies theme CSS and controls. It can opt into semantic styling with `.planloft-prose` and reading/full-width support with `.planloft-plan > article`.
 
 ## Agent boundary
 
 `planloft-write-doc` is the semantic authoring skill. It resolves the target, writes
-durable Markdown, and never publishes unless separately asked. `planloft-customise`
+durable Markdown or hoists trusted MDX with its dependency snapshot, and never publishes unless separately asked. `planloft-customise`
 explains the system and works on themes. All other behavior remains discoverable
 through the CLI.
 
@@ -80,7 +78,19 @@ Untrusted Markdown escapes embedded HTML and rejects unsafe link and image schem
 Raw HTML requires an explicit trusted-HTML option and should be used only for content
 the user controls.
 
-Publishing is always explicit. Published paths are hard to guess. Rendered Markdown
-gets `noindex`; trusted HTML keeps only the metadata supplied in its source.
+Publishing is always explicit. Published paths are hard to guess. Published Markdown, MDX, and HTML get `noindex`.
 The backing GitHub repository and manifest are public and enumerable. Keep
 sensitive documents local.
+
+## MDX and collaboration
+
+MDX imports and expressions execute code. Use `--trusted-mdx` only for trusted
+source, imports, registries, and stored or copied bundles. Hoist compiles a snapshot;
+a changed stored source needs to be hoisted again from its dependency context.
+Components imported from `planloft/components` and local files render static HTML.
+Project `.planloft/components/index.tsx` overrides the global
+`~/.planloft/components/index.tsx`, which overrides built-ins.
+
+Collaboration is opt-in. Viewers can comment and edit shared notes. State loads once;
+local changes update the view and a reload fetches other readers' changes. Checkbox
+state uses explicit stable task keys. Credentials belong on the server, never in HTML.

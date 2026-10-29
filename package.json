@@ -23,17 +23,22 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    }
   },
   "files": [
     "dist",
     "skills",
     "themes",
     "schemas",
-    "templates"
+    "templates",
+    "src/collaboration"
   ],
   "scripts": {
-    "build": "tsup src/cli.ts src/index.ts --format esm --clean --dts",
+    "build": "tsup src/cli.ts src/index.ts src/components/index.ts src/components/styles.ts --format esm --clean --dts",
     "dev": "bun src/cli.ts",
     "test": "tsx --test src/*.test.ts src/**/*.test.ts _tests_/*.test.ts scripts/*.test.ts",
     "test:installer": "bun scripts/installer-matrix.ts --contract",
@@ -42,7 +47,7 @@
     "test:installer:release": "bun scripts/installer-matrix.ts --live --source all --workers 4",
     "release": "bun scripts/release.ts",
     "prepack": "bun run build && bun run typecheck",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json && tsc -p tsconfig.client.json"
   },
   "publishConfig": {
     "access": "public"
@@ -60,14 +65,29 @@
     "themes"
   ],
   "dependencies": {
+    "@libsql/client": "0.18.0",
+    "@mdx-js/mdx": "3.1.1",
+    "@tanstack/charts": "1.1.0",
+    "@tanstack/table-core": "9.3.1",
     "commander": "^12.1.0",
+    "esbuild": "0.28.2",
     "gray-matter": "^4.0.3",
     "marked": "^12.0.2",
     "nanoid": "^5.0.7",
-    "picocolors": "^1.0.1"
+    "parse5": "8.0.1",
+    "picocolors": "^1.0.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
+    "unist-util-visit": "5.0.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "ajv": "^8.20.0",
     "tsup": "^8.1.0",
     "tsx": "^4.16.0",

@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 export default defineConfig({
   banner: {
-    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    js: "import { createRequire as __planloftCreateRequire } from 'node:module'; const require = __planloftCreateRequire(import.meta.url);",
   },
   noExternal: [
     "commander",

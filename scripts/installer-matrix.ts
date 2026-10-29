@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 export const SKILLS_CLI_VERSION = "1.5.22";
 export const MISSING_CLI_MESSAGE = "Planloft CLI is required by the planloft-write-doc skill. Install it with `npm install -g planloft`, `pnpm add -g planloft`, or `bun add -g planloft`, then retry in a new agent session.";
-export const SHIPPED_SKILLS = ["planloft-customise", "planloft-write-doc"] as const;
+export const SHIPPED_SKILLS = ["planloft-customise", "planloft-migrate", "planloft-write-doc"] as const;
 export const DIMENSIONS = {
   runner: ["npx", "pnpm", "bunx"] as const,
   agent: ["codex", "claude-code", "pi"] as const,
@@ -149,7 +149,7 @@ export function quickMatrix(source: Source = "local"): InstallerScenario[] {
   }));
 }
 
-/** Distributes the same 12 scenarios across the branch and release tag. */
+/** Distributes the same scenarios across the branch and release tag. */
 export function releaseMatrix(): InstallerScenario[] {
   return quickMatrix().map((entry, index) => {
     const row = Math.floor(index / SHIPPED_SKILLS.length);
@@ -163,7 +163,7 @@ export function releaseMatrix(): InstallerScenario[] {
 /** Checks static package, skill, documentation, and scenario contracts without network access. */
 export function validateRepositoryContract(): { scenarios: number; skills: string[]; skillsCliVersion: string } {
   const scenarios = quickMatrix();
-  assert.equal(scenarios.length, 12, "installer contract must contain 12 curated scenarios");
+  assert.equal(scenarios.length, 6 * SHIPPED_SKILLS.length, "installer contract must cover each skill in all six curated scenarios");
   assert.equal(new Set(scenarios.map(({ id }) => id)).size, scenarios.length, "scenario ids must be unique");
   for (const dimension of ["runner", "agent", "scope", "method", "cli", "skill"] as const) {
     assert.deepEqual(

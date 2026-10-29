@@ -24,12 +24,13 @@ export interface IngestOptions {
   defaults?: DocumentOverrides;
   overrides?: DocumentOverrides;
   trustedHtml?: boolean;
+  trustedMdx?: boolean;
 }
 
 /** Normalize Markdown, JSON, or trusted HTML into one canonical document. */
 export function ingestDocument(raw: string, options: IngestOptions): CanonicalDocument {
   const sourceName = options.sourceName ? path.basename(options.sourceName) : "document";
-  const fallbackSlug = sourceName.replace(/\.(md|markdown|html?|json)$/i, "");
+  const fallbackSlug = sourceName.replace(/\.(md|mdx|markdown|html?|json)$/i, "");
 
   if (options.format === "json") {
     return ingestJson(raw, options, fallbackSlug);
@@ -41,9 +42,13 @@ export function ingestDocument(raw: string, options: IngestOptions): CanonicalDo
     );
   }
 
-  const parsed = options.format === "md" ? fm.parse(raw) : { data: {}, content: raw };
+  if (options.format === "mdx" && !options.trustedMdx) {
+    throw new Error("MDX executes code. Pass --trusted-mdx only for content you trust.");
+  }
+
+  const parsed = options.format === "md" || options.format === "mdx" ? fm.parse(raw) : { data: {}, content: raw };
   const source = normalizeDocumentMetadata(parsed.data, "Markdown frontmatter");
-  return canonical({
+  const document = canonical({
     content: parsed.content,
     contentFormat: options.format,
     trustedHtml: !!options.trustedHtml,
@@ -52,6 +57,12 @@ export function ingestDocument(raw: string, options: IngestOptions): CanonicalDo
     source,
     overrides: options.overrides,
   });
+  if (options.format === "mdx") {
+    document.sourceLineOffset = raw.endsWith(parsed.content)
+      ? (raw.slice(0, raw.length - parsed.content.length).match(/\n/g) ?? []).length
+      : null;
+  }
+  return document;
 }
 
 /** Infer an ingestion adapter from a filename. Stdin callers should pass a format. */
@@ -59,8 +70,9 @@ export function sourceFormatFromPath(file: string): SourceFormat {
   const ext = path.extname(file).toLowerCase();
   if (ext === ".json") return "json";
   if (ext === ".html" || ext === ".htm") return "html";
+  if (ext === ".mdx") return "mdx";
   if (ext === ".md" || ext === ".markdown") return "md";
-  throw new Error(`Cannot infer input format from ${file}. Use --format md|json|html.`);
+  throw new Error(`Cannot infer input format from ${file}. Use --format md|mdx|json|html.`);
 }
 
 function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): CanonicalDocument {
@@ -97,8 +109,11 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
   }
   const source = normalizeDocumentMetadata(doc, "JSON document");
   const contentFormat = doc.contentFormat ?? "md";
-  if (contentFormat !== "md" && contentFormat !== "html") {
-    throw new Error('"contentFormat" must be "md" or "html".');
+  if (contentFormat !== "md" && contentFormat !== "mdx" && contentFormat !== "html") {
+    throw new Error('"contentFormat" must be "md", "mdx", or "html".');
+  }
+  if (contentFormat === "mdx" && !options.trustedMdx) {
+    throw new Error("MDX executes code. Pass --trusted-mdx only for content you trust.");
   }
   if (contentFormat === "html" && !options.trustedHtml) {
     throw new Error(
@@ -106,7 +121,7 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
     );
   }
 
-  return canonical({
+  const document = canonical({
     content: doc.content,
     contentFormat,
     trustedHtml: !!options.trustedHtml,
@@ -115,6 +130,8 @@ function ingestJson(raw: string, options: IngestOptions, fallbackSlug: string): 
     source,
     overrides: options.overrides,
   });
+  if (contentFormat === "mdx") document.sourceLineOffset = null;
+  return document;
 }
 
 function canonical(input: {
@@ -132,7 +149,7 @@ function canonical(input: {
     ...normalizeDocumentMetadata(input.overrides, "document overrides"),
   };
   const inferredTitle =
-    (input.contentFormat === "md" ? firstMarkdownHeading(input.content) : undefined) ??
+    (input.contentFormat !== "html" ? firstMarkdownHeading(input.content) : undefined) ??
     merged.slug ??
     input.fallbackSlug ??
     "Document";

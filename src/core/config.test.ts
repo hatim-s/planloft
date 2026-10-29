@@ -80,7 +80,7 @@ test("old HTML capture configuration produces an actionable migration diagnostic
     assertConfigError(
       () => loadConfig(),
       "PLANLOFT_CONFIG_MIGRATION_REQUIRED",
-      /Remove planFormat.*agent-authored documents now resolve to Markdown.*--trusted-html/,
+      /Remove planFormat.*choose Markdown, MDX, or trusted HTML/,
     );
     assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).planFormat, "html");
   });
@@ -222,7 +222,7 @@ test("the configuration interface resolves project overrides and returns only re
     const configuration = createPlanloftConfiguration();
     const resolved = configuration.resolveAuthoring("project");
     assert.equal(resolved.theme, "editorial");
-    assert.match(resolved.template, /Author Markdown only/);
+    assert.match(resolved.themeCss, /:root/);
     const diagnostic = JSON.stringify(configuration.redact(resolved.config));
     assert.match(diagnostic, /\[redacted\]/);
     assert.doesNotMatch(diagnostic, /configuration-secret/);

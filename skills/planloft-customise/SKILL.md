@@ -3,7 +3,7 @@ name: planloft-customise
 description: >-
   Explain Planloft's document pipeline, storage, theme resolution, and publication
   boundaries, or create, modify, validate, and troubleshoot a Planloft custom theme.
-  Use when the user asks how Planloft works, wants a new visual or authoring theme,
+  Use when the user asks how Planloft works, wants a new color and typography theme,
   needs theme configuration help, or reports a theme asset or layout error. Do not use
   for ordinary document authoring; use planloft-write-doc for that.
 ---
@@ -50,8 +50,8 @@ For a new theme, start from [assets/theme-starter/](assets/theme-starter/) and t
 only the assets the user needs:
 
 - `style.css` controls presentation and must deliberately support light and dark.
-- `template.md` guides agents that author documents using the theme.
-- `layout.html` is optional and constrained; omit it to use Planloft's default layout.
+  Set only the documented color and typography variables, including chart and status tokens.
+- Do not add `template.md`, `template.mdx`, or `layout.html`. Themes do not control document structure. Use `planloft-migrate` for legacy theme assets.
 
 Do not overwrite an existing theme or replace a built-in name without explicit user
 intent. A user theme with a built-in name intentionally shadows that built-in.

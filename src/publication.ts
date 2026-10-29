@@ -12,7 +12,7 @@ import {
 } from "./github-cli.js";
 import { getAdapter, type HostAdapter, type HostAuthentication, type Manifest } from "./hosts/adapter.js";
 import { vercelSettings } from "./hosts/vercel.js";
-import { buildSite } from "./render/renderer.js";
+import { buildSiteAsync } from "./render/renderer.js";
 
 export interface ApplicationPublicationInput {
   id: string;
@@ -110,9 +110,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       const host = options.host ?? getAdapter(publicationOptions.host ?? config.host ?? "github-pages");
       if (!host) throw new Error("PLANLOFT_HOST_INVALID: Choose github-pages or vercel.");
       if (host.name === "vercel") vercelSettings(config);
-      const theme = document.format === "html"
-        ? ""
-        : configuration.resolveProject(document.project, document.theme).theme;
+      const theme = configuration.resolveProject(document.project, document.theme).theme;
       if (document.format === "html" && publicationOptions.comments) {
         throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --comments");
       }
@@ -147,9 +145,9 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
         },
       };
       const artifacts: string[] = [];
-      const buildArtifact = (base: string): string => {
+      const buildArtifact = async (base: string): Promise<string> => {
         try {
-          const dist = buildSite({
+          const dist = await buildSiteAsync({
             doc: document,
             theme: prepared.theme,
             base,
@@ -167,7 +165,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
       try {
         let result: ApplicationPublicationAdapterResult;
         if (options.applicationAdapter) {
-          const dist = buildArtifact(
+          const dist = await buildArtifact(
             prepared.basePath ?? options.applicationAdapter.basePath(prepared.id),
           );
           result = await externalPublicationEffect("host", () =>
@@ -180,6 +178,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
               env: options.auth?.env ?? options.environment,
             }),
           );
+          const dist = await buildArtifact("/");
           result = await externalPublicationEffect("host", () =>
             host.deploy({
               ...common,
@@ -198,7 +197,8 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
                   );
                 }
                 renderedForHost = true;
-                return buildArtifact(host.basePath(id, prepared.config));
+                host.basePath(id, prepared.config);
+                return dist;
               },
             }),
           );

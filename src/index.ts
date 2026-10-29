@@ -1,5 +1,14 @@
+export { buildGallery } from "./gallery/index.js";
+export type { GalleryOptions, GalleryResult } from "./gallery/index.js";
+export { MigrationError, migrateDocument } from "./migration/index.js";
+export type { MigrationOptions, MigrationResult } from "./migration/index.js";
+export { attachCollaboration } from "./collaboration/attachment.js";
+export { buildCollaborationDeployment } from "./collaboration/deploy.js";
+export type { CollaborationConfig } from "./collaboration/contracts.js";
 export { ingestDocument, sourceFormatFromPath } from "./core/ingest.js";
 export { hoistDocument } from "./persistence.js";
+export { MdxAuthoringError, compileMdx, renderMdxDocument } from "./mdx/index.js";
+export type { MdxRenderOptions } from "./mdx/index.js";
 export { renderDocument } from "./render/renderer.js";
 export {
   APPLICATION_ERROR_CATEGORIES,

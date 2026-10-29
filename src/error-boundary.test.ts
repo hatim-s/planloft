@@ -281,6 +281,10 @@ function emptyApplication(): PlanloftApplication {
     config: fail,
     init: fail,
     migrateToVercel: fail,
+    migrate: fail,
+    attach: fail,
+    collaborationBuild: fail,
+    gallery: fail,
   };
 }
 
@@ -305,3 +309,24 @@ function assertSecretAbsent(value: unknown): void {
   for (const surface of surfaces) assert.doesNotMatch(surface, new RegExp(SENTINEL));
   assert.equal(Object.prototype.hasOwnProperty.call(error, "cause"), false);
 }
+
+test("migration preserves actionable source locations and redacts conflict paths", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `planloft-${SENTINEL}-`));
+  const source = path.join(root, "source.md");
+  const destination = path.join(root, "output.mdx");
+  const app = createPlanloftApplication({ cwd: root, planloftHome: path.join(root, "home") });
+  try {
+    fs.writeFileSync(source, "<b>raw</b>\n");
+    await assert.rejects(app.migrate(source, { out: destination, dryRun: true }), /Raw HTML at line 1, column 1/);
+    fs.writeFileSync(source, "# Safe\n");
+    fs.writeFileSync(destination, "different");
+    await assert.rejects(app.migrate(source, { out: destination, dryRun: true }), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Destination already exists/);
+      assert.doesNotMatch(error.message, new RegExp(SENTINEL));
+      return true;
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

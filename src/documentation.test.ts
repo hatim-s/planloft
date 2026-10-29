@@ -19,7 +19,7 @@ test("README keeps installation concise and points detailed setup to one guide",
   assert.match(readme, /\[Setup\]\(\.\/docs\/setup\.md\)/);
   assert.doesNotMatch(readme, /plugin/i);
   for (const theme of ["minimal", "detailed", "editorial", "decision", "research", "briefing"]) {
-    assert.ok(readme.includes(`| \`${theme}\` |`));
+    assert.ok(readme.includes(`\`${theme}\``));
   }
 });
 
@@ -62,7 +62,7 @@ test("consumer surfaces expose the focused skills and no retired aliases", () =>
     .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  assert.deepEqual(skillDirectories.sort(), ["planloft-customise", "planloft-write-doc"]);
+  assert.deepEqual(skillDirectories.sort(), ["planloft-customise", "planloft-migrate", "planloft-write-doc"]);
 
   const commands = path.join(ROOT, "commands");
   assert.ok(!fs.existsSync(commands) || fs.readdirSync(commands).length === 0);
@@ -97,7 +97,7 @@ test("migration guide names every breaking installation and runtime contract", (
     "planloft deploy [slug]",
   ]) assert.ok(migration.includes(replacement));
   for (const contract of [
-    "Markdown-only",
+    "Markdown or MDX",
     "strict version-1",
     "finite positive integers",
     "public",

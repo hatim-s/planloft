@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { configPath } from "./core/paths.js";
 import type { Config } from "./core/types.js";
 import { MAX_TTL_DAYS, TTL_RULE } from "./core/ttl.js";
-import { assertThemeName, readTemplate, validateTheme } from "./render/themes.js";
+import { assertThemeName, readStyle, themeDir, validateTheme } from "./render/themes.js";
 
 export interface ResolvedProjectConfiguration {
   config: Config;
@@ -36,7 +36,7 @@ export interface PlanloftConfiguration {
   save(config: Config): void;
   update(patch: ConfigPatch): Config;
   resolveProject(projectKey: string, documentTheme?: string): ResolvedProjectConfiguration;
-  resolveAuthoring(projectKey: string): ResolvedProjectConfiguration & { template: string };
+  resolveAuthoring(projectKey: string): ResolvedProjectConfiguration & { themeCss: string; themePath: string };
   redact(config?: Config): RedactedConfiguration;
 }
 
@@ -57,7 +57,7 @@ export function createPlanloftConfiguration(): PlanloftConfiguration {
     },
     resolveAuthoring(projectKey) {
       const resolved = this.resolveProject(projectKey);
-      return { ...resolved, template: readTemplate(resolved.theme) };
+      return { ...resolved, themeCss: readStyle(resolved.theme), themePath: path.join(themeDir(resolved.theme), "style.css") };
     },
     redact(config = loadConfig()) {
       return redactConfig(config);
@@ -263,7 +263,7 @@ function validateConfigValue(value: unknown): Config {
       : "The planFormat capture setting has been removed.";
     throw new ConfigError(
       "PLANLOFT_CONFIG_MIGRATION_REQUIRED",
-      `${detail} Remove planFormat from config.json; agent-authored documents now resolve to Markdown, while explicit trusted HTML input remains available through --trusted-html.`,
+      `${detail} Remove planFormat from config.json; choose Markdown, MDX, or trusted HTML when authoring.`,
     );
   }
   exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel", "host"], "$config");

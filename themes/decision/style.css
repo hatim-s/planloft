@@ -1,225 +1,118 @@
-/* planloft theme: decision. A record that has to hold up later: grotesk sans, ruled sections, a fully boxed options table. */
+/* planloft theme: decision. A stamped record: Seravek for the text, Futura Bold for the
+   headings so each section reads like a signpost, a cool neutral page and stamp-ink
+   violet for links and the first series. Dark is indigo-black with the ink lifted. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
-  --ink: #1b2430;
-  --muted: #5b6675;
-  --paper: #f7f8fa;
-  --surface: #edf1f6;
-  --rule: #d2d9e2;
-  --accent: #1e5aa8;
-  --accent-soft: #e5edf8;
-  --code-bg: #eaeff5;
-  --planloft-ink: var(--ink);
-  --planloft-paper: var(--paper);
-  --planloft-rule: var(--rule);
-  --planloft-accent: var(--accent);
+  --planloft-font-body: Seravek, "Segoe UI Variable Text", "Segoe UI", "Fira Sans", "Noto Sans", "Liberation Sans", sans-serif;
+  --planloft-font-heading: Futura, "Futura PT", "Century Gothic", "Avenir Next", "URW Gothic", Jost, sans-serif;
+  --planloft-font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --planloft-font-size: 16.5px;
+  --planloft-line-height: 1.58;
+  --planloft-code-size: 0.88em;
+  --planloft-heading-weight: 700;
+  --planloft-heading-line-height: 1.08;
+  --planloft-heading-tracking: -0.01em;
+  --planloft-h1-size: 2.35em;
+  --planloft-h2-size: 1.45em;
+  --planloft-h3-size: 1.15em;
+}
+:root,
+:root[data-planloft-color-scheme="light"] {
+  color-scheme: light;
+  --planloft-paper: #f7f7fa;
+  --planloft-ink: #1b1a2b;
+  --planloft-muted: #5a5970;
+  --planloft-surface: #ebebf2;
+  --planloft-rule: #cdcddc;
+  --planloft-accent: #4a3bba;
+  --planloft-accent-contrast: #ffffff;
+  --planloft-code-paper: #ededf4;
+  --planloft-code-ink: #1f1d35;
+  --planloft-chart-1: #5744cc;
+  --planloft-chart-2: #c0611c;
+  --planloft-chart-3: #0f8a79;
+  --planloft-chart-4: #c23b6c;
+  --planloft-chart-5: #2a7cbd;
+  --planloft-chart-6: #6b8f1d;
+  --planloft-chart-sequential: #4a3bba;
+  --planloft-chart-neutral: #828195;
+  --planloft-positive: #1b7a4a;
+  --planloft-negative: #b93236;
+  --planloft-caution: #9a6100;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-planloft-color-scheme="light"]) {
-    --ink: #d6dde6;
-    --muted: #8d99a8;
-    --paper: #131920;
-    --surface: #1a222c;
-    --rule: #2d3844;
-    --accent: #7fb2ff;
-    --accent-soft: #1b2a3d;
-    --code-bg: #192129;
+    color-scheme: dark;
+    --planloft-paper: #141320;
+    --planloft-ink: #e0deec;
+    --planloft-muted: #a3a1b9;
+    --planloft-surface: #1f1e2f;
+    --planloft-rule: #383651;
+    --planloft-accent: #b5a7ff;
+    --planloft-accent-contrast: #141320;
+    --planloft-code-paper: #1b1a2a;
+    --planloft-code-ink: #e4e2f0;
+    --planloft-chart-1: #ab9bff;
+    --planloft-chart-2: #f08f52;
+    --planloft-chart-3: #3dc1ad;
+    --planloft-chart-4: #f07aa2;
+    --planloft-chart-5: #67b2ea;
+    --planloft-chart-6: #a6c948;
+    --planloft-chart-sequential: #b5a7ff;
+    --planloft-chart-neutral: #77768c;
+    --planloft-positive: #5ccf8d;
+    --planloft-negative: #ff8b86;
+    --planloft-caution: #f1b84e;
   }
 }
-:root[data-planloft-color-scheme="light"] {
-  --ink: #1b2430;
-  --muted: #5b6675;
-  --paper: #f7f8fa;
-  --surface: #edf1f6;
-  --rule: #d2d9e2;
-  --accent: #1e5aa8;
-  --accent-soft: #e5edf8;
-  --code-bg: #eaeff5;
-}
 :root[data-planloft-color-scheme="dark"] {
-  --ink: #d6dde6;
-  --muted: #8d99a8;
-  --paper: #131920;
-  --surface: #1a222c;
-  --rule: #2d3844;
-  --accent: #7fb2ff;
-  --accent-soft: #1b2a3d;
-  --code-bg: #192129;
-}
-
-*, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font: 17px/1.65 "Helvetica Neue", "Segoe UI", Helvetica, Arial, system-ui, sans-serif;
-  font-kerning: normal;
-  text-rendering: optimizeLegibility;
-}
-.planloft-plan {
-  width: calc(100% - 200px);
-  margin-inline: auto;
-  padding-block: 4.5rem 7rem;
-}
-article > :first-child { margin-top: 0; }
-
-h1, h2, h3, h4, h5, h6 {
-  color: var(--ink);
-  line-height: 1.25;
-  text-wrap: balance;
-  overflow-wrap: anywhere;
-}
-h1 {
-  margin: 0 0 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 3px solid var(--accent);
-  font-size: 2.2rem;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-/* Each section opens with a short bar, so the record scans as numbered-feeling parts
-   without inventing numbers the author did not write. */
-h2 { margin: 3rem 0 0.75rem; font-size: 1.4rem; font-weight: 700; }
-h2::before {
-  content: "";
-  display: block;
-  width: 2.5rem;
-  height: 3px;
-  margin-bottom: 0.7rem;
-  border-radius: 2px;
-  background: var(--accent);
-}
-h3 { margin: 2rem 0 0.5rem; font-size: 1.12rem; font-weight: 700; }
-h4 { margin: 1.5rem 0 0.4rem; font-size: 1rem; font-weight: 700; }
-h5, h6 { margin: 1.25rem 0 0.3rem; font-size: 0.95rem; font-weight: 700; color: var(--muted); }
-h2 + h3, h3 + h4 { margin-top: 1rem; }
-h1 a, h2 a, h3 a, h4 a { color: inherit; }
-
-p { margin: 0 0 1.15em; text-wrap: pretty; }
-ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
-li { margin: 0.35em 0; }
-li > p { margin-bottom: 0.5em; }
-li ul, li ol { margin: 0.35em 0; }
-li::marker { color: var(--muted); }
-ol > li::marker { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
-ul:has(> li > input[type="checkbox"]) { list-style: none; padding-left: 0.25em; }
-input[type="checkbox"] { margin: 0 0.45em 0 0; vertical-align: -0.1em; accent-color: var(--accent); }
-
-a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  text-underline-offset: 0.18em;
-  overflow-wrap: anywhere;
-}
-a:hover { text-decoration-color: currentColor; }
-strong { font-weight: 700; }
-mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; padding: 0 0.15em; }
-del { color: var(--muted); }
-abbr[title] { text-decoration: underline dotted; text-underline-offset: 0.18em; }
-sup, sub { font-size: 0.75em; line-height: 0; }
-
-code, kbd, samp, pre {
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
-  font-size: 0.875em;
-}
-code { padding: 0.1em 0.28em; border-radius: 4px; background: var(--code-bg); }
-pre {
-  margin: 1.35em 0;
-  padding: 1rem 1.15rem;
-  overflow-x: auto;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--code-bg);
-  font-size: 0.86em;
-  line-height: 1.55;
-  tab-size: 2;
-}
-pre code { padding: 0; border-radius: 0; background: transparent; font-size: inherit; }
-kbd {
-  padding: 0.1em 0.4em;
-  border: 1px solid var(--rule);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  background: var(--surface);
-  font-size: 0.8em;
-}
-
-blockquote {
-  margin: 1.5em 0;
-  padding: 0.85em 1.1em;
-  border: 1px solid var(--rule);
-  border-left: 4px solid var(--accent);
-  border-radius: 0 6px 6px 0;
-  background: var(--surface);
-  color: var(--ink);
-}
-blockquote > :last-child { margin-bottom: 0; }
-
-/* The options table is the part of a decision people come back to, so it gets full
-   rules on every cell and a first column that reads as the row's name. */
-table {
-  display: block;
-  width: max-content;
-  max-width: 100%;
-  margin: 1.5em 0;
-  overflow-x: auto;
-  border-collapse: collapse;
-  font-size: 0.92em;
-  line-height: 1.5;
-}
-th, td {
-  padding: 0.6em 0.85em;
-  border: 1px solid var(--rule);
-  text-align: left;
-  vertical-align: top;
-}
-th { font-weight: 700; background: var(--accent-soft); border-bottom: 2px solid var(--accent); }
-tbody tr > :first-child { font-weight: 600; }
-tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface) 55%, transparent); }
-
-hr { height: 1px; margin: 3rem 0; border: 0; background: var(--rule); }
-img { max-width: 100%; height: auto; border-radius: 4px; }
-figure { margin: 1.5em 0; }
-figcaption { color: var(--muted); font-size: 0.9em; }
-details { margin: 1em 0; padding: 0.75em 1em; border: 1px solid var(--rule); border-radius: 6px; }
-summary { cursor: pointer; font-weight: 700; }
-
-::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
-.planloft-comments { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
-
-@media (max-width: 64rem) {
-  .planloft-plan { width: calc(100% - 100px); }
-}
-@media (max-width: 40rem) {
-  body { font-size: 16px; }
-  .planloft-plan { width: calc(100% - 50px); padding-block: 4.25rem 5rem; }
-  h1 { font-size: 1.85rem; }
-  h2 { font-size: 1.28rem; }
-  pre { padding: 0.85rem 1rem; }
+  color-scheme: dark;
+  --planloft-paper: #141320;
+  --planloft-ink: #e0deec;
+  --planloft-muted: #a3a1b9;
+  --planloft-surface: #1f1e2f;
+  --planloft-rule: #383651;
+  --planloft-accent: #b5a7ff;
+  --planloft-accent-contrast: #141320;
+  --planloft-code-paper: #1b1a2a;
+  --planloft-code-ink: #e4e2f0;
+  --planloft-chart-1: #ab9bff;
+  --planloft-chart-2: #f08f52;
+  --planloft-chart-3: #3dc1ad;
+  --planloft-chart-4: #f07aa2;
+  --planloft-chart-5: #67b2ea;
+  --planloft-chart-6: #a6c948;
+  --planloft-chart-sequential: #b5a7ff;
+  --planloft-chart-neutral: #77768c;
+  --planloft-positive: #5ccf8d;
+  --planloft-negative: #ff8b86;
+  --planloft-caution: #f1b84e;
 }
 @media print {
   html:root,
   html:root:not([data-planloft-color-scheme="light"]),
   html:root[data-planloft-color-scheme="dark"] {
     color-scheme: light;
-    --ink: #1b2430;
-    --muted: #5b6675;
-    --paper: #f7f8fa;
-    --surface: #edf1f6;
-    --rule: #d2d9e2;
-    --accent: #1e5aa8;
-    --accent-soft: #e5edf8;
-    --code-bg: #eaeff5;
+    --planloft-paper: #ffffff;
+    --planloft-ink: #1b1a2b;
+    --planloft-muted: #5a5970;
+    --planloft-surface: #ebebf2;
+    --planloft-rule: #cdcddc;
+    --planloft-accent: #4a3bba;
+    --planloft-accent-contrast: #ffffff;
+    --planloft-code-paper: #ededf4;
+    --planloft-code-ink: #1f1d35;
+    --planloft-chart-1: #5744cc;
+    --planloft-chart-2: #c0611c;
+    --planloft-chart-3: #0f8a79;
+    --planloft-chart-4: #c23b6c;
+    --planloft-chart-5: #2a7cbd;
+    --planloft-chart-6: #6b8f1d;
+    --planloft-chart-sequential: #4a3bba;
+    --planloft-chart-neutral: #828195;
+    --planloft-positive: #1b7a4a;
+    --planloft-negative: #b93236;
+    --planloft-caution: #9a6100;
   }
-  body { background: #fff; color: #000; font-size: 11pt; }
-  .planloft-plan { width: auto; padding: 0; }
-  a { color: inherit; }
-  pre, code, kbd { background: #f3f3f3; }
-  th { background: #eee; }
 }

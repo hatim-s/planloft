@@ -11,3 +11,6 @@ dist/
 
 # Prepared npm release artifacts
 .release/
+
+# Generated component and theme gallery
+planloft-gallery/

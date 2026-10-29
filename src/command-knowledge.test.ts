@@ -45,8 +45,8 @@ contractTest("command knowledge covers every public command with examples and ef
     new Set(commands.map((command) => command.name())),
     new Set(COMMAND_KNOWLEDGE.map((command) => command.name)),
   );
-  assert.equal(COMMAND_KNOWLEDGE.length, 12);
-  assert.equal(new Set(COMMAND_KNOWLEDGE.map((command) => command.name)).size, 12);
+  assert.equal(COMMAND_KNOWLEDGE.length, 16);
+  assert.equal(new Set(COMMAND_KNOWLEDGE.map((command) => command.name)).size, 16);
 
   for (const command of COMMAND_KNOWLEDGE) {
     assert.ok(COMMAND_CATEGORIES.includes(command.category));
@@ -125,6 +125,10 @@ contractTest("every structured example reaches the expected application operatio
       method: "deploy",
       args: ["architecture-roadmap", { ttl: 30, comments: undefined, host: undefined }],
     },
+    gallery: { method: "gallery", args: [{ out: "./planloft-gallery" }] },
+    attach: { method: "attach", args: ["report.html", { out: "shared.html", documentId: "report", revision: "1", apiUrl: "https://example.test" }] },
+    "collaboration-build": { method: "collaborationBuild", args: [{ provider: "local", out: "./service" }] },
+    migrate: { method: "migrate", args: ["proposal.md", { out: "proposal.mdx", dryRun: true }] },
     "migrate-to-vercel": { method: "migrateToVercel", args: ["./planloft-plans"] },
     rm: { method: "remove", args: ["obsolete-roadmap"] },
     resolve: {
@@ -214,7 +218,7 @@ contractTest("publication privacy disclosure is snapshot-stable and present in b
   assert.equal(
     PUBLICATION_PRIVACY_DISCLOSURE,
     "Public deployment: the URL path is hard to guess. Planloft adds noindex to rendered " +
-      "Markdown, but publishes trusted HTML unchanged; add noindex to the HTML yourself if needed. " +
+      "Markdown, MDX, and HTML. " +
       "The backing GitHub repository is public, and its manifest is enumerable. Keep sensitive plans local.",
   );
   for (const command of ["deploy", "publish"]) {
@@ -253,7 +257,7 @@ contractTest("distribution exposes focused semantic skills and no retired wrappe
     .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  assert.deepEqual(skills.sort(), ["planloft-customise", "planloft-write-doc"]);
+  assert.deepEqual(skills.sort(), ["planloft-customise", "planloft-migrate", "planloft-write-doc"]);
   const commandsDir = path.join(ROOT, "commands");
   if (fs.existsSync(commandsDir)) assert.deepEqual(fs.readdirSync(commandsDir), []);
 
@@ -363,6 +367,14 @@ function mockResult(method: string): unknown {
     file: "/tmp/example.md",
   };
   switch (method) {
+    case "gallery":
+      return { indexPath: "/tmp/gallery/index.html" };
+    case "attach":
+      return { documentId: "report" };
+    case "collaborationBuild":
+      return { directory: "/tmp/service" };
+    case "migrate":
+      return { status: "dry-run", sourcePath: "/tmp/proposal.md", destinationPath: "/tmp/proposal.mdx", backupPath: "/tmp/proposal.md.bak" };
     case "render":
       return { operation: "render", output: "stdout", html: "" };
     case "hoist":
@@ -377,7 +389,8 @@ function mockResult(method: string): unknown {
           kind: "plan",
           format: "md",
           theme: "detailed",
-          template: "# Plan",
+          themeCss: ":root {}",
+          themePath: "/tmp/style.css",
         },
       };
     case "list":

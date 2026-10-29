@@ -10,10 +10,15 @@ import { docFile } from "./core/doc.js";
 import { shortId } from "./core/id.js";
 import { normalizeDocumentMetadata } from "./core/ingest.js";
 import { configPath, withPlanloftHome } from "./core/paths.js";
-import { projectKey } from "./core/project.js";
+import { gitRoot, projectKey } from "./core/project.js";
 import { slugify } from "./core/slug.js";
 import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
 import { hasGh } from "./hosts/github-pages.js";
+import { attachCollaboration } from "./collaboration/attachment.js";
+import { buildCollaborationDeployment } from "./collaboration/deploy.js";
+import { packageRoot } from "./core/paths.js";
+import type { CollaborationConfig } from "./collaboration/contracts.js";
+import { MigrationError, migrateDocument, type MigrationResult } from "./migration/index.js";
 import { prepareHostingRepository } from "./hosts/layout.js";
 import {
   createDocumentPersistence,
@@ -27,13 +32,25 @@ import {
   type PublicationEffectStage,
   type PublicationOptions,
 } from "./publication.js";
-import { buildSite, renderDocument } from "./render/renderer.js";
-import type { ThemeDiagnosticCode } from "./render/themes.js";
+import { buildGallery } from "./gallery/index.js";
+import { buildSiteAsync, renderDocument } from "./render/renderer.js";
+import { isMdxAuthoringError, prepareMdx, renderMdxDocument } from "./mdx/index.js";
+import { type ThemeDiagnosticCode } from "./render/themes.js";
 import {
   readCanonicalDocument,
   type SourceFlags,
   type SourceReader,
 } from "./commands/source.js";
+
+const safeMigrationErrors = new WeakSet<MigrationError>();
+
+export function isSafeMigrationError(error: unknown): error is MigrationError {
+  try {
+    return error instanceof MigrationError && safeMigrationErrors.has(error);
+  } catch {
+    return false;
+  }
+}
 
 export const APPLICATION_ERROR_CATEGORIES = [
   "validation",
@@ -58,7 +75,11 @@ export type ApplicationOperation =
   | "remove"
   | "config"
   | "init"
-  | "migrate-to-vercel";
+  | "migrate-to-vercel"
+  | "migrate"
+  | "attach"
+  | "collaboration-build"
+  | "gallery";
 
 const APPLICATION_OPERATIONS = new Set<ApplicationOperation>([
   "render",
@@ -73,6 +94,10 @@ const APPLICATION_OPERATIONS = new Set<ApplicationOperation>([
   "config",
   "init",
   "migrate-to-vercel",
+  "migrate",
+  "attach",
+  "collaboration-build",
+  "gallery",
 ]);
 
 const ERROR_CODES: Record<ApplicationErrorCategory, string> = {
@@ -93,8 +118,13 @@ export type ApplicationDiagnosticCode =
   | "PLANLOFT_DOCUMENT_METADATA_INVALID"
   | "PLANLOFT_DOCUMENT_INPUT_INVALID"
   | "PLANLOFT_DOCUMENT_FORMAT_INVALID"
+  | "PLANLOFT_RESOLVE_FORMAT_INVALID"
   | "PLANLOFT_TRUSTED_HTML_REQUIRED"
+  | "PLANLOFT_TRUSTED_MDX_REQUIRED"
+  | "PLANLOFT_MDX_SNAPSHOT_STALE"
   | "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED"
+  | "PLANLOFT_RENDER_SUPPORT_CONFLICT"
+  | "PLANLOFT_HTML_FRAMESET_UNSUPPORTED"
   | "PLANLOFT_TTL_INVALID"
   | "PLANLOFT_EXPIRY_INVALID"
   | "PLANLOFT_GISCUS_CONFIG_INCOMPLETE"
@@ -314,7 +344,7 @@ export interface PlanloftApplication {
   render(input: string, options?: ApplicationRenderOptions): Promise<RenderResult>;
   hoist(input: string, options?: DocumentSourceOptions): Promise<HoistResult>;
   publish(input: string, options?: PublishOptions): Promise<PublishResult>;
-  resolve(options?: { slug?: string; title?: string; kind?: string }): Promise<ResolveResult>;
+  resolve(options?: { slug?: string; title?: string; kind?: string; format?: "md" | "mdx" | "html" }): Promise<ResolveResult>;
   list(options?: { kind?: string }): Promise<ListResult>;
   preview(slug?: string): Promise<PreviewResult>;
   copy(slug?: string, options?: { force?: boolean }): Promise<CopyResult>;
@@ -322,6 +352,10 @@ export interface PlanloftApplication {
   remove(slug: string): Promise<RemoveResult>;
   config(): Promise<ConfigResult>;
   init(options?: InitOptions): Promise<InitResult>;
+  attach(input: string, options: CollaborationConfig & { out: string }): Promise<{ documentId: string }>;
+  gallery(options: { out: string }): Promise<{ indexPath: string }>;
+  collaborationBuild(options: { provider: "local" | "cloudflare" | "vercel"; out: string }): Promise<{ directory: string }>;
+  migrate(source: string, options: { out: string; dryRun?: boolean }): Promise<MigrationResult>;
   migrateToVercel(directory: string): Promise<{ operation: "migrate-to-vercel"; directory: string; migrated: boolean }>;
 }
 
@@ -378,6 +412,17 @@ export function createPlanloftApplication(
       try {
         return await effect();
       } catch (error) {
+        if (isMdxAuthoringError(error)) throw error;
+        if (operation === "migrate" && error instanceof MigrationError) {
+          const message = error.code === "DESTINATION_CONFLICT"
+            ? "Destination already exists with different content. Choose a different destination."
+            : error.code === "BACKUP_CONFLICT"
+              ? "Backup already exists with different content. Resolve the backup conflict before migrating."
+              : error.message;
+          const safe = new MigrationError(error.code, message);
+          safeMigrationErrors.add(safe);
+          throw safe;
+        }
         throw classifyError(operation, error);
       }
     });
@@ -396,6 +441,22 @@ export function createPlanloftApplication(
   };
 
   return {
+    gallery: (options) => run("gallery", () => buildGallery({ outDir: path.resolve(currentDirectory(), options.out) })),
+    attach: (input, options) => run("attach", async () => {
+      const html = fileSystem.readText(path.resolve(currentDirectory(), input));
+      const result = await attachCollaboration(html, { documentId: options.documentId, revision: options.revision, apiUrl: options.apiUrl, contentSelector: options.contentSelector }, {
+        clientPath: path.join(packageRoot, "src/collaboration/client.ts"),
+        cssPath: path.join(packageRoot, "src/collaboration/client.css"),
+      });
+      fileSystem.writeText(path.resolve(currentDirectory(), options.out), result.html);
+      return { documentId: result.config.documentId };
+    }),
+    collaborationBuild: (options) => run("collaboration-build", async () => {
+      const directory = path.resolve(currentDirectory(), options.out);
+      await buildCollaborationDeployment({ provider: options.provider, outDir: directory, projectRoot: packageRoot });
+      return { directory };
+    }),
+    migrate: (source, options) => run("migrate", () => migrateDocument({ sourcePath: path.resolve(currentDirectory(), source), destinationPath: path.resolve(currentDirectory(), options.out), dryRun: options.dryRun })),
     migrateToVercel: (directory) => run("migrate-to-vercel", () => {
       const target = path.resolve(currentDirectory(), directory);
       return { operation: "migrate-to-vercel", directory: target, ...prepareHostingRepository(target) };
@@ -408,13 +469,10 @@ export function createPlanloftApplication(
           options,
           sourceReader,
         );
-        if (doc.contentFormat === "html" && options.noindex) {
-          throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --noindex");
-        }
-        const theme = doc.contentFormat === "html"
-          ? ""
-          : configuration.resolveProject(projectKey(cwd).key, doc.theme).theme;
-        const html = renderDocument(doc, theme, { noindex: options.noindex });
+        const theme = configuration.resolveProject(projectKey(cwd).key, doc.theme).theme;
+        const html = doc.contentFormat === "mdx"
+          ? await renderMdxDocument(doc, theme, { noindex: options.noindex, sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd })
+          : renderDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
         const destination = outputFile(path.resolve(cwd, options.out));
@@ -431,6 +489,11 @@ export function createPlanloftApplication(
           options,
           sourceReader,
         );
+        if (doc.contentFormat === "mdx") {
+          doc.compiledMdx = await prepareMdx(doc.content, { sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd, sourceLineOffset: doc.sourceLineOffset });
+        } else if (doc.contentFormat === "html") {
+          renderDocument(doc, configuration.resolveProject(projectKey(cwd).key, doc.theme).theme);
+        }
         const meta = persistence.hoist(doc, clock());
         return { operation: "hoist", document: publicDocument(meta, true) };
       }),
@@ -461,6 +524,10 @@ export function createPlanloftApplication(
         // Publication preparation validates configuration, theme, TTL, expiry, and comments
         // before persistence performs the first mutation.
         const prepared = publication.prepare(draftMeta, options, now);
+        if (doc.contentFormat === "mdx") {
+          doc.compiledMdx = await prepareMdx(doc.content, { sourcePath: input === "-" ? undefined : resolveSourceInput(input, cwd), projectRoot: gitRoot(cwd) ?? cwd, sourceLineOffset: doc.sourceLineOffset });
+        }
+        if (doc.contentFormat === "html") renderDocument(doc, prepared.theme, { noindex: true });
         const meta = persistence.hoist(doc, now);
         const deployment = await deployMeta(meta, options, prepared);
         return { operation: "publish", document: publicDocument(meta, true), deployment };
@@ -476,7 +543,8 @@ export function createPlanloftApplication(
         const slug = slugify(metadata.slug ?? title);
         const resolved = configuration.resolveAuthoring(key);
         const theme = resolved.theme;
-        const format = "md" as const;
+        const format = options.format ?? "md";
+        if (format !== "md" && format !== "mdx" && format !== "html") throw applicationError("validation", "resolve", { diagnosticCode: "PLANLOFT_RESOLVE_FORMAT_INVALID" });
 
         // Defaults are persisted only after metadata/configuration/theme validation.
         configuration.ensure();
@@ -486,7 +554,8 @@ export function createPlanloftApplication(
           kind,
           format,
           theme,
-          template: resolved.template,
+          themeCss: resolved.themeCss,
+          themePath: resolved.themePath,
         };
         return { operation: "resolve", context };
       }),
@@ -507,16 +576,14 @@ export function createPlanloftApplication(
       }),
 
     preview: (slug) =>
-      run("preview", () => {
+      run("preview", async () => {
         const cwd = currentDirectory();
         const meta = persistence.find(slug);
         if (!meta) throw applicationError("not_found", "preview", {
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
-        const theme = meta.format === "html"
-          ? ""
-          : configuration.resolveProject(projectKey(cwd).key, meta.theme).theme;
-        const directory = buildSite({ doc: meta, theme, base: "/" });
+        const theme = configuration.resolveProject(projectKey(cwd).key, meta.theme).theme;
+        const directory = await buildSiteAsync({ doc: meta, theme, base: "/" });
         const url = `file://${directory}/index.html`;
         const opened = (dependencies.openUrl ?? openUrl)(url);
         return { operation: "preview", slug: meta.slug, directory, url, opened };
@@ -693,6 +760,12 @@ function classifyError(
   if (candidate.name === "ConfigError" && validConfigDiagnostic(candidate.code)) {
     return applicationError("configuration", operation, { diagnosticCode: candidate.code });
   }
+  if (candidate.name === "UnsupportedHtmlStructureError" && candidate.code === "PLANLOFT_HTML_FRAMESET_UNSUPPORTED") {
+    return applicationError("validation", operation, { diagnosticCode: "PLANLOFT_HTML_FRAMESET_UNSUPPORTED" });
+  }
+  if (candidate.name === "RenderSupportError" && candidate.code === "PLANLOFT_RENDER_SUPPORT_CONFLICT") {
+    return applicationError("validation", operation, { diagnosticCode: "PLANLOFT_RENDER_SUPPORT_CONFLICT" });
+  }
   if (candidate.name === "ThemeError" && validThemeDiagnostic(candidate.code)) {
     return applicationError("validation", operation, { diagnosticCode: candidate.code });
   }
@@ -737,6 +810,8 @@ function applicationError(
 function publicationDiagnostic(message: unknown): ApplicationDiagnosticCode | undefined {
   if (typeof message !== "string") return undefined;
   for (const code of [
+    "PLANLOFT_HTML_FRAMESET_UNSUPPORTED",
+    "PLANLOFT_RENDER_SUPPORT_CONFLICT",
     "PLANLOFT_VERCEL_FAILED",
     "PLANLOFT_HOSTING_INVALID",
     "PLANLOFT_GITHUB_AUTH_MISSING",
@@ -768,6 +843,8 @@ function validationDiagnostic(message: unknown): PlanloftApplicationErrorDetails
   if (/^(?:--ttl|TTL|config\.defaultTtlDays) does not produce a representable expiry/.test(message)) {
     return { diagnosticCode: "PLANLOFT_EXPIRY_INVALID" };
   }
+  if (message.startsWith("MDX executes code.")) return { diagnosticCode: "PLANLOFT_TRUSTED_MDX_REQUIRED" };
+  if (message.startsWith("Stored MDX has changed since")) return { diagnosticCode: "PLANLOFT_MDX_SNAPSHOT_STALE" };
   if (/^(?:HTML input|JSON HTML content) is disabled by default\./.test(message)) {
     return { diagnosticCode: "PLANLOFT_TRUSTED_HTML_REQUIRED" };
   }
@@ -803,12 +880,17 @@ const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
   "PLANLOFT_THEME_MISSING",
   "PLANLOFT_THEME_INACCESSIBLE",
   "PLANLOFT_THEME_INVALID_ASSET",
-  "PLANLOFT_THEME_INVALID_LAYOUT",
+  "PLANLOFT_THEME_LEGACY_ASSET",
   "PLANLOFT_DOCUMENT_METADATA_INVALID",
   "PLANLOFT_DOCUMENT_INPUT_INVALID",
   "PLANLOFT_DOCUMENT_FORMAT_INVALID",
+  "PLANLOFT_RESOLVE_FORMAT_INVALID",
   "PLANLOFT_TRUSTED_HTML_REQUIRED",
+  "PLANLOFT_TRUSTED_MDX_REQUIRED",
+  "PLANLOFT_MDX_SNAPSHOT_STALE",
   "PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED",
+  "PLANLOFT_RENDER_SUPPORT_CONFLICT",
+  "PLANLOFT_HTML_FRAMESET_UNSUPPORTED",
   "PLANLOFT_TTL_INVALID",
   "PLANLOFT_EXPIRY_INVALID",
   "PLANLOFT_GISCUS_CONFIG_INCOMPLETE",
@@ -948,14 +1030,19 @@ function applicationErrorMessage(
     PLANLOFT_THEME_MISSING: "The selected theme does not exist. Install it or choose an available theme.",
     PLANLOFT_THEME_INACCESSIBLE: "The selected theme is inaccessible. Check theme permissions and try again.",
     PLANLOFT_THEME_INVALID_ASSET: "The selected theme contains an invalid asset.",
-    PLANLOFT_THEME_INVALID_LAYOUT: "The selected theme layout is invalid. Check its required slots.",
+    PLANLOFT_THEME_LEGACY_ASSET: "The selected theme contains template.md, template.mdx, or layout.html. Back it up, move authored content into a Markdown, MDX, or HTML source file, and convert theme styling to CSS variables in style.css.",
     PLANLOFT_DOCUMENT_METADATA_INVALID: details.field
       ? `Document metadata "${details.field}" must be a nonblank string when provided.`
       : "Document metadata is invalid.",
     PLANLOFT_DOCUMENT_INPUT_INVALID: "Document input is invalid. Check its structure and required fields.",
-    PLANLOFT_DOCUMENT_FORMAT_INVALID: "Document format is invalid. Use md, json, or html and specify stdin format explicitly.",
+    PLANLOFT_RESOLVE_FORMAT_INVALID: "Resolve format is invalid. Use md, mdx, or html.",
+    PLANLOFT_DOCUMENT_FORMAT_INVALID: "Document format is invalid. Use md, mdx, json, or html and specify stdin format explicitly.",
+    PLANLOFT_TRUSTED_MDX_REQUIRED: "MDX executes code. Pass --trusted-mdx only for content you trust.",
+    PLANLOFT_MDX_SNAPSHOT_STALE: "Stored MDX has changed since its dependencies were compiled. Hoist it again from its source location.",
     PLANLOFT_TRUSTED_HTML_REQUIRED: "HTML input is disabled by default. Enable trusted HTML only for content you trust.",
-    PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: "Direct HTML stays unchanged. Add noindex or comments to the source instead of using Planloft options.",
+    PLANLOFT_HTML_FRAMESET_UNSUPPORTED: "Frameset HTML is not supported. Convert it to a document with an ordinary body, or keep the original externally.",
+    PLANLOFT_RENDER_SUPPORT_CONFLICT: "Existing Planloft support is ambiguous or conflicts with the document. Regenerate from the original source, or review legacy generated support in a separate candidate before migrating.",
+    PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: "Comments cannot be added to authored HTML. Add them to the source instead.",
     PLANLOFT_TTL_INVALID: "TTL must be a supported finite positive integer.",
     PLANLOFT_EXPIRY_INVALID: "TTL does not produce a representable expiry from the current time.",
     PLANLOFT_GISCUS_CONFIG_INCOMPLETE: "Comments require complete valid giscus configuration.",

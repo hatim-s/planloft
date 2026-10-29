@@ -1,30 +1,16 @@
 # Built-in Planloft themes
 
-A Planloft theme combines renderer-neutral authoring guidance (`template.md`) with a
-light/dark visual skin (`style.css`). Choose a theme for the document's job and the
-reading experience you want:
+Planloft ships `minimal`, `detailed`, `editorial`, `decision`, `research`, and
+`briefing`. Each supplies colors and typography for light and dark modes. Select a
+theme with `--theme <name>`, document metadata, a project override, or the global
+configuration. User themes shadow built-ins with the same name.
 
-| Theme | Best for | Authoring emphasis | Set in |
-|---|---|---|---|
-| `minimal` | Checklists and terse execution plans | Flat, compact steps | Monospace, monochrome, heading marks kept visible |
-| `detailed` | Technical implementation plans | Context, ordered work, risks | Neutral sans, section bars in the margin, room for code |
-| `editorial` | Narrative proposals | Situation, tension, approach, outcome | Old-style serif, drop cap, hanging quotes |
-| `decision` | ADRs and durable choices | Options, criteria, rationale, consequences | Grotesk sans, ruled sections, fully boxed options table |
-| `research` | Investigations and evidence reviews | Sources, confidence, gaps, implications | Text serif with sans headings and tables, tinted excerpts |
-| `briefing` | Status updates and leadership reviews | Signals, asks, owners, next moves | Humanist sans, the first paragraph set as a lede |
+Themes do not supply templates or layouts. Authors choose the structure of Markdown,
+MDX, or HTML to suit the document. Markdown and MDX use the shared prose shell. HTML
+keeps its own structure, styles, and scripts and may opt into shared prose styling with
+`.planloft-prose`. Use `.planloft-plan > article` for reading/full-width support.
 
-Built-in themes share a responsive report layout. The report container has 200px of total
-side gutters on wide screens, 100px at 64rem and below, and 50px at 40rem and below.
-It has no per-theme max-width cap. Themes use off-black on off-white in light mode and
-soft grey on charcoal in dark mode, and style the full Markdown vocabulary: headings to
-level six, lists and task lists, links, inline code and code blocks, quotes, tables that
-scroll sideways on narrow screens, rules, images, keyboard keys, and the comments section.
-
-Render a document with a one-off choice:
-
-```bash
-planloft render document.md --theme research --out ./document-site
-```
-
-Set the default or a project override with `planloft config`. A custom theme under
-`~/.planloft/themes/<name>` takes precedence over a built-in with the same name.
+Run `planloft gallery --out <dir>` to inspect themes and static components locally.
+See the [theme contract](../skills/planloft-customise/references/themes.md) for custom
+themes and public variables, and the [migration guide](../docs/installation-migration.md#legacy-theme-migration)
+for legacy theme assets.
