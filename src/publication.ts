@@ -11,6 +11,8 @@ import {
   type GhRunner,
 } from "./github-cli.js";
 import { getAdapter, type HostAdapter, type HostAuthentication, type Manifest } from "./hosts/adapter.js";
+import { assertPublicationSlug } from "./hosts/urls.js";
+import { cloudflareSettings } from "./hosts/cloudflare.js";
 import { vercelSettings } from "./hosts/vercel.js";
 import { buildSiteAsync } from "./render/renderer.js";
 
@@ -37,7 +39,7 @@ export interface ApplicationPublicationAdapter {
 }
 
 export interface PublicationOptions {
-  host?: "github-pages" | "vercel";
+  host?: "github-pages" | "vercel" | "cloudflare";
   ttl?: number;
   comments?: boolean;
 }
@@ -108,8 +110,10 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
     prepare(document, publicationOptions = {}, operationNow) {
       const config = configuration.load();
       const host = options.host ?? getAdapter(publicationOptions.host ?? config.host ?? "github-pages");
-      if (!host) throw new Error("PLANLOFT_HOST_INVALID: Choose github-pages or vercel.");
+      if (!host) throw new Error("PLANLOFT_HOST_INVALID: Choose github-pages, vercel or cloudflare.");
+      if (!options.applicationAdapter && !options.host) assertPublicationSlug(document.slug);
       if (host.name === "vercel") vercelSettings(config);
+      if (host.name === "cloudflare") cloudflareSettings(config);
       const theme = configuration.resolveProject(document.project, document.theme).theme;
       if (document.format === "html" && publicationOptions.comments) {
         throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --comments");
@@ -178,7 +182,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
               env: options.auth?.env ?? options.environment,
             }),
           );
-          const dist = await buildArtifact("/");
+          const dist = await buildArtifact(host.basePath(document.slug, prepared.config));
           result = await externalPublicationEffect("host", () =>
             host.deploy({
               ...common,
@@ -197,7 +201,6 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
                   );
                 }
                 renderedForHost = true;
-                host.basePath(id, prepared.config);
                 return dist;
               },
             }),

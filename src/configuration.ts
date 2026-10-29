@@ -27,6 +27,7 @@ export interface RedactedConfiguration {
   giscus?: Partial<GiscusCoordinates>;
   github?: { token?: "[redacted]"; user?: string; repo?: string };
   vercel?: { token?: "[redacted]"; project?: string; scope?: string; url?: string };
+  cloudflare?: Config["cloudflare"];
 }
 
 export interface PlanloftConfiguration {
@@ -195,11 +196,12 @@ export function saveConfig(cfg: Config): void {
   }
 }
 
-export type ConfigPatch = Partial<Omit<Config, "version" | "projects" | "giscus" | "github" | "vercel">> & {
+export type ConfigPatch = Partial<Omit<Config, "version" | "projects" | "giscus" | "github" | "vercel" | "cloudflare">> & {
   projects?: Config["projects"];
   giscus?: NonNullable<Config["giscus"]>;
   github?: NonNullable<Config["github"]>;
   vercel?: NonNullable<Config["vercel"]>;
+  cloudflare?: NonNullable<Config["cloudflare"]>;
 };
 
 /** Apply a targeted update without discarding other valid configuration fields. */
@@ -236,6 +238,7 @@ export function updateConfig(patch: ConfigPatch): Config {
     ...optionalNestedUpdate("giscus", current.giscus, patch.giscus),
     ...optionalNestedUpdate("github", current.github, patch.github),
     ...optionalNestedUpdate("vercel", current.vercel, patch.vercel),
+    ...optionalNestedUpdate("cloudflare", current.cloudflare, patch.cloudflare),
   };
   const validated = validateConfig(next, "configuration update");
   saveConfig(validated);
@@ -266,8 +269,8 @@ function validateConfigValue(value: unknown): Config {
       `${detail} Remove planFormat from config.json; choose Markdown, MDX, or trusted HTML when authoring.`,
     );
   }
-  exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel", "host"], "$config");
-  if (root.host !== undefined && root.host !== "github-pages" && root.host !== "vercel") fail("$config.host must be github-pages or vercel");
+  exactKeys(root, ["version", "theme", "defaultTtlDays", "projects", "giscus", "github", "vercel", "cloudflare", "host"], "$config");
+  if (root.host !== undefined && root.host !== "github-pages" && root.host !== "vercel" && root.host !== "cloudflare") fail("$config.host must be github-pages, vercel or cloudflare");
   if (root.version !== 1) fail("$config.version must equal 1");
   const theme = nonEmptyString(root.theme, "$config.theme");
   assertThemeName(theme);
@@ -297,11 +300,13 @@ function validateConfigValue(value: unknown): Config {
     ...(root.giscus === undefined ? {} : { giscus: validateStringMap(root.giscus, "$config.giscus", GISCUS_KEYS) }),
     ...(root.github === undefined ? {} : { github: validateStringMap(root.github, "$config.github", GITHUB_KEYS) }),
     ...(root.vercel === undefined ? {} : { vercel: validateStringMap(root.vercel, "$config.vercel", VERCEL_KEYS) }),
+    ...(root.cloudflare === undefined ? {} : { cloudflare: validateStringMap(root.cloudflare, "$config.cloudflare", CLOUDFLARE_KEYS) }),
   };
 }
 
 const GISCUS_KEYS = ["repo", "repoId", "category", "categoryId"] as const;
 const GITHUB_KEYS = ["token", "user", "repo"] as const;
+const CLOUDFLARE_KEYS = ["worker", "accountId", "url"] as const;
 const VERCEL_KEYS = ["token", "project", "scope", "url"] as const;
 
 function validateStringMap<const K extends readonly string[]>(

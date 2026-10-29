@@ -4,34 +4,88 @@
   "title": "Planloft configuration",
   "description": "Version 1 contract for ~/.planloft/config.json.",
   "type": "object",
-  "required": ["version", "theme", "defaultTtlDays", "projects"],
+  "required": [
+    "version",
+    "theme",
+    "defaultTtlDays",
+    "projects"
+  ],
   "properties": {
-    "version": { "const": 1 },
-    "theme": { "$ref": "#/$defs/themeName" },
-    "defaultTtlDays": { "type": "integer", "minimum": 1, "maximum": 100000000 },
+    "version": {
+      "const": 1
+    },
+    "theme": {
+      "$ref": "#/$defs/themeName"
+    },
+    "defaultTtlDays": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000000
+    },
     "projects": {
       "type": "object",
-      "propertyNames": { "minLength": 1 },
-      "additionalProperties": { "$ref": "#/$defs/project" }
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/project"
+      }
     },
-    "host": { "enum": ["github-pages", "vercel"] },
-    "giscus": { "$ref": "#/$defs/giscus" },
+    "host": {
+      "enum": [
+        "github-pages",
+        "vercel",
+        "cloudflare"
+      ]
+    },
+    "giscus": {
+      "$ref": "#/$defs/giscus"
+    },
     "github": {
       "type": "object",
       "properties": {
-        "token": { "$ref": "#/$defs/nonblankString" },
-        "user": { "$ref": "#/$defs/nonblankString" },
-        "repo": { "$ref": "#/$defs/nonblankString" }
+        "token": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "user": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "repo": {
+          "$ref": "#/$defs/nonblankString"
+        }
       },
       "additionalProperties": false
     },
     "vercel": {
       "type": "object",
       "properties": {
-        "token": { "$ref": "#/$defs/nonblankString" },
-        "project": { "$ref": "#/$defs/nonblankString" },
-        "scope": { "$ref": "#/$defs/nonblankString" },
-        "url": { "$ref": "#/$defs/nonblankString" }
+        "token": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "project": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "scope": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "url": {
+          "$ref": "#/$defs/nonblankString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cloudflare": {
+      "type": "object",
+      "properties": {
+        "worker": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "accountId": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "url": {
+          "$ref": "#/$defs/nonblankString"
+        }
       },
       "additionalProperties": false
     }
@@ -48,18 +102,30 @@
     "giscus": {
       "type": "object",
       "properties": {
-        "repo": { "$ref": "#/$defs/nonblankString" },
-        "repoId": { "$ref": "#/$defs/nonblankString" },
-        "category": { "$ref": "#/$defs/nonblankString" },
-        "categoryId": { "$ref": "#/$defs/nonblankString" }
+        "repo": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "repoId": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "category": {
+          "$ref": "#/$defs/nonblankString"
+        },
+        "categoryId": {
+          "$ref": "#/$defs/nonblankString"
+        }
       },
       "additionalProperties": false
     },
     "project": {
       "type": "object",
       "properties": {
-        "theme": { "$ref": "#/$defs/themeName" },
-        "giscus": { "$ref": "#/$defs/giscus" }
+        "theme": {
+          "$ref": "#/$defs/themeName"
+        },
+        "giscus": {
+          "$ref": "#/$defs/giscus"
+        }
       },
       "additionalProperties": false
     }

@@ -134,6 +134,8 @@ export type ApplicationDiagnosticCode =
   | "PLANLOFT_DOCUMENT_NOT_FOUND"
   | "PLANLOFT_VERCEL_CONFIG_INVALID"
   | "PLANLOFT_VERCEL_FAILED"
+  | "PLANLOFT_CLOUDFLARE_CONFIG_INVALID"
+  | "PLANLOFT_CLOUDFLARE_FAILED"
   | "PLANLOFT_HOST_INVALID"
   | "PLANLOFT_HOSTING_INVALID"
   | "PLANLOFT_COPY_CONFLICT";
@@ -770,7 +772,7 @@ function classifyError(
     return applicationError("validation", operation, { diagnosticCode: candidate.code });
   }
   const hostingCode = typeof candidate.message === "string" ? candidate.message.split(":")[0] : undefined;
-  if (hostingCode && validDiagnostic(hostingCode) && ["PLANLOFT_VERCEL_CONFIG_INVALID", "PLANLOFT_HOST_INVALID", "PLANLOFT_HOSTING_INVALID"].includes(hostingCode)) {
+  if (hostingCode && validDiagnostic(hostingCode) && ["PLANLOFT_VERCEL_CONFIG_INVALID", "PLANLOFT_CLOUDFLARE_CONFIG_INVALID", "PLANLOFT_HOST_INVALID", "PLANLOFT_HOSTING_INVALID"].includes(hostingCode)) {
     return applicationError("validation", operation, { diagnosticCode: validDiagnostic(hostingCode) });
   }
   const validation = validationDiagnostic(candidate.message);
@@ -813,6 +815,7 @@ function publicationDiagnostic(message: unknown): ApplicationDiagnosticCode | un
     "PLANLOFT_HTML_FRAMESET_UNSUPPORTED",
     "PLANLOFT_RENDER_SUPPORT_CONFLICT",
     "PLANLOFT_VERCEL_FAILED",
+    "PLANLOFT_CLOUDFLARE_FAILED",
     "PLANLOFT_HOSTING_INVALID",
     "PLANLOFT_GITHUB_AUTH_MISSING",
     "PLANLOFT_GITHUB_AUTH_INVALID",
@@ -900,6 +903,8 @@ const DIAGNOSTIC_CODES = new Set<ApplicationDiagnosticCode>([
   "PLANLOFT_DOCUMENT_NOT_FOUND",
   "PLANLOFT_VERCEL_CONFIG_INVALID",
   "PLANLOFT_VERCEL_FAILED",
+  "PLANLOFT_CLOUDFLARE_CONFIG_INVALID",
+  "PLANLOFT_CLOUDFLARE_FAILED",
   "PLANLOFT_HOST_INVALID",
   "PLANLOFT_HOSTING_INVALID",
   "PLANLOFT_COPY_CONFLICT",
@@ -1052,7 +1057,9 @@ function applicationErrorMessage(
     PLANLOFT_DOCUMENT_NOT_FOUND: "No matching stored document was found.",
     PLANLOFT_VERCEL_CONFIG_INVALID: "Set vercel.project to a lowercase project name and vercel.url to an HTTPS origin, if used.",
     PLANLOFT_VERCEL_FAILED: "Vercel deployment failed. Install the Vercel CLI, run vercel login, and check project permissions. The repository push may have succeeded; retry deploy.",
-    PLANLOFT_HOST_INVALID: "Choose --host github-pages or --host vercel.",
+    PLANLOFT_CLOUDFLARE_CONFIG_INVALID: "Set cloudflare.worker, cloudflare.accountId, and cloudflare.url to the stable workers.dev origin.",
+    PLANLOFT_CLOUDFLARE_FAILED: "Cloudflare deployment could not be confirmed. Check Wrangler authentication, account permissions, and cloudflare.url against the actual worker URL. The Worker upload and repository push may have succeeded; correct the configuration and retry deploy.",
+    PLANLOFT_HOST_INVALID: "Choose --host github-pages, --host vercel, or --host cloudflare.",
     PLANLOFT_HOSTING_INVALID: "Hosting layout or manifest is invalid. Check for conflicting public paths, symlinks, missing plan files, and invalid manifest entries before retrying.",
     PLANLOFT_COPY_CONFLICT: "Copy would overwrite an existing repository document. Retry with force to replace it.",
   };

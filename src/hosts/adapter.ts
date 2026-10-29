@@ -21,6 +21,7 @@ export interface Manifest {
 }
 import { githubPages } from "./github-pages.js";
 import { vercel } from "./vercel.js";
+import { cloudflare } from "./cloudflare.js";
 
 export interface DeployInput {
   id: string;
@@ -44,7 +45,7 @@ export interface DeployResult {
 /** Pluggable host interface (ADR-0001 §D11). Add Cloudflare/Netlify by implementing this. */
 export interface HostAdapter {
   name: string;
-  /** URL base path to build the site with, e.g. "/planloft-plans/p/<id>/". */
+  /** URL base path to build the site with, e.g. "/planloft-plans/<slug>/". */
   basePath(id: string, cfg: Config): string;
   /** Publish the built dist and return the public URL. */
   deploy(input: DeployInput): Promise<DeployResult>;
@@ -54,6 +55,7 @@ const registry: Record<string, HostAdapter> = {
   github: githubPages,
   "github-pages": githubPages,
   vercel,
+  cloudflare,
 };
 
 export function getAdapter(name: string): HostAdapter | undefined {

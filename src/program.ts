@@ -124,7 +124,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--trusted-mdx", "execute trusted MDX and imported components")
     .option("--trusted-html", "allow trusted raw HTML input or embedded Markdown HTML")
     .option("--ttl <days>", "publication expiry in days", positiveInteger)
-    .option("--host <host>", "github-pages | vercel")
+    .option("--host <host>", "github-pages | vercel | cloudflare")
     .option("--comments", "enable giscus review comments")
     .action(async (input, parsed) => {
       await run(
@@ -157,7 +157,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
 
   withKnowledge(program.command("deploy [slug]"), "deploy")
     .option("--ttl <days>", "publication expiry in days", positiveInteger)
-    .option("--host <host>", "github-pages | vercel")
+    .option("--host <host>", "github-pages | vercel | cloudflare")
     .option("--comments", "enable giscus review comments")
     .action((slug, parsed) =>
       run(

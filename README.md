@@ -111,16 +111,16 @@ the gallery files there and does not publish them.
 <!-- planloft:command-knowledge:start -->
 - `planloft render <input>` — Render Markdown, trusted MDX, JSON, or trusted HTML to a self-contained HTML artifact.
 - `planloft hoist <input>` — Normalize Markdown, trusted MDX, JSON, or trusted HTML into the current project's store.
-- `planloft publish <input>` — Hoist, render, and publish a source to GitHub Pages or Vercel.
+- `planloft publish <input>` — Hoist, render, and publish a source to GitHub Pages, Vercel, or Cloudflare.
 - `planloft list` — List stored documents grouped by project.
 - `planloft preview [slug]` — Build and open a local themed preview of a stored document.
 - `planloft copy [slug]` — Copy a stored document's raw source into the current repository.
-- `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages or Vercel.
+- `planloft deploy [slug]` — Build and publish a stored document to GitHub Pages, Vercel, or Cloudflare.
 - `planloft gallery` — Build a local gallery of bundled themes and components.
 - `planloft attach <input>` — Attach a collaboration client to existing HTML.
 - `planloft collaboration-build` — Generate local collaboration service deployment files.
 - `planloft migrate <source>` — Convert eligible Markdown to MDX or copy HTML unchanged with a backup.
-- `planloft migrate-to-vercel <directory>` — Migrate a legacy hosting repository to the Vercel layout while retaining GitHub Pages support.
+- `planloft migrate-to-vercel <directory>` — Migrate a hosting repository to readable slug URLs and the shared static layout.
 - `planloft rm <slug>` — Delete a stored document's source and index entry.
 - `planloft resolve` — Resolve the store path, source format, and selected theme CSS.
 - `planloft config` — Open the versioned global configuration in $EDITOR, validate it, or print it.
