@@ -8,7 +8,8 @@ configuration. User themes shadow built-ins with the same name.
 Themes do not supply templates or layouts. Authors choose the structure of Markdown,
 MDX, or HTML to suit the document. Markdown and MDX use the shared prose shell. HTML
 keeps its own structure, styles, and scripts and may opt into shared prose styling with
-`.planloft-prose`. Use `.planloft-plan > article` for reading/full-width support.
+`.planloft-prose`. Every document gets reading/full-width controls. HTML uses its body as the width
+container unless it supplies `.planloft-plan > article`.
 
 Run `planloft gallery --out <dir>` to inspect themes and static components locally.
 See the [theme contract](../skills/planloft-customise/references/themes.md) for custom

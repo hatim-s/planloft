@@ -17,8 +17,9 @@ Markdown and MDX render in Planloft's shared `.planloft-prose` shell. Authors ch
 the content and structure. Built-in MDX components remain available and render static
 output. Authored HTML keeps its structure, styles, and scripts; Planloft adds theme CSS
 and controls. Add `.planloft-prose` to a region for semantic styling and use
-`.planloft-plan > article` for reading/full-width support. Custom HTML can use theme
-variables in its own styles and choose any layout.
+`.planloft-plan > article` for the shared article layout. Reading/full-width controls
+are available by default, using the body for other HTML structures. Custom HTML can
+use theme variables in its own styles and choose any layout.
 
 ## Public theme variables
 

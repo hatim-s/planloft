@@ -1,4 +1,4 @@
-// Reader controls and the opt-in width contract for rendered documents.
+// Reader controls and the shared width contract for rendered documents.
 
 /** Width mode is a root attribute so a theme can respond with plain CSS. */
 export const LAYOUT_MODES = ["reading", "full"] as const;
@@ -187,7 +187,6 @@ ${layoutButtons}
 })();
 (() => {
   const initialize = () => {
-    if (!document.querySelector(".planloft-plan > article")) return;
     const root = document.documentElement;
     const group = document.querySelector("[data-planloft-layout-selector]");
     const options = Array.from(group.querySelectorAll("[data-planloft-layout-option]"));
@@ -294,7 +293,7 @@ export const CONTROLS_CSS = `
 }
 `;
 
-// Width controls apply only to the explicit .planloft-plan > article structure.
+// Authored HTML uses the body when it does not have the shared article shell.
 // Reading mode defaults to 44rem; full mode removes the cap.
 export const LAYOUT_CSS = `
 :root { --planloft-gutter: clamp(1.25rem, 5vw, 3rem); }
@@ -327,7 +326,22 @@ export const LAYOUT_CSS = `
   max-width: none;
 }
 :root[data-planloft-layout="full"] .planloft-plan:has(> article) > .planloft-comments { max-width: none; }
+html > body:not(:has(.planloft-plan > article)) {
+  box-sizing: border-box;
+  max-width: calc(var(--planloft-measure, 44rem) + 2 * var(--planloft-gutter));
+  margin-inline: auto;
+  padding-inline: var(--planloft-gutter);
+}
+:root[data-planloft-layout="full"] > body:not(:has(.planloft-plan > article)) {
+  max-width: none;
+  padding-inline: clamp(1.25rem, 6vw, 5rem);
+}
+:root[data-planloft-layout="full"] > body:not(:has(.planloft-plan > article)) > :is(main, article) {
+  max-width: none;
+}
 @media print {
+  html > body:not(:has(.planloft-plan > article)),
+  :root[data-planloft-layout="full"] > body:not(:has(.planloft-plan > article)) { max-width: none; padding-inline: 0; }
   :root[data-planloft-layout="full"] .planloft-plan:has(> article),
   .planloft-plan:has(> article) { max-width: none; padding-inline: 0; }
   :root[data-planloft-layout="full"] .planloft-plan:has(> article) > article,

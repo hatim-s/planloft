@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { BarChart } from "../src/components/index.js";
 import { CHART_TOOLTIP_SCRIPT, CONTROLS_MARKUP } from "../src/render/controls.js";
 
-test("width controls wait for parsed content and only appear for the supported structure", () => {
+test("width controls wait for parsed content and work with or without the shared shell", () => {
   const script = /<script>\n([\s\S]*?)\n<\/script>/.exec(CONTROLS_MARKUP)?.[1];
   assert.ok(script);
   for (const supported of [false, true]) {
@@ -40,15 +40,13 @@ test("width controls wait for parsed content and only appear for the supported s
     assert.ok(onReady);
     parsed = true;
     onReady();
-    assert.equal(group.hidden, !supported);
-    if (supported) {
-      listeners.get("planloftLayoutOption:full")?.();
-      assert.equal(root.dataset.planloftLayout, "full");
-      assert.equal(layoutOptions[1]?.pressed, "true");
-    } else {
-      assert.equal(listeners.has("planloftLayoutOption:full"), false);
-      assert.equal(root.dataset.planloftLayout, undefined);
-    }
+    assert.equal(group.hidden, false);
+    listeners.get("planloftLayoutOption:full")?.();
+    assert.equal(root.dataset.planloftLayout, "full");
+    assert.equal(layoutOptions[1]?.pressed, "true");
+    listeners.get("planloftLayoutOption:reading")?.();
+    assert.equal(root.dataset.planloftLayout, undefined);
+    assert.equal(layoutOptions[0]?.pressed, "true");
   }
 });
 
