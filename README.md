@@ -160,7 +160,7 @@ deploying are always explicit; stored documents remain local until copied or pub
 - [MDX components and shared task keys](./docs/components.md)
 - [Architecture decisions](./docs/adr/README.md)
 - [Release guide](./docs/releasing.md)
-- [1.1.0 release notes](./docs/releases/1.1.0.md)
+- [1.0.1 release notes](./docs/releases/1.0.1.md)
 - [1.0.0 release notes](./docs/releases/1.0.0.md)
 
 Planloft requires Node.js 22.15.0 or newer, or Bun 1.4 or newer. The generated local
