@@ -1,6 +1,7 @@
 # Release Planloft
 
-Run releases from a clean, up-to-date `main` checkout:
+Run releases from a clean `main` or `release` checkout at the same commit as
+`origin/main`:
 
 ```bash
 npm login
@@ -16,7 +17,7 @@ first, then `bun run release 1.0.0`. The checkout needs Node.js 22.15.0 or newer
 ## What it checks
 
 Before changing the version, the command confirms that the checkout is clean, on
-`main`, and equal to `origin/main`. It also checks whether the npm version or Git tag
+`main` or `release`, and equal to `origin/main`. It also checks whether the npm version or Git tag
 already exists and confirms npm authentication for a new release.
 
 After the preflight, it updates `package.json` and runs:
@@ -29,7 +30,8 @@ After the preflight, it updates `package.json` and runs:
 - one npm pack, checks against the actual tarball, a Node consumer import, and an npm
   publish dry run
 
-After those checks pass, the command commits and pushes `main`, publishes the checked
+After those checks pass, the command commits the version bump and pushes it to
+`origin/main`. It publishes the checked
 tarball, verifies its SHA-1, and pushes `v<version>`. It then runs
 18 remote installer scenarios across the latest branch and new tag with four workers.
 

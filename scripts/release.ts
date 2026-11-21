@@ -90,15 +90,17 @@ function gitStatus(): string[] {
   return result.stdout.trimEnd().split(/\r?\n/).filter(Boolean);
 }
 
-/** Confirms that the release starts from a clean, synchronized main checkout. */
+/** Confirms that the release starts from a clean checkout of main or release at origin/main. */
 function validateCheckout(): void {
   run("git", ["fetch", "origin", "main", "--tags"]);
   const branch = output("git", ["branch", "--show-current"]);
-  if (branch !== "main") throw new Error(`Run releases from main, not ${branch || "detached HEAD"}.`);
+  if (branch !== "main" && branch !== "release") {
+    throw new Error(`Run releases from main or release, not ${branch || "detached HEAD"}.`);
+  }
   const status = gitStatus();
   if (status.length > 0) throw new Error(`The checkout is not clean:\n${status.join("\n")}`);
   if (output("git", ["rev-parse", "HEAD"]) !== output("git", ["rev-parse", "origin/main"])) {
-    throw new Error("main does not match origin/main.");
+    throw new Error(`${branch} does not match origin/main.`);
   }
 }
 
@@ -155,7 +157,7 @@ function commitVersion(version: string): string {
   assertExpectedChanges(true);
   run("git", ["add", "package.json"]);
   run("git", ["commit", "-m", `Release ${version}`]);
-  run("git", ["push", "origin", "main"]);
+  run("git", ["push", "origin", "HEAD:refs/heads/main"]);
   return output("git", ["rev-parse", "HEAD"]);
 }
 
