@@ -33,6 +33,7 @@ is shaped the way it is, not just *what* it does.
 | [0018](./0018-trusted-mdx-snapshots.md) | trusted MDX with pinned self-contained snapshots | Accepted (amends 0007 F1, 0011) |
 | [0019](./0019-token-only-themes-and-html-support-blocks.md) | token-only themes and owned support blocks in trusted HTML | Accepted (supersedes 0007 F3; amends 0007 F2, 0010) |
 | [0020](./0020-collaboration-service-and-client.md) | collaboration service ports, public viewer access, and idempotent writes | Accepted |
+| [0021](./0021-live-plan-indexes.md) | live indexes for shared static hosting | Accepted |
 
 ## Conventions
 

@@ -41,6 +41,7 @@ const REQUIRED_FILES = [
   "templates/hosting/pages.yml",
   "templates/hosting/vercel.json",
   "templates/hosting/prune.mjs",
+  "templates/hosting/update-indexes.mjs",
 ] as const;
 const RETIRED_PATHS = [
   "src", "bin", "hooks", ".agents", ".codex-plugin", ".claude-plugin",

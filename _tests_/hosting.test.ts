@@ -97,6 +97,9 @@ esac
     assert.match(first, /https:\/\/shared-plans.vercel.app\/first-plan\//);
     const clone = path.join(env.PLANLOFT_HOME, "hosting", "planloft-plans");
     const firstId = readManifest(clone).deploys[0]!.id;
+    assert.match(git(["show", "HEAD:public/index.html"], clone), /href="\.\/first-plan\/"/);
+    assert.match(git(["show", "HEAD:README.md"], clone), /https:\/\/shared-plans\.vercel\.app\/first-plan\//);
+
     fs.writeFileSync(path.join(dir, "project", "second.md"), "# Second plan\n\nHello again.");
     cli("publish", "second.md");
     assert.equal(readManifest(clone).deploys.length, 2);
@@ -149,6 +152,11 @@ test("scheduled prune removes only expired public pages and signals a redeploy",
     assert.ok(!fs.existsSync(path.join(dir, "public", "expired")));
     assert.ok(fs.existsSync(path.join(dir, "public", "p", entry.id, "index.html")));
     assert.match(fs.readFileSync(output, "utf8"), /changed=true/);
+    const index = execFileSync("git", ["show", "HEAD:public/index.html"], { cwd: dir, encoding: "utf8" });
+    assert.match(index, /href="\.\/proposal\/"/);
+    assert.doesNotMatch(index, /href="\.\/expired\/"/);
+    assert.match(fs.readFileSync(path.join(dir, "README.md"), "utf8"), /\.\/public\/proposal\//);
+
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
