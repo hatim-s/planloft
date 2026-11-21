@@ -43,6 +43,6 @@ test("one release command owns versioning, publishing, and tagging", () => {
   assert.match(guide, /bun run release 1\.0\.0/);
   assert.doesNotMatch(guide, /release:prepare|release:publish|PLANLOFT_PUBLISH/);
   assert.match(guide, /updates `package\.json`/i);
-  assert.match(guide, /commits and pushes `main`/i);
+  assert.match(guide, /commits the version bump and pushes it to\s+`origin\/main`/i);
   assert.doesNotMatch(Object.values(packageJson.scripts).join("\n"), /scripts\/.*\.mjs/);
 });
