@@ -88,6 +88,13 @@ Planloft includes fifteen color and typography themes, including `minimal`, `det
 metadata, a project override, or the global configuration. Themes do not prescribe a
 document's structure. See the [theme catalog](./themes/README.md).
 
+Set `"theme": "random"` in the global config to choose a bundled theme when a
+document has no explicit theme or project override. Planloft remembers the choice
+for stored documents. A standalone render without a stored document picks again
+on each invocation. For authored HTML, `planloft resolve --format html --slug <slug>`
+returns the concrete theme and CSS. Pass that theme with `--theme` when you render
+or store the document to use the same choice.
+
 ## Local gallery
 
 Generate a local gallery of the bundled themes and the static component catalog:

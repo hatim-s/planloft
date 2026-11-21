@@ -4,11 +4,12 @@ import { randomUUID } from "node:crypto";
 import { configPath } from "./core/paths.js";
 import type { Config } from "./core/types.js";
 import { MAX_TTL_DAYS, TTL_RULE } from "./core/ttl.js";
-import { assertThemeName, readStyle, themeDir, validateTheme } from "./render/themes.js";
+import { assertThemeName, randomBuiltinTheme, readStyle, themeDir, validateTheme } from "./render/themes.js";
 
 export interface ResolvedProjectConfiguration {
   config: Config;
   theme: string;
+  randomized: boolean;
 }
 
 interface GiscusCoordinates {
@@ -36,8 +37,8 @@ export interface PlanloftConfiguration {
   reset(): Config;
   save(config: Config): void;
   update(patch: ConfigPatch): Config;
-  resolveProject(projectKey: string, documentTheme?: string): ResolvedProjectConfiguration;
-  resolveAuthoring(projectKey: string): ResolvedProjectConfiguration & { themeCss: string; themePath: string };
+  resolveProject(projectKey: string, documentTheme?: string, previousTheme?: string): ResolvedProjectConfiguration;
+  resolveAuthoring(projectKey: string, documentTheme?: string, previousTheme?: string): ResolvedProjectConfiguration & { themeCss: string; themePath: string };
   redact(config?: Config): RedactedConfiguration;
 }
 
@@ -52,12 +53,11 @@ export function createPlanloftConfiguration(): PlanloftConfiguration {
     reset: resetConfig,
     save: saveConfig,
     update: updateConfig,
-    resolveProject(projectKey, documentTheme) {
-      const config = loadConfig();
-      return { config, theme: resolveTheme(config, projectKey, documentTheme) };
+    resolveProject(projectKey, documentTheme, previousTheme) {
+      return resolveProjectTheme(loadConfig(), projectKey, documentTheme, previousTheme);
     },
-    resolveAuthoring(projectKey) {
-      const resolved = this.resolveProject(projectKey);
+    resolveAuthoring(projectKey, documentTheme, previousTheme) {
+      const resolved = this.resolveProject(projectKey, documentTheme, previousTheme);
       return { ...resolved, themeCss: readStyle(resolved.theme), themePath: path.join(themeDir(resolved.theme), "style.css") };
     },
     redact(config = loadConfig()) {
@@ -395,7 +395,18 @@ function capitalize(value: string): string {
 
 /** Theme resolution order: plan > project > global (ADR-0001 §D8). */
 export function resolveTheme(cfg: Config, projectKey: string, planTheme?: string): string {
-  const theme = planTheme ?? cfg.projects[projectKey]?.theme ?? cfg.theme;
+  return resolveProjectTheme(cfg, projectKey, planTheme).theme;
+}
+
+function resolveProjectTheme(
+  config: Config,
+  projectKey: string,
+  documentTheme?: string,
+  previousTheme?: string,
+): ResolvedProjectConfiguration {
+  const override = documentTheme ?? config.projects[projectKey]?.theme;
+  const randomized = override === undefined && config.theme === "random";
+  const theme = randomized ? previousTheme ?? randomBuiltinTheme() : override ?? config.theme;
   validateTheme(theme);
-  return theme;
+  return { config, theme, randomized };
 }

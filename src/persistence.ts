@@ -62,6 +62,7 @@ export interface DocumentPersistence {
   list(): IndexFile;
   find(slug?: string): DocMeta | undefined;
   hoist(document: PreparedDocument, now?: Date): DocMeta;
+  rememberTheme(document: DocMeta, theme: string): void;
   copy(slug?: string, options?: { force?: boolean }): CopyStoredDocumentResult | undefined;
   remove(slug: string): RemoveStoredDocumentResult | undefined;
 }
@@ -135,11 +136,12 @@ export function createDocumentPersistence(
       }
       if (document.contentFormat === "html") assertHtmlSupported(document.content);
       const project = identity();
-      configuration.resolveProject(project.key, document.theme);
+      const previous = find(document.slug);
+      const selection = configuration.resolveProject(project.key, document.theme, previous?.theme);
+      const stored = selection.randomized ? { ...document, theme: selection.theme } : document;
       configuration.ensure();
       const file = docFile(project.label, document.slug, document.contentFormat);
-      const previous = find(document.slug);
-      const source = serializeCanonicalDocument(document);
+      const source = serializeCanonicalDocument(stored);
 
       files.makeDirectory(docDir(project.label));
       files.writeText(file, source);
@@ -152,7 +154,7 @@ export function createDocumentPersistence(
         title: document.title,
         kind: document.kind,
         project: project.key,
-        theme: document.theme,
+        theme: stored.theme,
         status: document.status,
         format: document.contentFormat,
         trustedHtml: document.trustedHtml,
@@ -162,6 +164,14 @@ export function createDocumentPersistence(
       upsert(meta);
       removeReplacedFormat(files, previous, file);
       return meta;
+    },
+
+    rememberTheme(document, theme) {
+      const index = loadIndex(files);
+      const entry = index.projects[identity().key]?.docs[document.slug];
+      if (!entry || entry.theme !== undefined || entry.updatedAt !== document.updatedAt || entry.file !== document.file) return;
+      entry.theme = theme;
+      saveIndex(index);
     },
 
     copy(slug, copyOptions = {}) {

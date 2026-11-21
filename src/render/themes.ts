@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { builtinThemesDir, userThemesDir } from "../core/paths.js";
@@ -64,6 +65,17 @@ export function resolveThemeDirectory(theme: string): string {
 
 export function listAvailableThemes(): string[] {
   return [...new Set([...themeDirectories(builtinThemesDir()), ...themeDirectories(userThemesDir())])].sort();
+}
+
+export function randomBuiltinTheme(): string {
+  const root = builtinThemesDir();
+  const themes = themeDirectories(root).filter((name) =>
+    name !== "random" && fs.existsSync(path.join(root, name, "style.css")),
+  );
+  if (themes.length === 0) {
+    throw new ThemeError("PLANLOFT_THEME_MISSING", "No bundled themes are available for random selection.");
+  }
+  return themes[randomInt(themes.length)]!;
 }
 
 /** Reject retired authoring and layout assets before using a theme. */

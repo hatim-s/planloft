@@ -36,21 +36,21 @@ and a human title. Resolve the chosen format with real values:
 ```
 
 The format defaults to `md` when omitted. The result includes `path`, `format`,
-`themeCss`, and `themePath`. Use the returned path for a Markdown source. For MDX or
+`theme`, `themeCss`, and `themePath`. Pass `--theme <name>` to resolve an explicit theme. Use the returned path for a Markdown source. For MDX or
 HTML, use the result as the intended store target and hoist a source as described below.
 Never guess or synthesize a store path. If resolution fails, report the error.
 
 ## Author and persist
 
-Choose the content and structure for the user's needs. Themes supply colors and typography, not an authoring template or required document structure. Select the requested theme, or use the resolved default. Inspect the resolved theme CSS and use its `--planloft-*` variables when authoring custom HTML or CSS.
+Choose the content and structure for the user's needs. Themes supply colors and typography, not an authoring template or required document structure. Select the requested theme, or use the resolved default. Inspect the resolved theme CSS and use its `--planloft-*` variables when authoring custom HTML or CSS. Keep the resolved theme when storing the document so a random global default does not pick again.
 
 For Markdown, write at the returned path. For MDX, author a source file in the project with its relative dependencies, then run
-`"$PLANLOFT_COMMAND" hoist <source.mdx> --trusted-mdx --slug "<slug>" --title "<title>" --kind plan` to compile and store it.
+`"$PLANLOFT_COMMAND" hoist <source.mdx> --trusted-mdx --slug "<slug>" --title "<title>" --kind plan --theme "<resolved-theme>"` to compile and store it.
 Do not write MDX directly to the resolved store path: the stored source needs its
 compiled dependency snapshot. Only execute MDX and registry code you trust.
 
 For HTML, author a `.html` source file in the project and store it with
-`"$PLANLOFT_COMMAND" hoist <source.html> --trusted-html --slug "<slug>" --title "<title>" --kind plan`. Use trusted HTML only for
+`"$PLANLOFT_COMMAND" hoist <source.html> --trusted-html --slug "<slug>" --title "<title>" --kind plan --theme "<resolved-theme>"`. Use trusted HTML only for
 content you control. Do not write HTML directly to a resolved store path.
 
 Start Markdown and MDX with complete frontmatter:
