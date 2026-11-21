@@ -1,13 +1,10 @@
-/* planloft theme: minimal. Plain text, set with care. A monospace body at 16px with a tall
-   line, so a document reads like a well kept README rather than a terminal dump. Headings
-   switch to a heavy humanist sans so the page has a spine without needing size. Graphite
-   ink on white; the only colour is an indigo for links. Dark is cold graphite. */
+/* Monospace body copy with Geist headings. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
-  --planloft-font-body: "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
-  --planloft-font-heading: "Gill Sans", "Gill Sans MT", Seravek, "Segoe UI", "Trebuchet MS", sans-serif;
-  --planloft-font-mono: "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  --planloft-font-body: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --planloft-font-heading: "Geist", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 16px;
   --planloft-line-height: 1.75;
   --planloft-code-size: 1em;

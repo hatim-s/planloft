@@ -83,14 +83,14 @@ planloft publish proposal.md --ttl 30
 
 ## Built-in themes
 
-Planloft includes six color and typography themes: `minimal`, `detailed`, `editorial`,
+Planloft includes fifteen color and typography themes, including `minimal`, `detailed`, `editorial`,
 `decision`, `research`, and `briefing`. Select one with `--theme <name>`, document
 metadata, a project override, or the global configuration. Themes do not prescribe a
 document's structure. See the [theme catalog](./themes/README.md).
 
 ## Local gallery
 
-Generate a local gallery of the six themes and the static component catalog:
+Generate a local gallery of the bundled themes and the static component catalog:
 
 ```sh
 planloft gallery --out ./planloft-gallery

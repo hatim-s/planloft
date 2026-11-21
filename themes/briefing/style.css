@@ -1,12 +1,10 @@
-/* planloft theme: briefing. A morning brief: Avenir Next at 17.5px on white, headlines in
-   Avenir Next Condensed Bold at newspaper size, navy ink, warm paper for callouts and
-   amber for links and the first series. Dark is a navy night page with the amber lifted. */
+/* Inter and Geist with navy ink and amber links. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
-  --planloft-font-body: "Avenir Next", Avenir, "Segoe UI Variable Text", "Segoe UI", "Noto Sans", "Liberation Sans", sans-serif;
-  --planloft-font-heading: "Avenir Next Condensed", "Segoe UI Variable Display", "Bahnschrift SemiCondensed", "Roboto Condensed", "Arial Narrow", "Liberation Sans Narrow", sans-serif;
-  --planloft-font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --planloft-font-body: "Inter", system-ui, sans-serif;
+  --planloft-font-heading: "Geist", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 17.5px;
   --planloft-line-height: 1.5;
   --planloft-code-size: 0.86em;

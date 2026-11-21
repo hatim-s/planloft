@@ -16,13 +16,22 @@ export interface GallerySources {
 }
 
 // Display names and one line on the identity. The theme id stays the config value.
-const THEME_NOTES: Record<string, { title: string; note: string; face: string }> = {
-  minimal: { title: "Plain text", note: "Monospace text with Gill Sans headings, graphite ink and indigo links. Space to read code and prose.", face: '"Gill Sans", Seravek, "Segoe UI", sans-serif' },
-  detailed: { title: "Slate", note: "PT Sans text and DIN headings on blueprint-grey paper, with drawing-blue links. For specs and figures.", face: '"DIN Alternate", Bahnschrift, "Arial Narrow", sans-serif' },
-  decision: { title: "Violet", note: "Seravek text, bold Futura headings and violet ink. Clear signposts for a decision and its reasoning.", face: 'Futura, "Century Gothic", "Avenir Next", sans-serif' },
-  research: { title: "Journal", note: "PT Serif text with quiet Avenir headings, pale blue-grey paper and Prussian blue links. Built for close reading.", face: '"PT Serif", Charter, Cambria, Georgia, serif' },
-  editorial: { title: "Folio", note: "Baskerville at 19px on stone-white paper, with madder red links. Large, regular-weight headings for a long read.", face: 'Baskerville, "Hoefler Text", "Palatino Linotype", Georgia, serif' },
-  briefing: { title: "Marigold", note: "Avenir text with bold condensed headlines, navy ink and amber links. A brief for ten minutes.", face: '"Avenir Next Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif' },
+const THEME_NOTES: Record<string, { title: string; note: string }> = {
+  minimal: { title: "Plain text", note: "Monospace body copy with Geist headings." },
+  detailed: { title: "Slate", note: "Inter and Geist on blueprint-grey paper." },
+  decision: { title: "Violet", note: "Inter body copy with Raleway headings and violet ink." },
+  research: { title: "Journal", note: "Serif body copy with Raleway headings and Prussian blue links." },
+  editorial: { title: "Folio", note: "Baskerville on stone-white paper with madder red links." },
+  briefing: { title: "Marigold", note: "Inter and Geist with navy ink and amber links." },
+  "wine-kelly": { title: "Wine kelly", note: "Blush, deep wine and Kelly green. Inter body, Raleway headings." },
+  "navy-amber": { title: "Navy amber", note: "Cream, navy and amber. Inter body, Raleway headings." },
+  "pistachio-raspberry": { title: "Pistachio raspberry", note: "Pistachio, ink and raspberry. Geist body, Raleway headings." },
+  "cream-burnt-orange": { title: "Cream burnt orange", note: "Cream, soft black and burnt orange. Inter body, Geist headings." },
+  "navy-hot-pink": { title: "Navy hot pink", note: "White, navy and hot pink. Geist body, Geist headings." },
+  "sand-electric-blue": { title: "Sand electric blue", note: "Sand, charcoal and electric blue. Geist body, Geist headings." },
+  "blush-chartreuse": { title: "Blush chartreuse", note: "Blush, burgundy and chartreuse. Inter body, Raleway headings." },
+  "ice-fire-orange": { title: "Ice fire orange", note: "Ice blue, steel gray and fire orange. Inter body, Geist headings." },
+  "pistachio-cherry": { title: "Pistachio cherry", note: "Warm sand, pistachio and cherry red. Inter body, Raleway headings." },
 };
 
 export function galleryPage(themes: readonly GalleryTheme[], catalog: readonly CatalogEntry[], sources: GallerySources): string {
@@ -35,7 +44,7 @@ export function galleryPage(themes: readonly GalleryTheme[], catalog: readonly C
     return `<li class="g-card">
   <a class="g-card__link" href="${theme.specimenPath}" target="g-preview" data-page="${theme.specimenPath}">
     <span class="g-card__thumb" aria-hidden="true"><iframe src="${theme.specimenPath}" loading="lazy" tabindex="-1" title=""></iframe></span>
-    <span class="g-card__name"${note ? ` style="font-family: ${escapeHtml(note.face)}"` : ""}>${escapeHtml(note?.title ?? theme.name)}</span>
+    <span class="g-card__name">${escapeHtml(note?.title ?? theme.name)}</span>
     <span class="g-card__id"><code>theme: ${escapeHtml(theme.name)}</code></span>
     <span class="g-card__use">${escapeHtml(note?.note ?? "")}</span>
   </a>

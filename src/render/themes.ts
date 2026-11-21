@@ -82,16 +82,44 @@ export function validateTheme(theme: string): void {
   readStyle(theme);
 }
 
+const BUNDLED_FONTS = [
+  { family: "Inter", asset: "inter" },
+  { family: "Raleway", asset: "raleway" },
+  { family: "Geist", asset: "geist" },
+  { family: "Geist Mono", asset: "geist-mono" },
+];
+
 /** Visual skin (CSS) applied by the renderer. */
 export function readStyle(theme: string): string {
-  return readOptionalThemeAsset(theme, "style.css") ?? "";
+  const directory = resolveThemeDirectory(theme);
+  const css = readOptionalThemeAsset(theme, directory, "style.css") ?? "";
+  const builtinRoot = builtinThemesDir();
+  if (directory !== path.join(builtinRoot, theme)) return css;
+
+  const faces = BUNDLED_FONTS
+    .filter(({ family }) => css.includes(`: "${family}",`))
+    .map(({ family, asset }) => {
+      const fontDir = path.join(builtinRoot, "_fonts");
+      const data = readOptionalThemeAsset(theme, fontDir, `${asset}.woff2`, "base64");
+      const license = readOptionalThemeAsset(theme, fontDir, `${asset}-OFL.txt`);
+      if (!data || !license) throw new ThemeError("PLANLOFT_THEME_INVALID_ASSET", `Missing bundled font or license for ${family} in ${fontDir}.`);
+      return `/*
+${license.trim()}
+*/
+@font-face { font-family: "${family}"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(data:font/woff2;base64,${data}) format("woff2"); }`;
+    });
+  return [...faces, css].join("\n");
 }
 
-function readOptionalThemeAsset(theme: string, asset: string): string | undefined {
-  const directory = resolveThemeDirectory(theme);
+function readOptionalThemeAsset(
+  theme: string,
+  directory: string,
+  asset: string,
+  encoding: BufferEncoding = "utf8",
+): string | undefined {
   const file = path.join(directory, asset);
   try {
-    return fs.readFileSync(file, "utf8");
+    return fs.readFileSync(file, encoding);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       try {

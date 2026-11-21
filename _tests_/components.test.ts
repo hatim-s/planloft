@@ -246,8 +246,9 @@ test("the gallery renders specimens, HTML, and the catalog in every theme", asyn
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "planloft-gallery-test-"));
   try {
     const { indexPath } = await buildGallery({ outDir });
-    const themes = fs.readdirSync(path.resolve(import.meta.dirname, "../themes"), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+    const themeRoot = path.resolve(import.meta.dirname, "../themes");
+    const themes = fs.readdirSync(themeRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(themeRoot, entry.name, "style.css")))
       .map((entry) => entry.name);
     assert.ok(themes.length >= 6);
     const index = fs.readFileSync(indexPath, "utf8");

@@ -12,12 +12,17 @@ import {
 } from "./themes.js";
 
 test("built-in themes resolve to real directories and are listed", () => withHome(() => {
-  const expected = ["briefing", "decision", "detailed", "editorial", "minimal", "research"];
+  const expected = [
+    "blush-chartreuse", "briefing", "cream-burnt-orange", "decision", "detailed", "editorial",
+    "ice-fire-orange", "minimal", "navy-amber", "navy-hot-pink", "pistachio-cherry",
+    "pistachio-raspberry", "research", "sand-electric-blue", "wine-kelly",
+  ];
   for (const theme of expected) {
     assert.equal(fs.statSync(resolveThemeDirectory(theme)).isDirectory(), true);
     assert.ok(listAvailableThemes().includes(theme));
-    assert.notEqual(readStyle(theme), "");
-    assert.match(readStyle(theme), /planloft-color-schemes: light dark/);
+    const css = readStyle(theme);
+    assert.match(css, /planloft-color-schemes: light dark/);
+    assert.match(css, /font-family: "Geist Mono";[^}]+data:font\/woff2;base64,/);
     assert.doesNotThrow(() => validateTheme(theme));
   }
 }));
@@ -37,7 +42,7 @@ test("invalid and unknown themes are explicit and missing errors list choices", 
   assertThemeError(
     () => resolveThemeDirectory("does-not-exist"),
     "PLANLOFT_THEME_MISSING",
-    /Available themes: briefing, decision, detailed, editorial, minimal, research/,
+    /Available themes: .*navy-amber.*wine-kelly/,
   );
 }));
 

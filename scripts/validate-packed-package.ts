@@ -35,6 +35,9 @@ const REQUIRED_FILES = [
   "skills/planloft-customise/references/themes.md",
   "skills/planloft-customise/assets/theme-starter/style.css",
   "themes/editorial/style.css",
+  ...["inter", "raleway", "geist", "geist-mono"].flatMap((font) => [
+    `themes/_fonts/${font}.woff2`, `themes/_fonts/${font}-OFL.txt`,
+  ]),
   "themes/README.md",
   "schemas/config.schema.json",
   "templates/hosting/prune-plans.yml",
@@ -170,7 +173,11 @@ function validatePackedPackage(tarball: string, minimumNode: boolean): void {
 
     const gallery = path.join(root, "gallery");
     run(wrapper, ["gallery", "--out", gallery], root, env);
-    for (const theme of ["minimal", "detailed", "editorial", "decision", "research", "briefing"]) {
+    for (const theme of [
+      "minimal", "detailed", "editorial", "decision", "research", "briefing",
+      "wine-kelly", "navy-amber", "pistachio-raspberry", "cream-burnt-orange", "navy-hot-pink",
+      "sand-electric-blue", "blush-chartreuse", "ice-fire-orange", "pistachio-cherry",
+    ]) {
       assert.ok(fs.existsSync(path.join(gallery, "specimen", `${theme}.html`)));
       assert.ok(fs.existsSync(path.join(gallery, "components", `${theme}.html`)));
       assert.ok(fs.existsSync(path.join(gallery, "html", `${theme}.html`)));

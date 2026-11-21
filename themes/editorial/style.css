@@ -1,13 +1,10 @@
-/* planloft theme: editorial. The long read. Baskerville at 19px on a 1.7 line, headings in
-   the same face at regular weight and a large size, so hierarchy comes from scale rather
-   than boldness. Stone white paper with the yellow kept out, espresso ink, madder red for
-   links. Dark is warm umber with the red lifted to a dusty rose. */
+/* Baskerville on stone-white paper with madder red links. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
   --planloft-font-body: Baskerville, "Libre Baskerville", "Baskerville Old Face", "Hoefler Text", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --planloft-font-heading: Baskerville, "Libre Baskerville", "Baskerville Old Face", "Hoefler Text", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --planloft-font-mono: "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 19px;
   --planloft-line-height: 1.7;
   --planloft-code-size: 0.8em;

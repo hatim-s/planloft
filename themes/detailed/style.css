@@ -1,12 +1,10 @@
-/* planloft theme: detailed. A datasheet: PT Sans body with PT Mono for code, DIN Alternate
-   for headings and stat values so numbers read like a drawing title block, a faint
-   blueprint-grey page and drawing-blue links. Dark is blue-black with the blue lifted. */
+/* Inter and Geist on blueprint-grey paper. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
-  --planloft-font-body: "PT Sans", "Segoe UI", "Noto Sans", "Liberation Sans", Arial, sans-serif;
-  --planloft-font-heading: "DIN Alternate", Bahnschrift, "Franklin Gothic Medium", "Roboto Condensed", "Arial Narrow", "Liberation Sans Narrow", sans-serif;
-  --planloft-font-mono: "PT Mono", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --planloft-font-body: "Inter", system-ui, sans-serif;
+  --planloft-font-heading: "Geist", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 16.5px;
   --planloft-line-height: 1.62;
   --planloft-code-size: 0.88em;
