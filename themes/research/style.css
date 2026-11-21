@@ -1,13 +1,10 @@
-/* planloft theme: research. A journal page you can read for an hour. PT Serif body at 17.5px
-   with Avenir Next running heads at medium weight and open tracking, so sections announce
-   themselves quietly. Pale blue-grey paper, slate ink, Prussian blue for links; the chart
-   series are a colour-blind safe set. Dark is a cool slate night. */
+/* Serif body copy with Raleway headings and Prussian blue links. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
   --planloft-font-body: "PT Serif", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
-  --planloft-font-heading: "Avenir Next", Avenir, Seravek, "Segoe UI Variable Display", "Segoe UI", "Trebuchet MS", sans-serif;
-  --planloft-font-mono: "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", ui-monospace, monospace;
+  --planloft-font-heading: "Raleway", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 17.5px;
   --planloft-line-height: 1.62;
   --planloft-code-size: 0.84em;

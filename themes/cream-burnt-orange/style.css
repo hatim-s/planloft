@@ -1,0 +1,116 @@
+/* Cream, soft black and burnt orange. */
+/* planloft-color-schemes: light dark */
+:root {
+  color-scheme: light dark;
+  --planloft-font-body: "Inter", system-ui, sans-serif;
+  --planloft-font-heading: "Geist", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --planloft-font-size: 16px;
+  --planloft-line-height: 1.65;
+  --planloft-code-size: 0.86em;
+  --planloft-heading-weight: 650;
+  --planloft-heading-line-height: 1.13;
+  --planloft-heading-tracking: -0.035em;
+  --planloft-h1-size: 2.65em;
+  --planloft-h2-size: 1.65em;
+  --planloft-h3-size: 1.24em;
+}
+:root,
+:root[data-planloft-color-scheme="light"] {
+  color-scheme: light;
+  --planloft-paper: #fcf8f2;
+  --planloft-ink: #14151a;
+  --planloft-muted: #6c6b6b;
+  --planloft-surface: #dedbd5;
+  --planloft-rule: #c4c2be;
+  --planloft-accent: #973a1e;
+  --planloft-accent-contrast: #ffffff;
+  --planloft-code-paper: #d0cdc8;
+  --planloft-code-ink: #14151a;
+  --planloft-chart-1: #c34b27;
+  --planloft-chart-2: #627692;
+  --planloft-chart-3: #288b76;
+  --planloft-chart-4: #9c641f;
+  --planloft-chart-5: #8750b5;
+  --planloft-chart-6: #3384b2;
+  --planloft-chart-sequential: #973a1e;
+  --planloft-chart-neutral: #898786;
+  --planloft-positive: #206a34;
+  --planloft-negative: #a73242;
+  --planloft-caution: #7e5613;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-planloft-color-scheme="light"]) {
+    color-scheme: dark;
+    --planloft-paper: #121419;
+    --planloft-ink: #f8f7f3;
+    --planloft-muted: #959595;
+    --planloft-surface: #131418;
+    --planloft-rule: #494a4d;
+    --planloft-accent: #cb6243;
+    --planloft-accent-contrast: #000000;
+    --planloft-code-paper: #131518;
+    --planloft-code-ink: #f8f7f3;
+    --planloft-chart-1: #c34b27;
+    --planloft-chart-2: #627692;
+    --planloft-chart-3: #288b76;
+    --planloft-chart-4: #9c641f;
+    --planloft-chart-5: #8750b5;
+    --planloft-chart-6: #3384b2;
+    --planloft-chart-sequential: #cb6243;
+    --planloft-chart-neutral: #757677;
+    --planloft-positive: #439158;
+    --planloft-negative: #d45768;
+    --planloft-caution: #af781b;
+  }
+}
+:root[data-planloft-color-scheme="dark"] {
+  color-scheme: dark;
+  --planloft-paper: #121419;
+  --planloft-ink: #f8f7f3;
+  --planloft-muted: #959595;
+  --planloft-surface: #131418;
+  --planloft-rule: #494a4d;
+  --planloft-accent: #cb6243;
+  --planloft-accent-contrast: #000000;
+  --planloft-code-paper: #131518;
+  --planloft-code-ink: #f8f7f3;
+  --planloft-chart-1: #c34b27;
+  --planloft-chart-2: #627692;
+  --planloft-chart-3: #288b76;
+  --planloft-chart-4: #9c641f;
+  --planloft-chart-5: #8750b5;
+  --planloft-chart-6: #3384b2;
+  --planloft-chart-sequential: #cb6243;
+  --planloft-chart-neutral: #757677;
+  --planloft-positive: #439158;
+  --planloft-negative: #d45768;
+  --planloft-caution: #af781b;
+}
+@media print {
+  html:root,
+  html:root:not([data-planloft-color-scheme="light"]),
+  html:root[data-planloft-color-scheme="dark"] {
+    color-scheme: light;
+    --planloft-paper: #ffffff;
+    --planloft-ink: #14151a;
+    --planloft-muted: #6e6f71;
+    --planloft-surface: #e1e1e1;
+    --planloft-rule: #c7c7c8;
+    --planloft-accent: #9c3c1f;
+    --planloft-accent-contrast: #ffffff;
+    --planloft-code-paper: #d3d3d3;
+    --planloft-code-ink: #14151a;
+    --planloft-chart-1: #c34b27;
+    --planloft-chart-2: #627692;
+    --planloft-chart-3: #288b76;
+    --planloft-chart-4: #9c641f;
+    --planloft-chart-5: #8750b5;
+    --planloft-chart-6: #3384b2;
+    --planloft-chart-sequential: #9c3c1f;
+    --planloft-chart-neutral: #8c8c8f;
+    --planloft-positive: #226f37;
+    --planloft-negative: #ad3445;
+    --planloft-caution: #825914;
+  }
+}

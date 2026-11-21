@@ -1,12 +1,10 @@
-/* planloft theme: decision. A stamped record: Seravek for the text, Futura Bold for the
-   headings so each section reads like a signpost, a cool neutral page and stamp-ink
-   violet for links and the first series. Dark is indigo-black with the ink lifted. */
+/* Inter body copy with Raleway headings and violet ink. */
 /* planloft-color-schemes: light dark */
 :root {
   color-scheme: light dark;
-  --planloft-font-body: Seravek, "Segoe UI Variable Text", "Segoe UI", "Fira Sans", "Noto Sans", "Liberation Sans", sans-serif;
-  --planloft-font-heading: Futura, "Futura PT", "Century Gothic", "Avenir Next", "URW Gothic", Jost, sans-serif;
-  --planloft-font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --planloft-font-body: "Inter", system-ui, sans-serif;
+  --planloft-font-heading: "Raleway", system-ui, sans-serif;
+  --planloft-font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --planloft-font-size: 16.5px;
   --planloft-line-height: 1.58;
   --planloft-code-size: 0.88em;
