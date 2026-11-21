@@ -359,7 +359,7 @@ export interface PlanloftApplication {
   render(input: string, options?: ApplicationRenderOptions): Promise<RenderResult>;
   hoist(input: string, options?: DocumentSourceOptions): Promise<HoistResult>;
   publish(input: string, options?: PublishOptions): Promise<PublishResult>;
-  resolve(options?: { slug?: string; title?: string; kind?: string; format?: "md" | "mdx" | "html" }): Promise<ResolveResult>;
+  resolve(options?: { slug?: string; title?: string; kind?: string; theme?: string; format?: "md" | "mdx" | "html" }): Promise<ResolveResult>;
   list(options?: { kind?: string }): Promise<ListResult>;
   preview(slug?: string): Promise<PreviewResult>;
   copy(slug?: string, options?: { force?: boolean }): Promise<CopyResult>;
@@ -441,13 +441,11 @@ export function createPlanloftApplication(
 
   const deployMeta = async (
     meta: DocMeta,
-    options: DeployOptions,
-    prepared?: PreparedPublication,
+    prepared: PreparedPublication,
     renderedHtml?: string,
   ): Promise<DeploymentSummary> => {
-    const validated = prepared ?? publication.prepare(meta, options);
     try {
-      return await publication.publish(meta, validated, renderedHtml);
+      return await publication.publish(meta, prepared, renderedHtml);
     } catch (error) {
       if (isMdxAuthoringError(error)) throw error;
       throw classifyError("deploy", error);
@@ -476,7 +474,7 @@ export function createPlanloftApplication(
       run("render", async () => {
         const cwd = currentDirectory();
         const doc = await readPreparedDocument(input, options, sourceReader, cwd);
-        const theme = configuration.resolveProject(projectKey(cwd).key, doc.theme).theme;
+        const theme = configuration.resolveProject(projectKey(cwd).key, doc.theme, persistence.find(doc.slug)?.theme).theme;
         const html = renderPreparedDocument(doc, theme, { noindex: options.noindex });
         if (!options.out) return { operation: "render", output: "stdout", html };
 
@@ -515,10 +513,10 @@ export function createPlanloftApplication(
         };
         // Publication preparation validates configuration, theme, TTL, expiry, and comments
         // before persistence performs the first mutation.
-        const prepared = publication.prepare(draftMeta, options, now);
+        const prepared = publication.prepare(draftMeta, options, now, persistence.find(doc.slug)?.theme);
         const html = renderPreparedDocument(doc, prepared.theme, { noindex: true, comments: prepared.comments });
-        const meta = persistence.hoist(doc, now);
-        const deployment = await deployMeta(meta, options, prepared, html);
+        const meta = persistence.hoist(prepared.randomized ? { ...doc, theme: prepared.theme } : doc, now);
+        const deployment = await deployMeta(meta, prepared, html);
         return { operation: "publish", document: publicDocument(meta, true), deployment };
       }),
 
@@ -530,7 +528,7 @@ export function createPlanloftApplication(
         const kind: Kind = metadata.kind ?? "plan";
         const title = metadata.title ?? metadata.slug ?? capitalize(kind);
         const slug = slugify(metadata.slug ?? title);
-        const resolved = configuration.resolveAuthoring(key);
+        const resolved = configuration.resolveAuthoring(key, metadata.theme, persistence.find(slug)?.theme);
         const theme = resolved.theme;
         const format = options.format ?? "md";
         if (format !== "md" && format !== "mdx" && format !== "html") throw applicationError("validation", "resolve", { diagnosticCode: "PLANLOFT_RESOLVE_FORMAT_INVALID" });
@@ -571,8 +569,9 @@ export function createPlanloftApplication(
         if (!meta) throw applicationError("not_found", "preview", {
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
-        const theme = configuration.resolveProject(projectKey(cwd).key, meta.theme).theme;
+        const { theme, randomized } = configuration.resolveProject(projectKey(cwd).key, meta.theme);
         const directory = await buildSite({ doc: meta, theme });
+        if (randomized) persistence.rememberTheme(meta, theme);
         const url = `file://${directory}/index.html`;
         const opened = (dependencies.openUrl ?? openUrl)(url);
         return { operation: "preview", slug: meta.slug, directory, url, opened };
@@ -609,12 +608,13 @@ export function createPlanloftApplication(
 
     deploy: (slug, options = {}) =>
       run("deploy", async () => {
-        const cwd = currentDirectory();
         const meta = persistence.find(slug);
         if (!meta) throw applicationError("not_found", "deploy", {
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
-        const deployment = await deployMeta(meta, options);
+        const prepared = publication.prepare(meta, options);
+        if (prepared.randomized) persistence.rememberTheme(meta, prepared.theme);
+        const deployment = await deployMeta(meta, prepared);
         return { operation: "deploy", slug: meta.slug, deployment };
       }),
 

@@ -127,6 +127,7 @@ export function createProgram(options: CliAdapterOptions = {}): Command {
     .option("--format <format>", "md | mdx | html (defaults to md)")
     .option("--slug <slug>", "kebab-case doc slug")
     .option("--title <title>", "human doc title")
+    .option("--theme <theme>", "override theme")
     .option("--kind <kind>", "plan | adr | review | research | report | note | <custom>", "plan")
     .action((parsed) => run("resolve", () => application.resolve(parsed), presentResolve));
 

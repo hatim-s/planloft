@@ -252,7 +252,10 @@ export const COMMAND_KNOWLEDGE: readonly CommandKnowledge[] = [
     localWrite: "always",
     externalWrite: "never",
     destructive: false,
-    defaults: ["Kind defaults to plan, format defaults to md, and title and slug are derived when omitted."],
+    defaults: [
+      "Kind defaults to plan, format defaults to md, and title and slug are derived when omitted.",
+      "Theme comes from --theme, the project override, or the global default. A random default resolves to a concrete bundled theme.",
+    ],
     examples: [
       {
         argv: [

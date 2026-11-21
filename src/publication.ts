@@ -51,6 +51,7 @@ export interface PreparedPublication {
   ttlDays: number;
   expiresAt: string;
   theme: string;
+  randomized: boolean;
   comments?: GiscusConfig;
   /** Internal validated configuration; never returned from the application interface. */
   config: Config;
@@ -90,7 +91,7 @@ export interface PublicationModuleOptions {
 }
 
 export interface PublicationModule {
-  prepare(document: DocMeta, options?: PublicationOptions, now?: Date): PreparedPublication;
+  prepare(document: DocMeta, options?: PublicationOptions, now?: Date, previousTheme?: string): PreparedPublication;
   publish(document: DocMeta, prepared: PreparedPublication, renderedHtml?: string): Promise<PublicationResult>;
 }
 
@@ -106,14 +107,14 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
   });
 
   return {
-    prepare(document, publicationOptions = {}, operationNow) {
+    prepare(document, publicationOptions = {}, operationNow, previousTheme) {
       const config = configuration.load();
       const host = options.host ?? getAdapter(publicationOptions.host ?? config.host ?? "github-pages");
       if (!host) throw new Error("PLANLOFT_HOST_INVALID: Choose github-pages, vercel or cloudflare.");
       if (!options.applicationAdapter && !options.host) assertPublicationSlug(document.slug);
       if (host.name === "vercel") vercelSettings(config);
       if (host.name === "cloudflare") cloudflareSettings(config);
-      const theme = configuration.resolveProject(document.project, document.theme).theme;
+      const { theme, randomized } = configuration.resolveProject(document.project, document.theme, previousTheme);
       if (document.format === "html" && publicationOptions.comments) {
         throw new Error("PLANLOFT_DIRECT_HTML_OPTION_UNSUPPORTED: --comments");
       }
@@ -129,7 +130,7 @@ export function createPublicationModule(options: PublicationModuleOptions): Publ
         : undefined;
       const id = createId();
       if (options.applicationAdapter) externalPublicationValue("host", () => options.applicationAdapter!.basePath(id));
-      return { id, now, ttlDays, expiresAt, theme, comments, config, host };
+      return { id, now, ttlDays, expiresAt, theme, randomized, comments, config, host };
     },
 
     async publish(document, prepared, renderedHtml) {

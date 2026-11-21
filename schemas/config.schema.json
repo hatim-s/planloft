@@ -15,6 +15,7 @@
       "const": 1
     },
     "theme": {
+      "description": "A theme name or random to select a bundled theme for each new document.",
       "$ref": "#/$defs/themeName"
     },
     "defaultTtlDays": {
