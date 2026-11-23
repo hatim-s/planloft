@@ -5,7 +5,7 @@ import { assertMdxSnapshot, type PreparedDocument } from "./mdx/compiler.js";
 import { assertHtmlSupported } from "./render/renderer.js";
 import { docDir, docFile } from "./core/doc.js";
 import * as fm from "./core/frontmatter.js";
-import { indexPath } from "./core/paths.js";
+import { documentPreviewPath, indexPath } from "./core/paths.js";
 import { gitRoot, projectKey } from "./core/project.js";
 import type {
   CanonicalDocument,
@@ -201,6 +201,12 @@ export function createDocumentPersistence(
     remove(slug) {
       const document = find(slug);
       if (!document) return undefined;
+      const previewPath = documentPreviewPath(document);
+      try {
+        files.removeFile(previewPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
       let sourceRemoved = false;
       try {
         files.removeFile(document.file);

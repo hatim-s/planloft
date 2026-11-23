@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { marked, Renderer } from "marked";
@@ -39,6 +39,7 @@ export interface MdxRenderOptions extends MdxCompileOptions, RenderOptions {}
 export interface BuildOpts extends RenderOptions {
   doc: DocMeta;
   theme: string;
+  previewPath?: string;
 }
 
 /** Render a canonical document into a self-contained HTML artifact (ADR-0007). */
@@ -124,7 +125,18 @@ export async function buildSite(opts: BuildOpts): Promise<string> {
   const html = canonical.contentFormat === "mdx"
     ? await renderCompiledMdx(canonical, opts.theme, fs.readFileSync(`${opts.doc.file}.bundle.js`, "utf8"), opts)
     : renderDocument(canonical, opts.theme, opts);
-  return writeRenderedSite(html);
+  if (!opts.previewPath) return writeRenderedSite(html);
+
+  const directory = path.dirname(opts.previewPath);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const staging = path.join(directory, randomUUID() + ".tmp");
+  try {
+    fs.writeFileSync(staging, html, { flag: "wx", mode: 0o600 });
+    fs.renameSync(staging, opts.previewPath);
+  } finally {
+    fs.rmSync(staging, { force: true });
+  }
+  return directory;
 }
 
 export function writeRenderedSite(html: string): string {
@@ -193,7 +205,10 @@ function ownedSupportRanges(input: string) {
     const startParent = start.parentNode;
     const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
     const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
-    const validControls = content === `\n${CONTROLS_MARKUP}\n` && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
+    // Accept the 1.1.0 block so stored or copied HTML can pick up the new controls.
+    const knownControls = content === `\n${CONTROLS_MARKUP}\n` ||
+      hashSupport(content) === "f7a641ee9335468da2f6e92a978696dc6d10de768931016d70b07f3fc71d1ade";
+    const validControls = knownControls && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
     const validHead = headMatch && headStyle && hashSupport(`${headMatch[2]}\n${headMatch[3] ?? ""}`) === headMatch[1];
     if (name === "controls" ? !validControls : !validHead) throw new RenderSupportError("Invalid Planloft render block.");
     ranges.push({ start: start.sourceCodeLocation.startOffset, end: end.sourceCodeLocation.endOffset });
@@ -203,7 +218,7 @@ function ownedSupportRanges(input: string) {
   for (const element of found.elements) {
     const loc = element.sourceCodeLocation;
     if (!loc || ranges.some((range) => loc.startOffset >= range.start && loc.endOffset <= range.end)) continue;
-    if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
+    if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector" || attr.name === "data-planloft-default" || attr.name === "data-planloft-reset") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).some((name) => name === "planloft-controls" || name === "planloft-appearance"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
   }
   return { ranges, ...found };
 }

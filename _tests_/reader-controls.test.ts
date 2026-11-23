@@ -6,48 +6,116 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { BarChart } from "../src/components/index.js";
 import { CHART_TOOLTIP_SCRIPT, CONTROLS_MARKUP } from "../src/render/controls.js";
 
-test("width controls wait for parsed content and work with or without the shared shell", () => {
+function openReader(pathname: string, storage: Pick<Storage, "getItem" | "setItem" | "removeItem">) {
   const script = /<script>\n([\s\S]*?)\n<\/script>/.exec(CONTROLS_MARKUP)?.[1];
   assert.ok(script);
-  for (const supported of [false, true]) {
-    const root: { dataset: Record<string, string> } = { dataset: {} };
-    const listeners = new Map<string, () => void>();
-    const option = (kind: string, value: string) => ({
-      dataset: { [kind]: value },
+  const root = { dataset: {} as Record<string, string> };
+  const group = { hidden: true };
+  const settings = { hidden: true, addEventListener() {} };
+  const listeners = new Map<string, () => void>();
+  const onStorage: ((event: { key: string | null; storageArea: typeof storage }) => void)[] = [];
+  const defaults = {
+    theme: { value: "", options: ["light", "dark", "system"].map((value) => ({ value })) },
+    layout: { value: "", options: ["reading", "full"].map((value) => ({ value })) },
+  };
+  const resets = { theme: { disabled: false }, layout: { disabled: false } };
+  const targets = new Map<string, object>();
+  const choices = new Map<string, { pressed: string }[]>();
+  for (const name of ["theme", "layout"] as const) {
+    const attr = "data-planloft-" + name + "-option";
+    choices.set("[" + attr + "]", defaults[name].options.map(({ value }) => ({
       pressed: "",
-      setAttribute(_name: string, next: string) { this.pressed = next; },
-      addEventListener(_name: string, callback: () => void) { listeners.set(`${kind}:${value}`, callback); },
-    });
-    const themeOptions = ["light", "dark", "system"].map((value) => option("planloftThemeOption", value));
-    const layoutOptions = ["reading", "full"].map((value) => option("planloftLayoutOption", value));
-    const group = { hidden: true, querySelectorAll: () => layoutOptions };
-    let parsed = false;
-    let onReady: (() => void) | undefined;
-    const document = {
-      documentElement: root,
-      readyState: "loading",
-      querySelector(selector: string) {
-        if (selector === ".planloft-plan > article") return parsed && supported ? {} : null;
-        return group;
-      },
-      querySelectorAll: () => themeOptions,
-      addEventListener(_name: string, callback: () => void) { onReady = callback; },
-    };
-    const localStorage = { getItem: () => null, setItem: () => {} };
-    runInNewContext(script, { document, localStorage, window: { matchMedia: () => ({ matches: false }) } });
-    assert.equal(group.hidden, true);
-    assert.equal(themeOptions[2]?.pressed, "true");
-    assert.ok(onReady);
-    parsed = true;
-    onReady();
-    assert.equal(group.hidden, false);
-    listeners.get("planloftLayoutOption:full")?.();
-    assert.equal(root.dataset.planloftLayout, "full");
-    assert.equal(layoutOptions[1]?.pressed, "true");
-    listeners.get("planloftLayoutOption:reading")?.();
-    assert.equal(root.dataset.planloftLayout, undefined);
-    assert.equal(layoutOptions[0]?.pressed, "true");
+      getAttribute: () => value,
+      setAttribute(_key: string, next: string) { this.pressed = next; },
+      addEventListener(_event: string, callback: () => void) { listeners.set(name + ":" + value, callback); },
+    })));
+    targets.set('[data-planloft-default="' + name + '"]', Object.assign(defaults[name], {
+      addEventListener: (_event: string, callback: () => void) => listeners.set("default:" + name, callback),
+      focus() {},
+    }));
+    targets.set('[data-planloft-reset="' + name + '"]', Object.assign(resets[name], {
+      addEventListener: (_event: string, callback: () => void) => listeners.set("reset:" + name, callback),
+      dispatchEvent() {},
+    }));
   }
+  targets.set('[data-planloft-theme-option="system"]', {});
+  targets.set("[data-planloft-layout-selector]", group);
+  targets.set(".planloft-appearance", settings);
+  const document = {
+    documentElement: root,
+    readyState: "loading",
+    querySelector: (selector: string) => targets.get(selector),
+    querySelectorAll: (selector: string) => choices.get(selector),
+    addEventListener: (event: string, callback: () => void) => listeners.set(event, callback),
+  };
+  runInNewContext(script, {
+    document, localStorage: storage, location: { pathname }, CustomEvent,
+    window: {
+      matchMedia: () => ({ matches: false }),
+      addEventListener: (_name: string, callback: (typeof onStorage)[number]) => { onStorage.push(callback); },
+    },
+  });
+  assert.equal(group.hidden, true);
+  listeners.get("DOMContentLoaded")!();
+  assert.equal(group.hidden, false);
+  assert.equal(settings.hidden, false);
+  return {
+    root, defaults, resets, choices,
+    click: (id: string) => listeners.get(id)!(),
+    storageChanged(key: string | null) {
+      for (const callback of onStorage) callback({ key, storageArea: storage });
+    },
+  };
+}
+
+test("reader overrides are independent per page and setting and can return to stored defaults", () => {
+  const values = new Map([["planloft-color-scheme", "dark"], ["planloft-layout", "full"]]);
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const first = openReader("/first/", storage);
+  assert.deepEqual(first.root.dataset, { planloftColorScheme: "dark", planloftLayout: "full" });
+  assert.equal(first.resets.theme.disabled, true);
+
+  first.click("theme:system");
+  first.click("layout:reading");
+  assert.deepEqual(first.root.dataset, {});
+  assert.equal(first.choices.get("[data-planloft-theme-option]")?.[2]?.pressed, "true");
+  assert.equal(first.resets.theme.disabled, false);
+
+  const second = openReader("/second/", storage);
+  assert.deepEqual(second.root.dataset, { planloftColorScheme: "dark", planloftLayout: "full" });
+  second.defaults.theme.value = "light";
+  second.click("default:theme");
+  assert.equal(second.root.dataset.planloftColorScheme, "light");
+  first.storageChanged("planloft-color-scheme");
+  assert.deepEqual(first.root.dataset, {});
+  assert.equal(first.defaults.theme.value, "light");
+
+  const reopened = openReader("/first/index.html", storage);
+  assert.deepEqual(reopened.root.dataset, {});
+  assert.equal(reopened.defaults.theme.value, "light");
+  reopened.click("reset:theme");
+  assert.deepEqual(reopened.root.dataset, { planloftColorScheme: "light" });
+  assert.equal(reopened.resets.theme.disabled, true);
+  assert.equal(openReader("/first/", storage).root.dataset.planloftColorScheme, "light");
+
+  values.set("planloft-color-scheme:doc:/third/", "invalid");
+  values.set("planloft-layout", "invalid");
+  assert.deepEqual(openReader("/third/", storage).root.dataset, { planloftColorScheme: "light" });
+});
+
+test("reader controls still work when the browser denies storage", () => {
+  const denied = () => { throw new Error("Storage denied"); };
+  const reader = openReader("/first/", { getItem: denied, setItem: denied, removeItem: denied });
+  assert.deepEqual(reader.root.dataset, {});
+  reader.click("theme:dark");
+  reader.click("layout:full");
+  assert.deepEqual(reader.root.dataset, { planloftColorScheme: "dark", planloftLayout: "full" });
+  reader.click("reset:layout");
+  assert.deepEqual(reader.root.dataset, { planloftColorScheme: "dark" });
 });
 
 test("the chart tooltip script lifts hit titles into accessible names and stays idle without charts", () => {

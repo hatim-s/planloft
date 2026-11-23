@@ -3,7 +3,6 @@
 /** Width mode is a root attribute so a theme can respond with plain CSS. */
 export const LAYOUT_MODES = ["reading", "full"] as const;
 export type LayoutMode = (typeof LAYOUT_MODES)[number];
-export const LAYOUT_STORAGE_KEY = "planloft-layout";
 
 const ICON = (paths: string) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -148,8 +147,9 @@ export const CHART_TOOLTIP_SCRIPT = `(() => {
   else start();
 })();`;
 
-// The colour-scheme script keeps its wording: the renderer tests and the gallery
-// pin its localStorage handling and the attribute it sets.
+const defaultOptions = (options: readonly { name: string; label: string }[], selected: string) =>
+  options.map(({ name, label }) => `<option value="${name}"${name === selected ? " selected" : ""}>${label}</option>`).join("");
+
 export const CONTROLS_MARKUP = `<div class="planloft-controls" data-planloft-ignore>
 <div class="planloft-theme-selector planloft-theme-toggle" role="group" aria-label="Color theme">
 ${themeButtons}
@@ -157,60 +157,101 @@ ${themeButtons}
 <div class="planloft-layout-selector" role="group" aria-label="Page width" data-planloft-layout-selector hidden>
 ${layoutButtons}
 </div>
+<details class="planloft-appearance" hidden>
+<summary aria-label="Appearance settings" title="Appearance settings">${ICON('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1m9.2 9.2 2.1 2.1m-13.4 0 2.1-2.1m9.2-9.2 2.1-2.1"/>')}</summary>
+<div class="planloft-appearance-panel">
+<button type="button" data-planloft-reset="theme">Use default color theme here</button>
+<button type="button" data-planloft-reset="layout">Use default width here</button>
+<label>Default color theme <select data-planloft-default="theme">${defaultOptions(THEME_OPTIONS, "system")}</select></label>
+<label>Default page width <select data-planloft-default="layout">${defaultOptions(LAYOUT_OPTIONS, "reading")}</select></label>
+</div>
+</details>
 </div>
 <script>
 (() => {
   const root = document.documentElement;
-  const options = Array.from(document.querySelectorAll("[data-planloft-theme-option]"));
+  const docPath = location.pathname.replace(/\\/index\\.html$/, "/");
   const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const key = "planloft-color-scheme";
-  let saved = null;
-  try { saved = localStorage.getItem(key); } catch {}
-  let selected = saved === "light" || saved === "dark" ? saved : "system";
-  const update = () => {
-    if (selected === "system") delete root.dataset.planloftColorScheme;
-    else root.dataset.planloftColorScheme = selected;
-    const effective = selected === "system" ? (media.matches ? "dark" : "light") : selected;
-    for (const option of options) {
-      const optionName = option.dataset.planloftThemeOption;
-      option.setAttribute("aria-pressed", String(optionName === selected));
-      if (optionName === "system") option.title = \`System theme (currently \${effective})\`;
-    }
+  const read = (key, options) => {
+    try {
+      const value = localStorage.getItem(key);
+      if (options.some(option => option.value === value)) return value;
+    } catch {}
+    return null;
   };
-  for (const option of options) option.addEventListener("click", () => {
-    selected = option.dataset.planloftThemeOption;
-    try { localStorage.setItem(key, selected); } catch {}
-    update();
-  });
-  media.addEventListener?.("change", update);
-  update();
-})();
-(() => {
-  const initialize = () => {
-    const root = document.documentElement;
-    const group = document.querySelector("[data-planloft-layout-selector]");
-    const options = Array.from(group.querySelectorAll("[data-planloft-layout-option]"));
-    const key = ${JSON.stringify(LAYOUT_STORAGE_KEY)};
-    let saved = null;
-    try { saved = localStorage.getItem(key); } catch {}
-    let selected = saved === "full" ? "full" : "reading";
+  const store = (key, value) => {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {}
+  };
+  const bind = (name, key, attribute, builtIn) => {
+    const docKey = key + ":doc:" + docPath;
+    const buttons = document.querySelectorAll("[data-planloft-" + name + "-option]");
+    const defaults = document.querySelector('[data-planloft-default="' + name + '"]');
+    const reset = document.querySelector('[data-planloft-reset="' + name + '"]');
+    const options = Array.from(defaults.options);
+    let preferred = read(key, options) ?? builtIn;
+    let override = read(docKey, options);
     const update = () => {
-      if (selected === "reading") delete root.dataset.planloftLayout;
-      else root.dataset.planloftLayout = selected;
-      for (const option of options) {
-        option.setAttribute("aria-pressed", String(option.dataset.planloftLayoutOption === selected));
+      const selected = override ?? preferred;
+      if (selected === builtIn) delete root.dataset[attribute];
+      else root.dataset[attribute] = selected;
+      for (const button of buttons) {
+        const value = button.getAttribute("data-planloft-" + name + "-option");
+        button.setAttribute("aria-pressed", String(value === selected));
       }
+      defaults.value = preferred;
+      reset.disabled = override === null;
+      reset.dispatchEvent(new CustomEvent("planloft-appearance-change", { bubbles: true, detail: name }));
     };
-    for (const option of options) option.addEventListener("click", () => {
-      selected = option.dataset.planloftLayoutOption;
-      try { localStorage.setItem(key, selected); } catch {}
+    for (const button of buttons) button.addEventListener("click", () => {
+      override = button.getAttribute("data-planloft-" + name + "-option");
+      store(docKey, override);
+      update();
+    });
+    defaults.addEventListener("change", () => {
+      preferred = defaults.value;
+      store(key, preferred);
+      update();
+    });
+    reset.addEventListener("click", () => {
+      override = null;
+      store(docKey, null);
+      update();
+      defaults.focus();
+    });
+    window.addEventListener("storage", (event) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key === key || event.key === null) preferred = read(key, options) ?? builtIn;
+      else if (event.key !== docKey) return;
+      if (event.key === docKey || event.key === null) override = read(docKey, options);
       update();
     });
     update();
-    group.hidden = false;
   };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
-  else initialize();
+  bind("theme", "planloft-color-scheme", "planloftColorScheme", "system");
+  const system = document.querySelector('[data-planloft-theme-option="system"]');
+  const describeSystem = () => { system.title = "System theme (currently " + (media.matches ? "dark" : "light") + ")"; };
+  media.addEventListener?.("change", describeSystem);
+  describeSystem();
+  const initializeLayout = () => {
+    bind("layout", "planloft-layout", "planloftLayout", "reading");
+    document.querySelector("[data-planloft-layout-selector]").hidden = false;
+    const settings = document.querySelector(".planloft-appearance");
+    settings.hidden = false;
+    settings.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !settings.open) return;
+      event.preventDefault();
+      settings.open = false;
+      settings.querySelector("summary").focus();
+    });
+    document.addEventListener("click", (event) => {
+      if (settings.open && !settings.contains(event.target)) settings.open = false;
+    });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initializeLayout, { once: true });
+  else initializeLayout();
 })();
 </script>
 <script>
@@ -237,7 +278,8 @@ export const CONTROLS_CSS = `
   line-height: 0;
 }
 .planloft-theme-selector,
-.planloft-layout-selector {
+.planloft-layout-selector,
+.planloft-appearance > summary {
   display: inline-flex;
   gap: 2px;
   margin: 0;
@@ -250,7 +292,8 @@ export const CONTROLS_CSS = `
 }
 .planloft-layout-selector[hidden] { display: none; }
 .planloft-theme-option,
-.planloft-layout-option {
+.planloft-layout-option,
+.planloft-appearance > summary {
   display: inline-grid;
   width: 1.75rem;
   height: 1.75rem;
@@ -266,7 +309,8 @@ export const CONTROLS_CSS = `
   transition: background-color 120ms ease, color 120ms ease;
 }
 .planloft-theme-option:hover,
-.planloft-layout-option:hover {
+.planloft-layout-option:hover,
+.planloft-appearance > summary:hover {
   color: var(--planloft-control-ink);
   background: color-mix(in srgb, var(--planloft-control-ink) 9%, transparent);
 }
@@ -276,12 +320,54 @@ export const CONTROLS_CSS = `
   color: var(--planloft-control-paper);
 }
 .planloft-theme-option svg,
-.planloft-layout-option svg { width: 0.95rem; height: 0.95rem; pointer-events: none; }
+.planloft-layout-option svg,
+.planloft-appearance > summary svg { width: 0.95rem; height: 0.95rem; pointer-events: none; }
 .planloft-theme-option:focus-visible,
-.planloft-layout-option:focus-visible {
+.planloft-layout-option:focus-visible,
+.planloft-appearance :focus-visible {
   outline: 2px solid var(--planloft-control-accent);
   outline-offset: 2px;
 }
+.planloft-appearance { position: relative; }
+.planloft-appearance > summary {
+  box-sizing: content-box;
+  padding: 3px;
+  background: var(--planloft-control-paper);
+}
+.planloft-appearance > summary::-webkit-details-marker { display: none; }
+.planloft-appearance > summary:hover {
+  background: var(--planloft-control-paper);
+}
+.planloft-appearance-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid var(--planloft-control-rule);
+  border-radius: 0.75rem;
+  background: var(--planloft-control-paper);
+  font: 0.875rem/1.4 system-ui, sans-serif;
+}
+.planloft-appearance-panel label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+.planloft-appearance-panel :is(button, select) {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--planloft-control-rule);
+  border-radius: 0.35rem;
+  color: inherit;
+  background: var(--planloft-control-paper);
+  font: inherit;
+}
+.planloft-appearance-panel button:disabled { opacity: 0.5; }
 @media (max-width: 40rem) {
   .planloft-controls { top: 0.625rem; right: 0.625rem; }
 }

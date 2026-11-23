@@ -91,16 +91,12 @@ test("rendered documents expose a compact three-option theme selector", () => {
     assert.match(html, /prefers-color-scheme: dark/);
     assert.match(html, /data-planloft-color-scheme="light"/);
     assert.match(html, /data-planloft-color-scheme="dark"/);
-    assert.match(html, /localStorage\.getItem\(key\)/);
     for (const option of ["light", "dark", "system"]) {
       assert.match(html, new RegExp(`data-planloft-theme-option="${option}"`));
     }
     assert.equal((html.match(/class="planloft-theme-option"/g) ?? []).length, 3);
     const themeSelector = html.slice(selectorIndex, html.indexOf("planloft-layout-selector", selectorIndex));
     assert.equal((themeSelector.match(/<svg viewBox=/g) ?? []).length, 3);
-    assert.match(html, /saved === "light" \|\| saved === "dark" \? saved : "system"/);
-    assert.match(html, /selected === "system"/);
-    assert.match(html, /delete root\.dataset\.planloftColorScheme/);
   }
 });
 
@@ -111,10 +107,6 @@ test("rendered documents carry a reading/full width control that only scripts re
   assert.match(selector, /role="group" aria-label="Page width" data-planloft-layout-selector hidden>/);
   assert.match(selector, /data-planloft-layout-option="reading"[^>]*aria-pressed="true"/);
   assert.match(selector, /data-planloft-layout-option="full"[^>]*aria-pressed="false"/);
-  assert.match(html, /const key = "planloft-layout";/);
-  assert.match(html, /saved === "full" \? "full" : "reading"/);
-  assert.match(html, /delete root\.dataset\.planloftLayout/);
-  assert.match(html, /group\.hidden = false/);
   // The width contract is renderer CSS scoped to the default shell, so a custom theme
   // inherits it without opting in, a custom layout with another structure is left
   // alone, and a theme's own width rule is never overridden.

@@ -1,4 +1,5 @@
 import os from "node:os";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,11 @@ export const configPath = (): string => path.join(planloftHome(), "config.json")
 export const indexPath = (): string => path.join(planloftHome(), "index.json");
 export const docsDir = (): string => path.join(planloftHome(), "docs");
 export const userThemesDir = (): string => path.join(planloftHome(), "themes");
+
+export function documentPreviewPath(document: { project: string; slug: string }): string {
+  const id = createHash("sha256").update(JSON.stringify([document.project, document.slug])).digest("hex");
+  return path.resolve(planloftHome(), "previews", id, "index.html");
+}
 
 // The built CLI lives at <pkg>/dist/cli.js; bundled assets sit beside it at <pkg>/.
 const here = path.dirname(fileURLToPath(import.meta.url));

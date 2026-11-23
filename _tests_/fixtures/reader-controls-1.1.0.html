@@ -1,0 +1,190 @@
+
+<div class="planloft-controls" data-planloft-ignore>
+<div class="planloft-theme-selector planloft-theme-toggle" role="group" aria-label="Color theme">
+  <button class="planloft-theme-option" type="button" data-planloft-theme-option="light" aria-label="Light theme" title="Light theme" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+  </button>
+  <button class="planloft-theme-option" type="button" data-planloft-theme-option="dark" aria-label="Dark theme" title="Dark theme" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11z"/></svg>
+  </button>
+  <button class="planloft-theme-option" type="button" data-planloft-theme-option="system" aria-label="System theme" title="System theme" aria-pressed="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 17v3.5"/></svg>
+  </button>
+</div>
+<div class="planloft-layout-selector" role="group" aria-label="Page width" data-planloft-layout-selector hidden>
+  <button class="planloft-layout-option" type="button" data-planloft-layout-option="reading" aria-label="Reading width" title="Reading width" aria-pressed="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5v15M16 4.5v15M3.5 4.5h17M3.5 19.5h17"/><path d="M10.5 9h3M10.5 12h3M10.5 15h3"/></svg>
+  </button>
+  <button class="planloft-layout-option" type="button" data-planloft-layout-option="full" aria-label="Full width" title="Full width" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="1.5"/><path d="M6.5 9h11M6.5 12h11M6.5 15h11"/></svg>
+  </button>
+</div>
+</div>
+<script>
+(() => {
+  const root = document.documentElement;
+  const options = Array.from(document.querySelectorAll("[data-planloft-theme-option]"));
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const key = "planloft-color-scheme";
+  let saved = null;
+  try { saved = localStorage.getItem(key); } catch {}
+  let selected = saved === "light" || saved === "dark" ? saved : "system";
+  const update = () => {
+    if (selected === "system") delete root.dataset.planloftColorScheme;
+    else root.dataset.planloftColorScheme = selected;
+    const effective = selected === "system" ? (media.matches ? "dark" : "light") : selected;
+    for (const option of options) {
+      const optionName = option.dataset.planloftThemeOption;
+      option.setAttribute("aria-pressed", String(optionName === selected));
+      if (optionName === "system") option.title = `System theme (currently ${effective})`;
+    }
+  };
+  for (const option of options) option.addEventListener("click", () => {
+    selected = option.dataset.planloftThemeOption;
+    try { localStorage.setItem(key, selected); } catch {}
+    update();
+  });
+  media.addEventListener?.("change", update);
+  update();
+})();
+(() => {
+  const initialize = () => {
+    const root = document.documentElement;
+    const group = document.querySelector("[data-planloft-layout-selector]");
+    const options = Array.from(group.querySelectorAll("[data-planloft-layout-option]"));
+    const key = "planloft-layout";
+    let saved = null;
+    try { saved = localStorage.getItem(key); } catch {}
+    let selected = saved === "full" ? "full" : "reading";
+    const update = () => {
+      if (selected === "reading") delete root.dataset.planloftLayout;
+      else root.dataset.planloftLayout = selected;
+      for (const option of options) {
+        option.setAttribute("aria-pressed", String(option.dataset.planloftLayoutOption === selected));
+      }
+    };
+    for (const option of options) option.addEventListener("click", () => {
+      selected = option.dataset.planloftLayoutOption;
+      try { localStorage.setItem(key, selected); } catch {}
+      update();
+    });
+    update();
+    group.hidden = false;
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
+  else initialize();
+})();
+</script>
+<script>
+(() => {
+  const HIT = ".pl-chart__hits > *";
+  let tip = null;
+  let current = null;
+  const hitOf = (event) => (event.target instanceof Element ? event.target.closest(HIT) : null);
+  const hide = () => {
+    if (tip) tip.hidden = true;
+    current = null;
+  };
+  const show = (hit, pointerY) => {
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "pl-tip";
+      tip.setAttribute("data-planloft-ignore", "");
+      tip.setAttribute("aria-hidden", "true");
+      document.body.append(tip);
+    }
+    const [title, ...rows] = (hit.getAttribute("aria-label") || "").split("\n");
+    tip.replaceChildren();
+    const heading = document.createElement("div");
+    heading.className = "pl-tip__title";
+    heading.textContent = title;
+    tip.append(heading);
+    for (const row of rows) {
+      const split = row.lastIndexOf(": ");
+      const line = document.createElement("div");
+      line.className = "pl-tip__row";
+      const label = document.createElement("span");
+      label.className = "pl-tip__label";
+      label.textContent = split < 0 ? row : row.slice(0, split);
+      const value = document.createElement("span");
+      value.className = "pl-tip__value";
+      value.textContent = split < 0 ? "" : row.slice(split + 2);
+      line.append(label, value);
+      tip.append(line);
+    }
+    const color = hit.dataset.plColor;
+    tip.toggleAttribute("data-keyed", Boolean(color) && rows.length === 1);
+    if (color) tip.style.setProperty("--pl-tip-color", color);
+    tip.hidden = false;
+    current = hit;
+    place(hit, pointerY);
+  };
+  const place = (hit, pointerY) => {
+    // Above the mark, centred, kept inside the viewport; below it when the top is cut off.
+    // A column spans the whole plot, so it anchors to the pointer instead of its top.
+    const box = hit.getBoundingClientRect();
+    const column = hit.classList.contains("pl-hit--column") && pointerY !== undefined;
+    const anchorY = column ? pointerY : box.top;
+    // Leave room for the value label above a mark.
+    const gap = column ? 10 : 24;
+    const width = tip.offsetWidth;
+    const height = tip.offsetHeight;
+    const left = Math.max(8, Math.min(box.left + box.width / 2 - width / 2, window.innerWidth - width - 8));
+    let top = anchorY - height - gap;
+    if (top < 8) top = (column ? anchorY : box.bottom) + gap;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  };
+  const start = () => {
+    const titles = document.querySelectorAll(".pl-chart__hits > * > title");
+    if (titles.length === 0) return;
+    for (const title of titles) {
+      title.parentNode.setAttribute("aria-label", title.textContent);
+      title.remove();
+    }
+    document.addEventListener("pointerover", (event) => {
+      const hit = event.pointerType === "touch" ? null : hitOf(event);
+      if (hit) show(hit, event.clientY);
+    });
+    document.addEventListener("pointerout", (event) => {
+      if (event.pointerType !== "touch" && hitOf(event) === current) hide();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "touch") return;
+      const hit = hitOf(event);
+      if (hit && hit !== current) show(hit, event.clientY);
+      else hide();
+    });
+    document.addEventListener("focusin", (event) => {
+      const hit = hitOf(event);
+      if (hit) show(hit);
+    });
+    document.addEventListener("focusout", (event) => {
+      if (hitOf(event) === current) hide();
+    });
+    const STEPS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") return hide();
+      const hit = hitOf(event);
+      const step = STEPS[event.key];
+      if (!hit || event.altKey || event.ctrlKey || event.metaKey || (!step && event.key !== "Home" && event.key !== "End")) return;
+      event.preventDefault();
+      const hits = Array.from(hit.parentNode.children);
+      const next = event.key === "Home" ? hits[0] : event.key === "End" ? hits[hits.length - 1] : hits[hits.indexOf(hit) + step];
+      if (!next || next === hit) return;
+      hit.setAttribute("tabindex", "-1");
+      next.setAttribute("tabindex", "0");
+      next.focus();
+    });
+    // Focusing a hit can scroll it into view, so a focused hit keeps its tooltip and
+    // the tooltip moves with it. Hover tooltips close on scroll.
+    window.addEventListener("scroll", () => {
+      if (current && current === document.activeElement) place(current);
+      else hide();
+    }, { passive: true });
+    window.addEventListener("resize", hide);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
+})();
+</script>
