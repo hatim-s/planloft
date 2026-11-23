@@ -133,6 +133,7 @@ test("trusted HTML publishes and redeploys without changing its content", async 
     assert.equal(fs.readFileSync(published.document.file!, "utf8"), html);
     const preview = await application.preview("page");
     assert.match(fs.readFileSync(path.join(preview.directory, "index.html"), "utf8"), /planloft-render:head:start/);
+    assert.equal((await application.preview("page")).url, preview.url);
     await application.deploy("page");
     assert.equal(deployed.length, 2);
     assert.equal(deployed[0], deployed[1]);
@@ -141,6 +142,8 @@ test("trusted HTML publishes and redeploys without changing its content", async 
       saveConfig({ ...DEFAULT_CONFIG, theme: "does-not-exist" }),
     );
     await assert.rejects(application.preview("page"), /PLANLOFT_THEME_MISSING/);
+    await application.remove("page");
+    assert.equal(fs.existsSync(path.join(preview.directory, "index.html")), false);
 
     const invalid = path.join(cwd, "invalid.html");
     fs.writeFileSync(invalid, Buffer.from([0x3c, 0x70, 0x3e, 0xe9, 0x3c, 0x2f, 0x70, 0x3e]));

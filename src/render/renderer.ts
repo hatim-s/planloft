@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { marked, Renderer } from "marked";
@@ -39,6 +39,7 @@ export interface MdxRenderOptions extends MdxCompileOptions, RenderOptions {}
 export interface BuildOpts extends RenderOptions {
   doc: DocMeta;
   theme: string;
+  previewPath?: string;
 }
 
 /** Render a canonical document into a self-contained HTML artifact (ADR-0007). */
@@ -124,7 +125,18 @@ export async function buildSite(opts: BuildOpts): Promise<string> {
   const html = canonical.contentFormat === "mdx"
     ? await renderCompiledMdx(canonical, opts.theme, fs.readFileSync(`${opts.doc.file}.bundle.js`, "utf8"), opts)
     : renderDocument(canonical, opts.theme, opts);
-  return writeRenderedSite(html);
+  if (!opts.previewPath) return writeRenderedSite(html);
+
+  const directory = path.dirname(opts.previewPath);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const staging = path.join(directory, randomUUID() + ".tmp");
+  try {
+    fs.writeFileSync(staging, html, { flag: "wx", mode: 0o600 });
+    fs.renameSync(staging, opts.previewPath);
+  } finally {
+    fs.rmSync(staging, { force: true });
+  }
+  return directory;
 }
 
 export function writeRenderedSite(html: string): string {

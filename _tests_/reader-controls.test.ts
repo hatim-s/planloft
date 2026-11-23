@@ -13,6 +13,7 @@ function openReader(pathname: string, storage: Pick<Storage, "getItem" | "setIte
   const group = { hidden: true };
   const settings = { hidden: true };
   const listeners = new Map<string, () => void>();
+  const onStorage: ((event: { key: string | null; storageArea: typeof storage }) => void)[] = [];
   const defaults = {
     theme: { value: "", options: ["light", "dark", "system"].map((value) => ({ value })) },
     layout: { value: "", options: ["reading", "full"].map((value) => ({ value })) },
@@ -49,13 +50,22 @@ function openReader(pathname: string, storage: Pick<Storage, "getItem" | "setIte
   };
   runInNewContext(script, {
     document, localStorage: storage, location: { pathname }, CustomEvent,
-    window: { matchMedia: () => ({ matches: false }) },
+    window: {
+      matchMedia: () => ({ matches: false }),
+      addEventListener: (_name: string, callback: (typeof onStorage)[number]) => { onStorage.push(callback); },
+    },
   });
   assert.equal(group.hidden, true);
   listeners.get("DOMContentLoaded")!();
   assert.equal(group.hidden, false);
   assert.equal(settings.hidden, false);
-  return { root, defaults, resets, choices, click: (id: string) => listeners.get(id)!() };
+  return {
+    root, defaults, resets, choices,
+    click: (id: string) => listeners.get(id)!(),
+    storageChanged(key: string | null) {
+      for (const callback of onStorage) callback({ key, storageArea: storage });
+    },
+  };
 }
 
 test("reader overrides are independent per page and setting and can return to stored defaults", () => {
@@ -80,6 +90,9 @@ test("reader overrides are independent per page and setting and can return to st
   second.defaults.theme.value = "light";
   second.click("default:theme");
   assert.equal(second.root.dataset.planloftColorScheme, "light");
+  first.storageChanged("planloft-color-scheme");
+  assert.deepEqual(first.root.dataset, {});
+  assert.equal(first.defaults.theme.value, "light");
 
   const reopened = openReader("/first/index.html", storage);
   assert.deepEqual(reopened.root.dataset, {});

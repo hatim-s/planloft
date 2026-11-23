@@ -221,6 +221,13 @@ ${layoutButtons}
       update();
       defaults.focus();
     });
+    window.addEventListener("storage", (event) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key === key || event.key === null) preferred = read(key, options) ?? builtIn;
+      else if (event.key !== docKey) return;
+      if (event.key === docKey || event.key === null) override = read(docKey, options);
+      update();
+    });
     update();
   };
   bind("theme", "planloft-color-scheme", "planloftColorScheme", "system");

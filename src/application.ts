@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   createPlanloftConfiguration,
   type ConfigDiagnosticCode,
@@ -9,14 +10,13 @@ import {
 import { docFile } from "./core/doc.js";
 import { shortId } from "./core/id.js";
 import { normalizeDocumentMetadata } from "./core/ingest.js";
-import { configPath, withPlanloftHome } from "./core/paths.js";
+import { configPath, documentPreviewPath, packageRoot, withPlanloftHome } from "./core/paths.js";
 import { projectKey } from "./core/project.js";
 import { slugify } from "./core/slug.js";
 import type { DocMeta, Kind, ResolvedContext } from "./core/types.js";
 import { hasGh } from "./hosts/github-pages.js";
 import { attachCollaboration } from "./collaboration/attachment.js";
 import { buildCollaborationDeployment } from "./collaboration/deploy.js";
-import { packageRoot } from "./core/paths.js";
 import type { CollaborationConfig, CollaborationProvider } from "./collaboration/contracts.js";
 import { MigrationError, migrateDocument, type MigrationResult } from "./migration/index.js";
 import { prepareHostingRepository } from "./hosts/layout.js";
@@ -570,9 +570,10 @@ export function createPlanloftApplication(
           diagnosticCode: "PLANLOFT_DOCUMENT_NOT_FOUND",
         });
         const { theme, randomized } = configuration.resolveProject(projectKey(cwd).key, meta.theme);
-        const directory = await buildSite({ doc: meta, theme });
+        const previewPath = documentPreviewPath(meta);
+        const directory = await buildSite({ doc: meta, theme, previewPath });
         if (randomized) persistence.rememberTheme(meta, theme);
-        const url = `file://${directory}/index.html`;
+        const url = pathToFileURL(previewPath).href;
         const opened = (dependencies.openUrl ?? openUrl)(url);
         return { operation: "preview", slug: meta.slug, directory, url, opened };
       }),
