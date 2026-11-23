@@ -205,7 +205,7 @@ function ownedSupportRanges(input: string) {
     const startParent = start.parentNode;
     const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
     const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
-    // The previous controls block was byte-for-byte identical across documents.
+    // Accept the 1.1.0 block so stored or copied HTML can pick up the new controls.
     const knownControls = content === `\n${CONTROLS_MARKUP}\n` ||
       hashSupport(content) === "f7a641ee9335468da2f6e92a978696dc6d10de768931016d70b07f3fc71d1ade";
     const validControls = knownControls && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));

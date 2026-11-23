@@ -382,6 +382,7 @@ const GALLERY_SCRIPT = `
     for (const button of document.querySelectorAll("[data-layout]")) {
       button.setAttribute("aria-pressed", String(button.dataset.layout === layout));
       button.disabled = !supported;
+      button.closest(".g-segment").title = supported ? "" : "This page has no width control";
     }
   };
 

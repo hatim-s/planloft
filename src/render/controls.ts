@@ -238,7 +238,17 @@ ${layoutButtons}
   const initializeLayout = () => {
     bind("layout", "planloft-layout", "planloftLayout", "reading");
     document.querySelector("[data-planloft-layout-selector]").hidden = false;
-    document.querySelector(".planloft-appearance").hidden = false;
+    const settings = document.querySelector(".planloft-appearance");
+    settings.hidden = false;
+    settings.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !settings.open) return;
+      event.preventDefault();
+      settings.open = false;
+      settings.querySelector("summary").focus();
+    });
+    document.addEventListener("click", (event) => {
+      if (settings.open && !settings.contains(event.target)) settings.open = false;
+    });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initializeLayout, { once: true });
   else initializeLayout();

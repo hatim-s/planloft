@@ -11,7 +11,7 @@ function openReader(pathname: string, storage: Pick<Storage, "getItem" | "setIte
   assert.ok(script);
   const root = { dataset: {} as Record<string, string> };
   const group = { hidden: true };
-  const settings = { hidden: true };
+  const settings = { hidden: true, addEventListener() {} };
   const listeners = new Map<string, () => void>();
   const onStorage: ((event: { key: string | null; storageArea: typeof storage }) => void)[] = [];
   const defaults = {
