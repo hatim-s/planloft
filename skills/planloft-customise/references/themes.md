@@ -21,6 +21,11 @@ and controls. Add `.planloft-prose` to a region for semantic styling and use
 are available by default, using the body for other HTML structures. Custom HTML can
 use theme variables in its own styles and choose any layout.
 
+Reader controls save the color scheme and width for the current URL in the browser.
+**Appearance settings** lets readers set site defaults and clear each document
+override independently. With no saved preferences, the page uses the system color
+scheme and reading width.
+
 ## Public theme variables
 
 Colors are defined for light, dark system preference, explicit dark, and print. The

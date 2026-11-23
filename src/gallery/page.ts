@@ -336,13 +336,8 @@ code { font: 0.9em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 }
 `;
 
-// Links work without this script: each targets the preview frame by name. The script
-// adds what plain links cannot: current-page marking and the appearance, page-width
-// and device controls, which stay hidden until it runs. Page width presses the
-// previewed page's own control, so the preview shows exactly what a reader gets; an
-// authored HTML page has no width control, and the width button then has nothing to
-// press. Appearance is a preview-only choice: pressing the page's colour control would
-// save it for every page on this origin, including the documents the gallery links to.
+// Each link targets the preview frame and works without the script.
+// Gallery toolbar choices are transient. Only the document's own controls write preferences.
 const GALLERY_SCRIPT = `
 (() => {
   const frame = document.querySelector('iframe[name="g-preview"]');
@@ -351,8 +346,7 @@ const GALLERY_SCRIPT = `
   const open = document.querySelector(".g-open");
   const links = Array.from(document.querySelectorAll("a[data-page]"));
   const viewer = document.getElementById("g-viewer");
-  let scheme = "system";
-  let layout = "reading";
+  const preview = { theme: null, layout: null };
   toolbar.hidden = false;
 
   const pageOf = (href) => new URL(href, location.href).pathname;
@@ -364,89 +358,57 @@ const GALLERY_SCRIPT = `
     }
     open.href = link.href;
   };
-  // Same-origin previews get the page's own width control pressed and its colour
-  // attribute set, so the page and its toggles agree. A file:// preview is
-  // cross-origin; it follows the frame's colour scheme and keeps the width the page
-  // last stored.
-  const press = (selector) => {
-    try {
-      const option = frame.contentDocument?.querySelector(selector);
-      if (option && option.getAttribute("aria-pressed") !== "true") option.click();
-    } catch {}
+  const apply = (page, name, value, attribute, fallback) => {
+    if (!value) return;
+    if (value === fallback) delete page.documentElement.dataset[attribute];
+    else page.documentElement.dataset[attribute] = value;
+    for (const option of page.querySelectorAll("[data-planloft-" + name + "-option]")) {
+      option.setAttribute("aria-pressed", String(option.getAttribute("data-planloft-" + name + "-option") === value));
+    }
   };
-  const applyScheme = () => {
-    frame.style.colorScheme = scheme === "system" ? "" : scheme;
-    try {
-      const page = frame.contentDocument;
-      if (!page) return;
-      if (scheme === "system") delete page.documentElement.dataset.planloftColorScheme;
-      else page.documentElement.dataset.planloftColorScheme = scheme;
-      for (const option of page.querySelectorAll("[data-planloft-theme-option]")) {
-        option.setAttribute("aria-pressed", String(option.dataset.planloftThemeOption === scheme));
-      }
-    } catch {}
-  };
-  const applyLayout = () => press('[data-planloft-layout-option="' + layout + '"]');
-  // A freshly loaded page shows the width its reader last chose, and the reader can
-  // press the page's own control inside the preview; the toolbar follows both rather
-  // than overwriting the choice. The page's button handler runs before this document
-  // listener, so the pressed state is already current when it reads it.
-  // A page without a width control (authored HTML, or a layout the contract does not
-  // reach) leaves the segment disabled; the chosen width is kept and pressed again on
-  // the next page that supports it.
-  const syncLayout = () => {
-    let supported = false;
-    try {
-      const group = frame.contentDocument?.querySelector("[data-planloft-layout-selector]");
-      supported = !!group && !group.hidden;
-      const pressed = supported ? group.querySelector('[data-planloft-layout-option][aria-pressed="true"]') : null;
-      if (pressed) layout = pressed.dataset.planloftLayoutOption;
-    } catch {}
+  const sync = () => {
+    const page = frame.contentDocument;
+    frame.style.colorScheme = preview.theme === "system" ? "" : (preview.theme ?? "");
+    if (page) {
+      apply(page, "theme", preview.theme, "planloftColorScheme", "system");
+      apply(page, "layout", preview.layout, "planloftLayout", "reading");
+    }
+    const scheme = preview.theme ?? page?.documentElement.dataset.planloftColorScheme ?? "system";
+    const layout = page?.documentElement.dataset.planloftLayout ?? "reading";
+    const supported = !!page?.querySelector("[data-planloft-layout-selector]:not([hidden])");
+    for (const button of document.querySelectorAll("[data-scheme]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.scheme === scheme));
+    }
     for (const button of document.querySelectorAll("[data-layout]")) {
       button.setAttribute("aria-pressed", String(button.dataset.layout === layout));
       button.disabled = !supported;
     }
-    document.querySelector("[data-layout]").closest(".g-segment").title = supported ? "" : "This page has no width control";
   };
 
   for (const link of links) link.addEventListener("click", () => {
     select(link);
     if (link.closest(".g-cards")) viewer.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
-  const showScheme = () => {
-    for (const button of document.querySelectorAll("[data-scheme]")) button.setAttribute("aria-pressed", String(button.dataset.scheme === scheme));
-  };
   for (const button of document.querySelectorAll("[data-scheme]")) button.addEventListener("click", () => {
-    scheme = button.dataset.scheme;
-    showScheme();
-    applyScheme();
+    preview.theme = button.dataset.scheme;
+    sync();
   });
   for (const button of document.querySelectorAll("[data-layout]")) button.addEventListener("click", () => {
-    layout = button.dataset.layout;
-    for (const other of document.querySelectorAll("[data-layout]")) other.setAttribute("aria-pressed", String(other === button));
-    applyLayout();
+    preview.layout = button.dataset.layout;
+    sync();
   });
   for (const button of document.querySelectorAll("[data-width]")) button.addEventListener("click", () => {
     stage.dataset.width = button.dataset.width;
     for (const other of document.querySelectorAll("[data-width]")) other.setAttribute("aria-pressed", String(other === button));
   });
   frame.addEventListener("load", () => {
-    applyScheme();
-    applyLayout();
-    syncLayout();
-    try {
-      frame.contentDocument?.addEventListener("click", (event) => {
-        if (event.target.closest?.("[data-planloft-layout-option]")) syncLayout();
-        // The reader chose a colour inside the page, which the page saves as usual.
-        const option = event.target.closest?.("[data-planloft-theme-option]");
-        if (option) {
-          scheme = option.dataset.planloftThemeOption;
-          showScheme();
-          applyScheme();
-        }
-      });
-    } catch {}
+    sync();
+    frame.contentDocument?.addEventListener("planloft-appearance-change", (event) => {
+      preview[event.detail] = null;
+      sync();
+    });
   });
+  sync();
   select(links.find((link) => pageOf(link.href) === pageOf(frame.src)) ?? links[0]);
 })();
 `;

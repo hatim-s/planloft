@@ -193,7 +193,10 @@ function ownedSupportRanges(input: string) {
     const startParent = start.parentNode;
     const validStartParent = startParent && (startParent.nodeName === "#document" || ("tagName" in startParent && (startParent.tagName === "html" || startParent.tagName === "head")));
     const controlElement = found.elements.find((element) => element.sourceCodeLocation?.startOffset === start.sourceCodeLocation!.endOffset + 1 && element.parentNode === controlsParent && element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls")));
-    const validControls = content === `\n${CONTROLS_MARKUP}\n` && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
+    // The previous controls block was byte-for-byte identical across documents.
+    const knownControls = content === `\n${CONTROLS_MARKUP}\n` ||
+      hashSupport(content) === "f7a641ee9335468da2f6e92a978696dc6d10de768931016d70b07f3fc71d1ade";
+    const validControls = knownControls && controlsBody && !!controlElement && (start.parentNode === end.parentNode || (implicitBody && validStartParent));
     const validHead = headMatch && headStyle && hashSupport(`${headMatch[2]}\n${headMatch[3] ?? ""}`) === headMatch[1];
     if (name === "controls" ? !validControls : !validHead) throw new RenderSupportError("Invalid Planloft render block.");
     ranges.push({ start: start.sourceCodeLocation.startOffset, end: end.sourceCodeLocation.endOffset });
@@ -203,7 +206,7 @@ function ownedSupportRanges(input: string) {
   for (const element of found.elements) {
     const loc = element.sourceCodeLocation;
     if (!loc || ranges.some((range) => loc.startOffset >= range.start && loc.endOffset <= range.end)) continue;
-    if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).includes("planloft-controls"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
+    if (element.attrs.some((attr) => attr.name === "data-planloft-render" || attr.name === "data-planloft-theme-option" || attr.name === "data-planloft-layout-option" || attr.name === "data-planloft-layout-selector" || attr.name === "data-planloft-default" || attr.name === "data-planloft-reset") || element.attrs.some((attr) => attr.name === "class" && attr.value.split(/\s+/).some((name) => name === "planloft-controls" || name === "planloft-appearance"))) throw new RenderSupportError("Planloft render controls collide with authored HTML.");
   }
   return { ranges, ...found };
 }

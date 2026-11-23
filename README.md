@@ -145,6 +145,11 @@ styling with `.planloft-prose` and reading/full-width support with
 `.planloft-plan > article`. See the [theme contract](./skills/planloft-customise/references/themes.md)
 for public CSS variables and an example.
 
+The color theme and page width buttons save choices for the current document. Open
+**Appearance settings** to change your browser's defaults or make this document use
+either default again. Each setting uses the document choice first, then the saved
+default for the site, then Planloft's system color theme or reading width.
+
 ```text
 <!-- planloft:command-examples:start -->
 planloft render proposal.md --theme editorial --out ./proposal-site
